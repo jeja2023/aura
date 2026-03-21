@@ -1,5 +1,5 @@
 # 全系统联调与压测脚本（PowerShell）
-# 用途：登录、批量模拟抓拍、触发研判、验证输出接口吞吐
+# 用途：登录、批量模拟抓拍、触发研判、验证输出接口。
 
 $ErrorActionPreference = "Stop"
 [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
@@ -14,11 +14,14 @@ function Call-Api([string]$Method, [string]$Path, $Body = $null, [string]$Token 
     return Invoke-RestMethod -Method $Method -Uri "$base$Path" -Headers $headers
 }
 
-Write-Host "1) 登录..."
+Write-Host "1) login..."
 $login = Call-Api "POST" "/api/auth/login" @{ userName = "admin"; password = "admin123" }
 $token = $login.data.token
+if ([string]::IsNullOrWhiteSpace($token)) {
+    throw "login failed: token is empty."
+}
 
-Write-Host "2) 批量模拟抓拍（200条）..."
+Write-Host "2) bulk mock capture (200)..."
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
 for ($i = 1; $i -le 200; $i++) {
     [void](Call-Api "POST" "/api/capture/mock" @{
@@ -28,26 +31,26 @@ for ($i = 1; $i -le 200; $i++) {
     } $token)
 }
 $sw.Stop()
-Write-Host ("   抓拍耗时(ms): " + $sw.ElapsedMilliseconds)
+Write-Host ("   capture elapsed(ms): " + $sw.ElapsedMilliseconds)
 
-Write-Host "3) 执行每日研判..."
+Write-Host "3) run daily judge..."
 [void](Call-Api "POST" "/api/judge/run/daily" @{ date = (Get-Date).ToString("yyyy-MM-dd"); cutoffHour = 23 } $token)
 
-Write-Host "4) 拉取统计与输出..."
+Write-Host "4) query stats and output..."
 $overview = Call-Api "GET" "/api/stats/overview" $null $token
 $dash = Call-Api "GET" "/api/stats/dashboard" $null $token
 $events = Call-Api "GET" "/api/output/events?page=1&pageSize=500" $null $token
 $persons = Call-Api "GET" "/api/output/persons?minCapture=1" $null $token
 
-Write-Host ("   总抓拍: " + $overview.data.totalCapture)
-Write-Host ("   事件输出数量(页): " + (($events.data | Measure-Object).Count))
-Write-Host ("   人员输出数量: " + (($persons.data | Measure-Object).Count))
-Write-Host ("   仪表盘维度: daily=" + (($dash.data.daily | Measure-Object).Count))
+Write-Host ("   total capture: " + $overview.data.totalCapture)
+Write-Host ("   output events(page): " + (($events.data | Measure-Object).Count))
+Write-Host ("   output persons: " + (($persons.data | Measure-Object).Count))
+Write-Host ("   dashboard daily points: " + (($dash.data.daily | Measure-Object).Count))
 
-Write-Host "5) 导出验证..."
+Write-Host "5) export validation..."
 $expCsv = Call-Api "GET" "/api/export/csv?dataset=capture" $null $token
 $expXlsx = Call-Api "GET" "/api/export/xlsx?dataset=alert" $null $token
-Write-Host ("   CSV: " + $expCsv.data.downloadUrl)
-Write-Host ("   XLSX: " + $expXlsx.data.downloadUrl)
+Write-Host ("   csv: " + $expCsv.data.downloadUrl)
+Write-Host ("   xlsx: " + $expXlsx.data.downloadUrl)
 
-Write-Host "联调压测完成。"
+Write-Host "integration and stress test done."
