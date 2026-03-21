@@ -1,5 +1,5 @@
 # 抓拍链路回归脚本（PowerShell）
-# 用途：快速回归登录、抓拍、查询、向量检索、重试队列
+# 用途：快速回归登录、抓拍、查询、向量检索、重试队列。
 
 $ErrorActionPreference = "Stop"
 [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
@@ -22,6 +22,9 @@ function Invoke-Api([string]$Method, [string]$Path, $Body = $null, [string]$Toke
 Write-Host "1) login..."
 $login = Invoke-Api "POST" "/api/auth/login" @{ userName = $user; password = $pass }
 $token = $login.data.token
+if ([string]::IsNullOrWhiteSpace($token)) {
+    throw "login failed: token is empty."
+}
 Write-Host "   token ok"
 
 Write-Host "2) sdk capture..."
