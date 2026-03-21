@@ -1,0 +1,23 @@
+<!-- 文件：角色页（role.html） | File: Role Page -->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>角色</title>
+  <link rel="stylesheet" href="./role.css" />
+</head>
+<body>
+  <main class="page">
+    <h1>角色管理</h1>
+    <div class="row">
+      <input id="roleName" placeholder="角色名，如安保巡查员" />
+      <input id="permissionJson" placeholder='权限JSON，如["device","alert"]' />
+    </div>
+    <button id="create">创建角色</button>
+    <button id="load">查询角色</button>
+    <pre id="result">等待操作</pre>
+  </main>
+  <script src="./role.js"></script>
+</body>
+</html>

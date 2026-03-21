@@ -1,0 +1,57 @@
+<!-- 文件：首页（index.html） | File: Home Page -->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>寓瞳态势看板</title>
+  <link rel="stylesheet" href="./index.css" />
+</head>
+<body>
+  <header class="top-bar">
+    <h1>寓瞳态势看板</h1>
+    <div class="top-actions">
+      <button class="btn-primary" id="refreshBtn">刷新概览</button>
+      <button class="btn-primary" id="logoutBtn">退出登录</button>
+    </div>
+  </header>
+  <main class="grid">
+    <section class="card">
+      <h2>页面导航</h2>
+      <ul class="nav-list">
+        <li id="loginNavItem"><a href="/login">登录页</a></li>
+        <li><a href="/device">设备页</a></li>
+        <li><a href="/roi">防区页</a></li>
+        <li><a href="/track">轨迹页</a></li>
+        <li><a href="/search">搜轨页</a></li>
+        <li><a href="/scene">三维态势页</a></li>
+        <li><a href="/alert">告警页</a></li>
+        <li><a href="/stats">统计页</a></li>
+        <li><a href="/campus">资源页</a></li>
+        <li><a href="/floor">楼层页</a></li>
+        <li><a href="/camera">摄像头页</a></li>
+        <li><a href="/judge">研判页</a></li>
+        <li><a href="/export">导出页</a></li>
+        <li><a href="/capture">抓拍页</a></li>
+        <li><a href="/log">日志页</a></li>
+        <li><a href="/role">角色页</a></li>
+        <li><a href="/user">用户页</a></li>
+      </ul>
+    </section>
+    <section class="card">
+      <h2>系统状态</h2>
+      <pre id="status">加载中...</pre>
+    </section>
+    <section class="card">
+      <h2>统计概览</h2>
+      <pre id="overview">加载中...</pre>
+    </section>
+    <section class="card">
+      <h2>态势事件流（SignalR）</h2>
+      <ul id="events" class="event-list"></ul>
+    </section>
+  </main>
+  <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"></script>
+  <script src="./index.js"></script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+<!-- 文件：导出页（export.html） | File: Export Page -->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>导出</title>
+  <link rel="stylesheet" href="./export.css" />
+</head>
+<body>
+  <main class="page">
+    <h1>报表导出</h1>
+    <label>格式
+      <select id="type">
+        <option value="csv">CSV</option>
+        <option value="xlsx">XLSX</option>
+      </select>
+    </label>
+    <label>数据集
+      <select id="dataset">
+        <option value="capture">抓拍</option>
+        <option value="alert">告警</option>
+        <option value="judge">研判</option>
+      </select>
+    </label>
+    <button id="run">创建导出文件</button>
+    <a id="download" target="_blank" rel="noreferrer">下载链接</a>
+    <pre id="result">等待导出</pre>
+  </main>
+  <script src="./export.js"></script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+<!-- 文件：告警页（alert.html） | File: Alert Page -->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>告警</title>
+  <link rel="stylesheet" href="./alert.css" />
+</head>
+<body>
+  <main class="page">
+    <h1>告警列表</h1>
+    <div class="row">
+      <input id="type" placeholder="告警类型，如群租告警" />
+      <input id="detail" placeholder="告警详情" />
+    </div>
+    <button id="create">新增告警</button>
+    <button id="load">查询告警</button>
+    <pre id="result">等待查询</pre>
+  </main>
+  <script src="./alert.js"></script>
+</body>
+</html>

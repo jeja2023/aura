@@ -1,0 +1,28 @@
+<!-- 文件：防区页（roi.html） | File: ROI Page -->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>防区</title>
+  <link rel="stylesheet" href="./roi.css" />
+</head>
+<body>
+  <main class="page">
+    <h1>Canvas ROI 多边形绘制编辑器</h1>
+    <section class="panel">
+      <label>CameraId <input id="cameraId" type="number" value="1" /></label>
+      <label>RoomNodeId <input id="roomNodeId" type="number" value="4" /></label>
+      <label>底图URL <input id="bgUrl" type="text" placeholder="/uploads/floors/xxx.png 或完整URL" /></label>
+      <button id="loadBgBtn">加载底图</button>
+      <button id="undoBtn">撤销点</button>
+      <button id="clearBtn">清空点</button>
+      <button id="saveBtn">保存ROI</button>
+      <button id="loadBtn">查询防区</button>
+    </section>
+    <canvas id="canvas" width="900" height="520"></canvas>
+    <pre id="result">提示：点击画布依次落点，至少3个点可保存。</pre>
+  </main>
+  <script src="./roi.js"></script>
+</body>
+</html>

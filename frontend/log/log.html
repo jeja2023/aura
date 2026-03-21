@@ -1,0 +1,23 @@
+<!-- 文件：日志页（log.html） | File: Log Page -->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>日志</title>
+  <link rel="stylesheet" href="./log.css" />
+</head>
+<body>
+  <main class="page">
+    <h1>操作日志</h1>
+    <div class="row">
+      <input id="keyword" placeholder="关键字筛选，如设备注册" />
+      <input id="page" placeholder="页码，默认1" />
+      <input id="pageSize" placeholder="每页条数，默认20" />
+    </div>
+    <button id="load">查询日志</button>
+    <pre id="result">等待查询</pre>
+  </main>
+  <script src="./log.js"></script>
+</body>
+</html>

@@ -1,0 +1,123 @@
+-- 寓瞳系统第一阶段基础表结构
+CREATE TABLE IF NOT EXISTS sys_role (
+  role_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  role_name VARCHAR(64) NOT NULL,
+  permission_json JSON NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS sys_user (
+  user_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  user_name VARCHAR(64) NOT NULL UNIQUE,
+  password_hash VARCHAR(255) NOT NULL,
+  role_id BIGINT NOT NULL,
+  status TINYINT NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_sys_user_role FOREIGN KEY (role_id) REFERENCES sys_role(role_id)
+);
+
+CREATE TABLE IF NOT EXISTS nvr_device (
+  device_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  name VARCHAR(128) NOT NULL,
+  ip VARCHAR(64) NOT NULL,
+  port INT NOT NULL,
+  brand VARCHAR(32) NOT NULL,
+  protocol VARCHAR(32) NOT NULL,
+  hmac_secret VARCHAR(255) NULL,
+  status VARCHAR(16) NOT NULL DEFAULT 'offline',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS map_roi (
+  roi_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  camera_id BIGINT NOT NULL,
+  room_node_id BIGINT NOT NULL,
+  vertices_json JSON NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS map_floor (
+  floor_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  node_id BIGINT NOT NULL,
+  file_path VARCHAR(255) NOT NULL,
+  scale_ratio DECIMAL(10,4) NOT NULL DEFAULT 1.0000,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS map_camera (
+  camera_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  floor_id BIGINT NOT NULL,
+  device_id BIGINT NOT NULL,
+  channel_no INT NOT NULL,
+  pos_x DECIMAL(12,4) NOT NULL DEFAULT 0,
+  pos_y DECIMAL(12,4) NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS dict_campus (
+  node_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  parent_id BIGINT NULL,
+  level_type VARCHAR(32) NOT NULL,
+  node_name VARCHAR(128) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS capture_record (
+  capture_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  device_id BIGINT NOT NULL,
+  channel_no INT NOT NULL,
+  capture_time DATETIME NOT NULL,
+  image_path VARCHAR(255) NULL,
+  feature_id VARCHAR(128) NULL,
+  metadata_json JSON NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS track_event (
+  event_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  vid VARCHAR(64) NOT NULL,
+  camera_id BIGINT NOT NULL,
+  roi_id BIGINT NOT NULL,
+  event_time DATETIME NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS judge_result (
+  judge_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  vid VARCHAR(64) NOT NULL,
+  room_id BIGINT NOT NULL,
+  judge_type VARCHAR(32) NOT NULL,
+  judge_date DATE NOT NULL,
+  detail_json JSON NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS virtual_person (
+  v_id VARCHAR(64) PRIMARY KEY,
+  first_seen DATETIME NOT NULL,
+  last_seen DATETIME NOT NULL,
+  device_id BIGINT NOT NULL,
+  capture_count INT NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS alert_record (
+  alert_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  alert_type VARCHAR(32) NOT NULL,
+  vid VARCHAR(64) NULL,
+  room_id BIGINT NULL,
+  detail_json JSON NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS log_operation (
+  op_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  operator_name VARCHAR(64) NOT NULL,
+  action_type VARCHAR(64) NOT NULL,
+  action_detail TEXT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT IGNORE INTO sys_role(role_id, role_name, permission_json) VALUES
+  (1, 'super_admin', JSON_ARRAY('all')),
+  (2, 'building_admin', JSON_ARRAY('device', 'roi', 'track', 'alert', 'stats'));
