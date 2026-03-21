@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+pydantic
+pymilvus
+onnxruntime
+numpy
+pillow

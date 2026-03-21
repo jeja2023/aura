@@ -1,0 +1,30 @@
+<!-- 文件：三维态势页（scene.html） | File: Scene Page -->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>三维态势</title>
+  <link rel="stylesheet" href="./scene.css" />
+</head>
+<body>
+  <main class="page">
+    <section class="left">
+      <h1>3D 主视界（Three.js）</h1>
+      <div class="toolbar">
+        <button id="resetBtn">重置视角</button>
+        <button id="back3dBtn">返回3D总览</button>
+      </div>
+      <div id="stage3d"></div>
+    </section>
+    <section class="right">
+      <h2>2D 楼层切片</h2>
+      <canvas id="slice2d" width="520" height="360"></canvas>
+      <pre id="result">提示：点击3D楼层可下钻到2D切片。</pre>
+    </section>
+  </main>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"></script>
+  <script src="./scene.js"></script>
+</body>
+</html>

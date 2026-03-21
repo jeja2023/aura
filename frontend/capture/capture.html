@@ -1,0 +1,24 @@
+<!-- 文件：抓拍页（capture.html） | File: Capture Page -->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>抓拍</title>
+  <link rel="stylesheet" href="./capture.css" />
+</head>
+<body>
+  <main class="page">
+    <h1>抓拍记录</h1>
+    <div class="row">
+      <input id="deviceId" placeholder="设备ID，默认1" />
+      <input id="channelNo" placeholder="通道号，默认1" />
+      <input id="meta" placeholder="元数据，如：异常-夜间滞留" />
+    </div>
+    <button id="create">新增模拟抓拍</button>
+    <button id="load">查询抓拍</button>
+    <pre id="result">等待查询</pre>
+  </main>
+  <script src="./capture.js"></script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+<!-- 文件：研判页（judge.html） | File: Judge Page -->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>研判</title>
+  <link rel="stylesheet" href="./judge.css" />
+</head>
+<body>
+  <main class="page">
+    <h1>每日研判</h1>
+    <section class="actions">
+      <label>日期 <input id="date" type="date" /></label>
+      <label>截止小时 <input id="cutoffHour" type="number" min="0" max="23" value="23" /></label>
+      <button id="runDaily">执行每日研判</button>
+      <button id="runHome">仅归寝研判</button>
+      <button id="runAbnormal">群租/滞留研判</button>
+      <button id="runNight">夜不归宿研判</button>
+      <button id="load">查询研判</button>
+    </section>
+    <pre id="result">等待查询</pre>
+  </main>
+  <script src="./judge.js"></script>
+</body>
+</html>

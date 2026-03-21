@@ -1,0 +1,27 @@
+<!-- 文件：摄像头页（camera.html） | File: Camera Page -->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>摄像头</title>
+  <link rel="stylesheet" href="./camera.css" />
+</head>
+<body>
+  <main class="page">
+    <h1>Canvas 摄像头点位拖拽布置</h1>
+    <section class="panel">
+      <label>FloorId <input id="floorId" type="number" value="1" /></label>
+      <label>DeviceId <input id="deviceId" type="number" value="1" /></label>
+      <label>ChannelNo <input id="channelNo" type="number" value="1" /></label>
+      <label>底图URL <input id="bgUrl" type="text" placeholder="/uploads/floors/xxx.png 或完整URL" /></label>
+      <button id="loadBgBtn">加载底图</button>
+      <button id="saveBtn">保存新点位</button>
+      <button id="listBtn">查询点位</button>
+    </section>
+    <canvas id="canvas" width="900" height="520"></canvas>
+    <pre id="result">提示：点击画布新增点位；拖拽红点可调整坐标。</pre>
+  </main>
+  <script src="./camera.js"></script>
+</body>
+</html>

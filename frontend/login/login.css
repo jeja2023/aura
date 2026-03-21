@@ -1,0 +1,50 @@
+/* 文件：登录页样式（login.css） | File: Login Styles */
+:root {
+  --bg: #f3f5f8;
+  --card: #ffffff;
+  --text: #1f2937;
+  --line: #d8dee8;
+  --primary: #00d2ff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b0e14;
+    --card: #141b26;
+    --text: #e5e7eb;
+    --line: #283244;
+    --primary: #00d2ff;
+  }
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Microsoft YaHei", sans-serif;
+}
+
+.box {
+  width: min(360px, 92vw);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+}
+
+input,
+button {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+button {
+  background: var(--primary);
+  cursor: pointer;
+}

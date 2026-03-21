@@ -1,0 +1,53 @@
+/* 文件：导出页样式（export.css） | File: Export Styles */
+:root {
+  --bg: #f3f5f8;
+  --card: #ffffff;
+  --text: #1f2937;
+  --line: #d8dee8;
+  --primary: #00d2ff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b0e14;
+    --card: #141b26;
+    --text: #e5e7eb;
+    --line: #283244;
+    --primary: #00d2ff;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Microsoft YaHei", sans-serif;
+}
+
+.page {
+  margin: 20px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+}
+
+button {
+  background: var(--primary);
+  border: none;
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+select {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+a {
+  color: var(--text);
+}

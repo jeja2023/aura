@@ -1,0 +1,22 @@
+<!-- 文件：搜轨页（search.html） | File: Search Page -->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>搜轨</title>
+  <link rel="stylesheet" href="./search.css" />
+</head>
+<body>
+  <main class="page">
+    <h1>以图搜轨</h1>
+    <section class="card">
+      <input id="file" type="file" accept="image/*" />
+      <label>TopK <input id="topk" type="number" value="10" min="1" max="50" /></label>
+      <button id="runBtn">提特征并检索</button>
+    </section>
+    <pre id="result">等待检索</pre>
+  </main>
+  <script src="./search.js"></script>
+</body>
+</html>

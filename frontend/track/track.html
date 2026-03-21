@@ -1,0 +1,24 @@
+<!-- 文件：轨迹页（track.html） | File: Track Page -->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>轨迹</title>
+  <link rel="stylesheet" href="./track.css" />
+</head>
+<body>
+  <main class="page">
+    <h1>平面轨迹动画播放器</h1>
+    <section class="bar">
+      <input id="vid" placeholder="请输入VID" />
+      <button id="load">查询轨迹</button>
+      <button id="play">播放动画</button>
+      <button id="pause">暂停</button>
+    </section>
+    <canvas id="canvas" width="900" height="520"></canvas>
+    <pre id="result">等待查询</pre>
+  </main>
+  <script src="./track.js"></script>
+</body>
+</html>
