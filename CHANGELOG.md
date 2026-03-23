@@ -4,6 +4,22 @@
 
 ---
 
+## [0.0.6] - 2026-03-23
+
+### 数据
+
+- `database/schema.sql`：库默认使用 `utf8mb4` + `utf8mb4_unicode_ci`（完整 Unicode）；增加 `CREATE DATABASE IF NOT EXISTS` / `USE`（默认库名 `aura`，可按环境调整）
+- 全部业务表补充**表级注释**与**字段级注释**（`COMMENT`），便于 DBA 与研发对照维护
+
+### 修复
+
+- `backend/Aura.Api/Data/MySqlStore.cs`：`alert_record.detail_json` 列为 `JSON` 类型时，原先用普通文本直接写入可能导致 MySQL 拒绝插入或静默失败；改为插入时使用 `JSON_QUOTE`，查询时使用 `COALESCE(JSON_UNQUOTE(detail_json), …)`，与库表类型一致
+
+### 说明
+
+- **已有库表**：`CREATE TABLE IF NOT EXISTS` 不会为已存在的表补注释或改字符集；需调整时请使用 `ALTER DATABASE` / `ALTER TABLE` 或在新环境执行完整脚本
+- 回归验证：在 API 已启动前提下，`抓拍链路回归脚本.ps1` 与含「异常」关键词的模拟抓拍场景下，抓拍、操作日志与告警链路可正常跑通（向量条数依赖 AI 与向量服务，可能为 0）
+
 ## [0.0.5] - 2026-03-21
 
 ### 新增
@@ -85,5 +101,5 @@
 ## 版本规范
 
 - 版本号遵循 `MAJOR.MINOR.PATCH`
-- 当前版本：`0.0.5`
-- 当前版本序列：`0.0.1` -> `0.0.2` -> `0.0.3` -> `0.0.4` -> `0.0.5`
+- 当前版本：`0.0.6`
+- 当前版本序列：`0.0.1` -> `0.0.2` -> `0.0.3` -> `0.0.4` -> `0.0.5` -> `0.0.6`
