@@ -123,7 +123,7 @@ internal sealed class MySqlStore
             await conn.ExecuteAsync(
                 """
                 INSERT INTO alert_record(alert_type, detail_json, created_at)
-                VALUES(@AlertType, @Detail, NOW())
+                VALUES(@AlertType, JSON_QUOTE(@Detail), NOW())
                 """,
                 new { AlertType = alertType, Detail = detail });
             return await conn.ExecuteScalarAsync<long>("SELECT LAST_INSERT_ID()");
@@ -142,7 +142,8 @@ internal sealed class MySqlStore
             var rows = await conn.QueryAsync<DbAlert>(
                 """
                 SELECT alert_id AS AlertId, alert_type AS AlertType,
-                       COALESCE(CAST(detail_json AS CHAR), '') AS Detail, created_at AS CreatedAt
+                       COALESCE(JSON_UNQUOTE(detail_json), CAST(detail_json AS CHAR), '') AS Detail,
+                       created_at AS CreatedAt
                 FROM alert_record
                 ORDER BY alert_id DESC
                 LIMIT 500
