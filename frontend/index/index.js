@@ -70,6 +70,21 @@ function formatPayload(payload) {
   return String(payload);
 }
 
+function formatTimeYMDHMS(time) {
+  // 兼容后端返回 ISO 形如：2026-03-23T16:20:53.2603573+08:00
+  // 目标仅展示：2026-03-23 16:20:53（去掉 T 与毫秒/时区）
+  const raw = String(time ?? "");
+  const m = raw.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})/);
+  if (m) return `${m[1]} ${m[2]}`;
+
+  const d = new Date(time);
+  if (Number.isNaN(d.getTime())) return raw;
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(
+    d.getMinutes()
+  )}:${pad(d.getSeconds())}`;
+}
+
 function pushEvent(name, payload) {
   if (!eventListEl) return;
   const li = document.createElement("li");
@@ -92,7 +107,7 @@ async function loadStatus() {
     }
     const data = await res.json();
     const message = data?.msg
-      ? `${data.msg}（${data.time ? data.time.toString() : ""}）`
+      ? `${data.msg}（${data.time ? formatTimeYMDHMS(data.time) : ""}）`
       : "系统状态已更新";
     setPre(statusEl, message, false, "status");
   } catch (error) {
