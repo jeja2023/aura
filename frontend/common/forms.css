@@ -1,0 +1,314 @@
+/* 文件：全局表单与展示控件（forms.css） | File: Global form & display controls */
+
+/* —— 文本类控件（业务区 + 登录卡片 + 顶栏主题选择） —— */
+:is(.app-content, .box, .app-topbar)
+  :is(
+    input:not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]),
+    select,
+    textarea
+  ) {
+  width: 100%;
+  max-width: 100%;
+  min-height: 38px;
+  padding: 9px 12px;
+  font-size: 14px;
+  line-height: 1.45;
+  font-family: inherit;
+  color: var(--text-main);
+  background: var(--form-control-bg);
+  border: 1px solid var(--form-control-border);
+  border-radius: var(--form-radius);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease;
+}
+
+:is(.app-content, .box, .app-topbar)
+  :is(
+    input:not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]),
+    select,
+    textarea
+  ):hover {
+  border-color: rgba(var(--primary-rgb), 0.45);
+}
+
+:is(.app-content, .box, .app-topbar)
+  :is(
+    input:not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]),
+    select,
+    textarea
+  ):focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.2);
+}
+
+:is(.app-content, .box, .app-topbar)
+  :is(
+    input:not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]),
+    select,
+    textarea
+  )::placeholder {
+  color: var(--text-muted);
+  opacity: var(--form-placeholder-opacity);
+}
+
+/* 文件选择：虚线边框；宽度由下方「卡片内横排」规则约束，避免占满整行 */
+.app-content input[type="file"],
+.box input[type="file"] {
+  padding: 10px 12px;
+  cursor: pointer;
+  border-style: dashed;
+  width: auto;
+  max-width: 100%;
+}
+
+/* 文件选择按钮统一为全局次要按钮风格，避免浏览器默认样式割裂 */
+.app-content input[type="file"]::file-selector-button,
+.box input[type="file"]::file-selector-button,
+.app-content input[type="file"]::-webkit-file-upload-button,
+.box input[type="file"]::-webkit-file-upload-button {
+  min-height: 32px;
+  padding: 7px 12px;
+  margin-right: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--btn-secondary-text);
+  background: var(--btn-secondary-bg);
+  border: 1px solid var(--btn-secondary-border);
+  border-radius: calc(var(--form-radius) - 2px);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+.app-content input[type="file"]::file-selector-button:hover,
+.box input[type="file"]::file-selector-button:hover,
+.app-content input[type="file"]::-webkit-file-upload-button:hover,
+.box input[type="file"]::-webkit-file-upload-button:hover {
+  border-color: var(--primary);
+  background: var(--btn-secondary-hover-bg);
+}
+
+/* 数字/日期等窄控件在横向 label 内不必全宽撑开 */
+.app-content label > input[type="number"],
+.app-content label > input[type="text"],
+.box label > input[type="number"],
+.box label > input[type="text"] {
+  width: auto;
+  min-width: 5rem;
+}
+
+/* —— 标签：与控件对齐的说明 —— */
+.app-content .page label,
+.app-content .panel label,
+.app-content .card label,
+.box label {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--text-muted);
+}
+
+/* 导出页：label 内嵌 select 的横向布局 */
+.app-content .page > label {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  margin-right: 4px;
+}
+
+/* —— 行内多列（搜索条件等） —— */
+.app-content .row,
+.app-content .page > .row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+  align-items: end;
+}
+
+/* —— 工具条 / 面板 —— */
+/* 与 .panel 一致：标签在上、控件在下的字段与右侧按钮底部对齐 */
+.app-content .actions,
+.app-content .bar,
+.app-content .toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+  margin-bottom: 14px;
+}
+
+.app-content .panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  align-items: flex-end;
+}
+
+.app-content .panel input[type="text"] {
+  min-width: min(100%, 280px);
+  flex: 1 1 200px;
+}
+
+/* 底图 URL 统一单行高度（与数字输入一致），避免被渲染成高输入框 */
+.app-content .panel #bgUrl {
+  min-height: 38px;
+  height: 38px;
+  max-height: 38px;
+  line-height: 1.45;
+}
+
+/* 页面卡片内控件横排（含文件选择）；默认顶对齐，专用工具栏类可覆写为底对齐 */
+.app-content .page .card {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+/* 横排卡片内文件选择：全局统一宽度，禁止 flex:1 拉满整行 */
+.app-content .page .card input[type="file"] {
+  flex: 0 1 var(--form-file-input-basis);
+  min-width: var(--form-file-input-min);
+  max-width: var(--form-file-input-max);
+  width: auto;
+}
+
+/* 楼层图纸等参数行：与按钮、数字框同一水平线（优先级高于上一段 .card） */
+.app-content .page .card.floor-toolbar {
+  align-items: flex-end;
+}
+
+/* —— 次要按钮（主按钮 .btn-primary 仍由 shell 负责） —— */
+.app-content .page button:not(.btn-primary),
+.app-content .panel button:not(.btn-primary),
+.app-content .actions button:not(.btn-primary),
+.app-content .bar button:not(.btn-primary),
+.app-content .toolbar button:not(.btn-primary) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 9px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--primary-text);
+  background: var(--primary);
+  border: none;
+  border-radius: var(--form-radius);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.app-content .page button:not(.btn-primary):hover,
+.app-content .panel button:not(.btn-primary):hover,
+.app-content .actions button:not(.btn-primary):hover,
+.app-content .bar button:not(.btn-primary):hover,
+.app-content .toolbar button:not(.btn-primary):hover {
+  background: var(--primary-hover);
+}
+
+/* 显式次要按钮类：用于“查询/取消”等弱强调动作 */
+.app-content .btn-secondary,
+.box .btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 9px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--btn-secondary-text);
+  background: var(--btn-secondary-bg);
+  border: 1px solid var(--btn-secondary-border);
+  border-radius: var(--form-radius);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+.app-content .btn-secondary:hover,
+.box .btn-secondary:hover {
+  border-color: var(--primary);
+  background: var(--btn-secondary-hover-bg);
+}
+
+/* —— 登录页主按钮 —— */
+.box > button {
+  min-height: 40px;
+  padding: 10px 16px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--primary-text);
+  background: var(--primary);
+  border: none;
+  border-radius: var(--form-radius);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.box > button:hover {
+  background: var(--primary-hover);
+}
+
+/* —— 展示块：JSON / 日志 / 状态 —— */
+:is(.app-content, .box) pre {
+  display: block;
+  margin: 0;
+  padding: 14px 16px;
+  font-family: ui-monospace, "Cascadia Code", "Consolas", "Microsoft YaHei UI", monospace;
+  font-size: 13px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-muted);
+  background: var(--form-control-bg);
+  border: 1px solid var(--form-control-border);
+  border-radius: var(--form-radius);
+  max-height: min(60vh, 560px);
+  overflow: auto;
+}
+
+/* `hidden` 属性在部分浏览器样式下可能被上面的 display:block 覆盖，强制兜底 */
+:is(.app-content, .box) pre[hidden] {
+  display: none !important;
+}
+
+.app-content .page > pre,
+.app-content .dashboard pre {
+  margin-top: 4px;
+}
+
+/* 首页卡片内 pre 与列表 */
+.dashboard .card pre {
+  max-height: min(42vh, 360px);
+}
+
+/* 导出页下载链接 */
+.app-content .page a[href] {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 0 4px;
+  font-size: 14px;
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 500;
+}
+.app-content .page a[href]:hover {
+  text-decoration: underline;
+}
+

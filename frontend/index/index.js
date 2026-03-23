@@ -1,22 +1,81 @@
 /* 文件：首页脚本（index.js） | File: Home Script */
 const apiBase = "https://localhost:5001";
 const eventListEl = document.getElementById("events");
+const statusEl = document.getElementById("status");
+const overviewEl = document.getElementById("overview");
+
+const SUCCESS_STATUS_MS = 5000;
+let statusSuccessTimer = null;
+let overviewSuccessTimer = null;
 
 function getToken() {
   return localStorage.getItem("token") ?? "";
 }
 
-function syncNavByLoginState() {
-  const loginNavItem = document.getElementById("loginNavItem");
-  if (!loginNavItem) return;
-  loginNavItem.style.display = getToken() ? "none" : "";
+function clearStatusTimer(timerRefName) {
+  if (timerRefName === "status") {
+    if (statusSuccessTimer != null) clearTimeout(statusSuccessTimer);
+    statusSuccessTimer = null;
+    return;
+  }
+  if (timerRefName === "overview") {
+    if (overviewSuccessTimer != null) clearTimeout(overviewSuccessTimer);
+    overviewSuccessTimer = null;
+  }
+}
+
+function hidePre(preEl) {
+  if (!preEl) return;
+  preEl.textContent = "";
+  preEl.hidden = true;
+  preEl.classList.remove("is-error");
+}
+
+function setPre(preEl, message, isError, timerTarget) {
+  if (!preEl) return;
+  if (!message) {
+    hidePre(preEl);
+    clearStatusTimer(timerTarget);
+    return;
+  }
+
+  preEl.textContent = message;
+  preEl.hidden = false;
+  preEl.classList.toggle("is-error", Boolean(isError));
+
+  clearStatusTimer(timerTarget);
+  if (!isError) {
+    const timerSetter = (fn) => {
+      if (timerTarget === "status") statusSuccessTimer = fn();
+      if (timerTarget === "overview") overviewSuccessTimer = fn();
+    };
+    timerSetter(() => window.setTimeout(() => {
+      if (timerTarget === "status") statusSuccessTimer = null;
+      if (timerTarget === "overview") overviewSuccessTimer = null;
+      hidePre(preEl);
+    }, SUCCESS_STATUS_MS));
+  }
+}
+
+function formatPayload(payload) {
+  if (!payload) return "";
+  if (typeof payload === "string") return payload;
+  if (typeof payload === "object") {
+    if (typeof payload.msg === "string") return payload.msg;
+    if (typeof payload.detail === "string") return payload.detail;
+    if (typeof payload.eventType === "string") return payload.eventType;
+    if (payload.data && typeof payload.data === "object" && typeof payload.data.detail === "string") return payload.data.detail;
+    return "";
+  }
+  return String(payload);
 }
 
 function pushEvent(name, payload) {
   if (!eventListEl) return;
   const li = document.createElement("li");
   const time = new Date().toLocaleTimeString();
-  li.textContent = `[${time}] ${name} ${JSON.stringify(payload)}`;
+  const tail = formatPayload(payload);
+  li.textContent = `[${time}] ${name}${tail ? " " + tail : ""}`;
   eventListEl.prepend(li);
   while (eventListEl.children.length > 80) {
     eventListEl.removeChild(eventListEl.lastChild);
@@ -24,38 +83,51 @@ function pushEvent(name, payload) {
 }
 
 async function loadStatus() {
-  const statusEl = document.getElementById("status");
+  setPre(statusEl, "", false, "status");
   try {
     const res = await fetch(`${apiBase}/api/health`);
     if (!res.ok) {
-      statusEl.textContent = `状态加载失败：HTTP ${res.status}`;
+      setPre(statusEl, `状态加载失败：HTTP ${res.status}`, true, "status");
       return;
     }
     const data = await res.json();
-    statusEl.textContent = JSON.stringify(data, null, 2);
+    const message = data?.msg
+      ? `${data.msg}（${data.time ? data.time.toString() : ""}）`
+      : "系统状态已更新";
+    setPre(statusEl, message, false, "status");
   } catch (error) {
-    statusEl.textContent = `状态加载失败：${error.message}`;
+    setPre(statusEl, `状态加载失败：${error.message}`, true, "status");
   }
 }
 
 async function loadOverview() {
-  const overviewEl = document.getElementById("overview");
+  setPre(overviewEl, "", false, "overview");
   try {
     const res = await fetch(`${apiBase}/api/stats/overview`, {
       headers: { Authorization: `Bearer ${getToken()}` }
     });
     if (res.status === 401) {
-      overviewEl.textContent = "概览加载失败：登录已失效，请重新登录。";
+      setPre(overviewEl, "概览加载失败：登录已失效，请重新登录。", true, "overview");
       return;
     }
     if (!res.ok) {
-      overviewEl.textContent = `概览加载失败：HTTP ${res.status}`;
+      setPre(overviewEl, `概览加载失败：HTTP ${res.status}`, true, "overview");
       return;
     }
     const data = await res.json();
-    overviewEl.textContent = JSON.stringify(data, null, 2);
+    if (data?.code === 0 && data?.data) {
+      const d = data.data;
+      setPre(
+        overviewEl,
+        `抓拍合计：${d.totalCapture ?? 0} 条；告警合计：${d.totalAlert ?? 0} 条；在线设备：${d.onlineDevice ?? 0} 台`,
+        false,
+        "overview"
+      );
+    } else {
+      setPre(overviewEl, data?.msg || "概览已更新", false, "overview");
+    }
   } catch (error) {
-    overviewEl.textContent = `概览加载失败：${error.message}`;
+    setPre(overviewEl, `概览加载失败：${error.message}`, true, "overview");
   }
 }
 
@@ -84,20 +156,14 @@ async function initSignalR() {
 
 function bindEvents() {
   const refreshBtn = document.getElementById("refreshBtn");
-  refreshBtn.addEventListener("click", async () => {
-    await Promise.all([loadStatus(), loadOverview()]);
-  });
-
-  const logoutBtn = document.getElementById("logoutBtn");
-  logoutBtn.addEventListener("click", () => {
-    localStorage.removeItem("token");
-    document.cookie = "aura_token=; path=/; Max-Age=0; SameSite=Lax";
-    window.location.href = "/login/";
-  });
+  if (refreshBtn) {
+    refreshBtn.addEventListener("click", async () => {
+      await Promise.all([loadStatus(), loadOverview()]);
+    });
+  }
 }
 
 async function bootstrap() {
-  syncNavByLoginState();
   bindEvents();
   await Promise.all([loadStatus(), loadOverview()]);
   await initSignalR();

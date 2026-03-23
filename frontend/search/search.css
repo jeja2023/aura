@@ -1,30 +1,6 @@
 /* 文件：搜轨页样式（search.css） | File: Search Styles */
-:root {
-  --bg: #f3f5f8;
-  --card: #ffffff;
-  --text: #1f2937;
-  --line: #d8dee8;
-  --primary: #00d2ff;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0b0e14;
-    --card: #141b26;
-    --text: #e5e7eb;
-    --line: #283244;
-  }
-}
-
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family: "Microsoft YaHei", sans-serif;
-}
-
 .page {
-  margin: 20px;
+  margin: 0;
 }
 
 .card {
@@ -32,16 +8,34 @@ body {
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 12px;
-  display: flex;
-  gap: 8px;
-  align-items: center;
   margin-bottom: 12px;
 }
 
-button {
-  border: none;
-  border-radius: 8px;
-  background: var(--primary);
-  padding: 8px 12px;
-  cursor: pointer;
+/*
+ * 覆盖 forms.css 中 .app-content .page .card 的 flex-start 与 file 的 flex:1，
+ * 否则本页工具栏样式不生效。
+ */
+.app-content .page .card.search-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.app-content .page .card.search-toolbar > input[type="file"] {
+  flex: 0 1 var(--form-file-input-basis);
+  min-width: var(--form-file-input-min);
+  max-width: var(--form-file-input-max);
+  width: auto;
+  min-height: 38px;
+}
+
+.app-content .page .card.search-toolbar > label,
+.app-content .page .card.search-toolbar > button {
+  align-self: flex-end;
+}
+
+.app-content .page .card.search-toolbar > label > #topk {
+  width: 72px;
+  min-width: 72px;
 }

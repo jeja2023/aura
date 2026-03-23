@@ -5,23 +5,38 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>摄像头</title>
+  <script src="../common/theme-pref.js"></script>
+  <link rel="stylesheet" href="../common/theme.css" />
+  <link rel="stylesheet" href="../common/shell.css" />
+  <link rel="stylesheet" href="../common/forms.css" />
   <link rel="stylesheet" href="./camera.css" />
 </head>
-<body>
-  <main class="page">
-    <h1>Canvas 摄像头点位拖拽布置</h1>
-    <section class="panel">
-      <label>FloorId <input id="floorId" type="number" value="1" /></label>
-      <label>DeviceId <input id="deviceId" type="number" value="1" /></label>
-      <label>ChannelNo <input id="channelNo" type="number" value="1" /></label>
-      <label>底图URL <input id="bgUrl" type="text" placeholder="/uploads/floors/xxx.png 或完整URL" /></label>
-      <button id="loadBgBtn">加载底图</button>
-      <button id="saveBtn">保存新点位</button>
-      <button id="listBtn">查询点位</button>
-    </section>
-    <canvas id="canvas" width="900" height="520"></canvas>
-    <pre id="result">提示：点击画布新增点位；拖拽红点可调整坐标。</pre>
-  </main>
-  <script src="./camera.js"></script>
+<body class="app-body" data-shell-title="摄像头布点">
+  <aside class="app-sidebar" id="auraSidebar" aria-label="主导航"></aside>
+  <div class="app-frame">
+    <header class="app-topbar">
+      <button type="button" class="app-sidebar-toggle" id="auraSidebarToggle" aria-label="展开或收起导航">菜单</button>
+      <h1 class="app-page-title"></h1>
+      <div class="app-topbar-actions"></div>
+    </header>
+    <main class="app-content">
+      <div class="page">
+        <p class="page-lead">在楼层平面图上拖拽布置摄像头物理点位。</p>
+        <section class="panel">
+          <label>楼层ID <input id="floorId" type="number" value="1" /></label>
+          <label>设备ID <input id="deviceId" type="number" value="1" /></label>
+          <label>通道号 <input id="channelNo" type="number" value="1" /></label>
+          <label class="bg-url-field">底图URL <input id="bgUrl" type="text" placeholder="/uploads/floors/xxx.png 或完整URL" /></label>
+          <button id="loadBgBtn" type="button">加载底图</button>
+          <button id="saveBtn" type="button">保存新点位</button>
+          <button id="listBtn" type="button">查询点位</button>
+        </section>
+        <canvas id="canvas" width="900" height="520"></canvas>
+        <pre id="result">提示：点击画布新增点位；拖拽红点可调整坐标。</pre>
+      </div>
+    </main>
+  </div>
+  <script defer src="../common/shell.js"></script>
+  <script defer src="./camera.js"></script>
 </body>
 </html>

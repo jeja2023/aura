@@ -5,16 +5,23 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>登录</title>
+  <script src="../common/theme-pref.js"></script>
+  <link rel="stylesheet" href="../common/theme.css" />
+  <link rel="stylesheet" href="../common/forms.css" />
   <link rel="stylesheet" href="./login.css" />
 </head>
 <body>
-  <main class="box">
-    <h1>系统登录</h1>
-    <input id="user" placeholder="用户名" />
-    <input id="pass" type="password" placeholder="密码" />
-    <button id="submit">登录</button>
-    <pre id="result">未登录</pre>
-  </main>
+  <div class="login-page">
+    <div class="login-brand">寓瞳</div>
+    <main class="box">
+      <h1>系统登录</h1>
+      <p class="login-desc">使用账号登录以访问寓瞳平台。</p>
+      <input id="user" placeholder="用户名" />
+      <input id="pass" type="password" placeholder="密码" />
+      <button id="submit">登录</button>
+      <pre id="result" hidden></pre>
+    </main>
+  </div>
   <script src="./login.js"></script>
 </body>
 </html>

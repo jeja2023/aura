@@ -5,24 +5,39 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>防区</title>
+  <script src="../common/theme-pref.js"></script>
+  <link rel="stylesheet" href="../common/theme.css" />
+  <link rel="stylesheet" href="../common/shell.css" />
+  <link rel="stylesheet" href="../common/forms.css" />
   <link rel="stylesheet" href="./roi.css" />
 </head>
-<body>
-  <main class="page">
-    <h1>Canvas ROI 多边形绘制编辑器</h1>
-    <section class="panel">
-      <label>CameraId <input id="cameraId" type="number" value="1" /></label>
-      <label>RoomNodeId <input id="roomNodeId" type="number" value="4" /></label>
-      <label>底图URL <input id="bgUrl" type="text" placeholder="/uploads/floors/xxx.png 或完整URL" /></label>
-      <button id="loadBgBtn">加载底图</button>
-      <button id="undoBtn">撤销点</button>
-      <button id="clearBtn">清空点</button>
-      <button id="saveBtn">保存ROI</button>
-      <button id="loadBtn">查询防区</button>
-    </section>
-    <canvas id="canvas" width="900" height="520"></canvas>
-    <pre id="result">提示：点击画布依次落点，至少3个点可保存。</pre>
-  </main>
-  <script src="./roi.js"></script>
+<body class="app-body" data-shell-title="ROI 防区编辑">
+  <aside class="app-sidebar" id="auraSidebar" aria-label="主导航"></aside>
+  <div class="app-frame">
+    <header class="app-topbar">
+      <button type="button" class="app-sidebar-toggle" id="auraSidebarToggle" aria-label="展开或收起导航">菜单</button>
+      <h1 class="app-page-title"></h1>
+      <div class="app-topbar-actions"></div>
+    </header>
+    <main class="app-content">
+      <div class="page">
+        <p class="page-lead">在底图上绘制多边形防区，并关联到房间节点。</p>
+        <section class="panel">
+          <label>摄像头ID <input id="cameraId" type="number" value="1" /></label>
+          <label>房间节点ID <input id="roomNodeId" type="number" value="4" /></label>
+          <label class="bg-url-field">底图URL <input id="bgUrl" type="text" placeholder="/uploads/floors/xxx.png 或完整URL" /></label>
+          <button id="loadBgBtn" type="button">加载底图</button>
+          <button id="undoBtn" type="button">撤销点</button>
+          <button id="clearBtn" type="button">清空点</button>
+          <button id="saveBtn" type="button">保存ROI</button>
+          <button id="loadBtn" type="button">查询防区</button>
+        </section>
+        <canvas id="canvas" width="900" height="520"></canvas>
+        <pre id="result" class="aura-status" role="status" aria-live="polite">提示：点击画布依次落点，至少3个点可保存。</pre>
+      </div>
+    </main>
+  </div>
+  <script defer src="../common/shell.js"></script>
+  <script defer src="./roi.js"></script>
 </body>
 </html>

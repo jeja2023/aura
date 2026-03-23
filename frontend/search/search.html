@@ -5,18 +5,32 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>搜轨</title>
+  <script src="../common/theme-pref.js"></script>
+  <link rel="stylesheet" href="../common/theme.css" />
+  <link rel="stylesheet" href="../common/shell.css" />
+  <link rel="stylesheet" href="../common/forms.css" />
   <link rel="stylesheet" href="./search.css" />
 </head>
-<body>
-  <main class="page">
-    <h1>以图搜轨</h1>
-    <section class="card">
-      <input id="file" type="file" accept="image/*" />
-      <label>TopK <input id="topk" type="number" value="10" min="1" max="50" /></label>
-      <button id="runBtn">提特征并检索</button>
-    </section>
-    <pre id="result">等待检索</pre>
-  </main>
-  <script src="./search.js"></script>
+<body class="app-body" data-shell-title="以图搜轨">
+  <aside class="app-sidebar" id="auraSidebar" aria-label="主导航"></aside>
+  <div class="app-frame">
+    <header class="app-topbar">
+      <button type="button" class="app-sidebar-toggle" id="auraSidebarToggle" aria-label="展开或收起导航">菜单</button>
+      <h1 class="app-page-title"></h1>
+      <div class="app-topbar-actions"></div>
+    </header>
+    <main class="app-content">
+      <div class="page">
+        <section class="card search-toolbar">
+          <input id="file" type="file" accept="image/*" />
+          <label title="最多返回的相似结果条数">返回条数 <input id="topk" type="number" value="10" min="1" max="50" /></label>
+          <button id="runBtn" type="button">提特征并检索</button>
+        </section>
+        <pre id="result" class="aura-status" role="status" hidden aria-live="polite"></pre>
+      </div>
+    </main>
+  </div>
+  <script defer src="../common/shell.js"></script>
+  <script defer src="./search.js"></script>
 </body>
 </html>

@@ -1,0 +1,281 @@
+/* 文件：应用外壳布局（shell.css） | File: App Shell Layout */
+.app-body {
+  display: flex;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.app-sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  background: var(--sidebar-bg);
+  color: var(--sidebar-text);
+  border-right: 1px solid var(--sidebar-border);
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
+  z-index: 40;
+  transition: transform 0.22s ease;
+}
+
+.app-brand {
+  padding: 18px 18px 14px;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--sidebar-text);
+  border-bottom: 1px solid var(--sidebar-border);
+}
+
+.app-nav {
+  padding: 6px 0 8px;
+  flex: 1;
+}
+
+.nav-group {
+  margin: 0 10px 4px;
+}
+
+.nav-group-title {
+  padding: 5px 12px;
+  font-size: 15px;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0.1px;
+  color: var(--primary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--sidebar-border);
+  border-radius: 8px;
+  margin-bottom: 1px;
+}
+
+.nav-group-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.nav-group-items li {
+  margin: 0;
+}
+
+.nav-link {
+  display: block;
+  padding: 4px 12px 4px 16px;
+  color: var(--sidebar-text);
+  text-decoration: none;
+  font-size: 14px;
+  border-left: 3px solid transparent;
+  border-radius: 6px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.nav-link:hover {
+  background: var(--sidebar-active-bg);
+}
+
+.nav-link.is-active {
+  background: var(--sidebar-active-bg);
+  border-left-color: var(--primary);
+  font-weight: 600;
+}
+
+.app-frame {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.app-topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  flex-shrink: 0;
+}
+
+.app-sidebar-toggle {
+  display: none;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  color: var(--text-main);
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.app-page-title {
+  margin: 0;
+  flex: 1;
+  font-size: 20px;
+  font-weight: 700;
+  min-width: 0;
+}
+
+.app-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.aura-theme-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 4px;
+}
+
+.aura-theme-label {
+  font-size: 13px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* 主题下拉外观由 forms.css 统一；此处仅保留宽度上限避免顶栏撑开 */
+.aura-theme-select {
+  min-width: 6.5rem;
+  max-width: 10rem;
+}
+
+.aura-theme-icon-button {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  color: var(--text-main);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.aura-theme-icon-button:hover {
+  border-color: rgba(var(--primary-rgb), 0.6);
+  background: rgba(var(--primary-rgb), 0.06);
+}
+
+.aura-theme-icon-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.2);
+}
+
+.aura-theme-icon-button svg {
+  width: 20px;
+  height: 20px;
+}
+
+.app-content {
+  flex: 1;
+  overflow: auto;
+  padding: 20px 24px 28px;
+  min-height: 0;
+}
+
+.app-content.scene-mode {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-content.scene-mode .page {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+  margin: 0;
+  border-radius: 0;
+  border: none;
+}
+
+.btn-primary {
+  border: none;
+  background: var(--primary);
+  color: var(--primary-text);
+  font-weight: 700;
+  font-size: 14px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.btn-primary:hover {
+  background: var(--primary-hover);
+}
+
+.page-lead {
+  margin: 0 0 14px;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.app-content button:not(.app-sidebar-toggle):not(.btn-primary) {
+  color: var(--primary-text);
+  font-weight: 600;
+}
+
+@media (max-width: 900px) {
+  .app-sidebar-toggle {
+    display: inline-block;
+  }
+
+  .app-sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    transform: translateX(-100%);
+    box-shadow: var(--shadow);
+  }
+
+  .app-body.app-sidebar-open .app-sidebar,
+  .app-sidebar.is-open {
+    transform: translateX(0);
+  }
+
+  .app-body.app-sidebar-open::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: var(--overlay-scrim);
+    z-index: 30;
+  }
+
+  .app-content {
+    padding: 14px 16px 20px;
+  }
+
+  .app-page-title {
+    font-size: 17px;
+  }
+}
+
+.aura-status {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 14px;
+  border-radius: var(--form-radius);
+  border: 1px solid var(--form-control-border);
+  background: var(--form-control-bg);
+  color: var(--text-muted);
+}
+
+.aura-status.is-error {
+  color: var(--text-main);
+  border-color: rgba(var(--primary-rgb), 0.35);
+  background: rgba(var(--primary-rgb), 0.06);
+}

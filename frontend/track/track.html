@@ -5,20 +5,41 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>轨迹</title>
+  <script src="../common/theme-pref.js"></script>
+  <link rel="stylesheet" href="../common/theme.css" />
+  <link rel="stylesheet" href="../common/shell.css" />
+  <link rel="stylesheet" href="../common/forms.css" />
   <link rel="stylesheet" href="./track.css" />
 </head>
-<body>
-  <main class="page">
-    <h1>平面轨迹动画播放器</h1>
-    <section class="bar">
-      <input id="vid" placeholder="请输入VID" />
-      <button id="load">查询轨迹</button>
-      <button id="play">播放动画</button>
-      <button id="pause">暂停</button>
-    </section>
-    <canvas id="canvas" width="900" height="520"></canvas>
-    <pre id="result">等待查询</pre>
-  </main>
-  <script src="./track.js"></script>
+<body class="app-body" data-shell-title="轨迹回放">
+  <aside class="app-sidebar" id="auraSidebar" aria-label="主导航"></aside>
+  <div class="app-frame">
+    <header class="app-topbar">
+      <button type="button" class="app-sidebar-toggle" id="auraSidebarToggle" aria-label="展开或收起导航">菜单</button>
+      <h1 class="app-page-title"></h1>
+      <div class="app-topbar-actions"></div>
+    </header>
+    <main class="app-content">
+      <div class="page">
+        <p class="page-lead">在平面图上按时间序列播放历史动线。</p>
+        <section class="bar track-toolbar">
+          <input
+            id="vid"
+            type="text"
+            placeholder="请输入人员虚拟编号"
+            aria-label="人员虚拟编号"
+            autocomplete="off"
+          />
+          <button id="load" type="button">查询轨迹</button>
+          <button id="play" type="button">播放动画</button>
+          <button id="pause" type="button">暂停</button>
+        </section>
+        <canvas id="canvas" width="900" height="520"></canvas>
+        <pre id="result" class="aura-status" role="status" hidden aria-live="polite"></pre>
+      </div>
+    </main>
+  </div>
+  <script defer src="../common/shell.js"></script>
+  <script defer src="./track.js"></script>
 </body>
 </html>

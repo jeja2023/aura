@@ -7,16 +7,75 @@ const bg = new Image();
 const points = [];
 let bgReady = false;
 
+let successStatusTimer = null;
+const SUCCESS_STATUS_MS = 5000;
+const defaultPromptText = resultEl?.textContent ?? "";
+
 function getToken() {
   return localStorage.getItem("token") ?? "";
 }
 
+function clearSuccessStatusTimer() {
+  if (successStatusTimer != null) {
+    clearTimeout(successStatusTimer);
+    successStatusTimer = null;
+  }
+}
+
+function setResultText(message, isError) {
+  if (!resultEl) return;
+  resultEl.textContent = message;
+  resultEl.classList.toggle("is-error", Boolean(isError));
+}
+
+function deriveMessage(data) {
+  if (typeof data === "string") return data;
+  if (data && typeof data === "object") {
+    if (typeof data.msg === "string") return data.msg;
+    if (Array.isArray(data.data)) return `共 ${data.data.length} 条结果`;
+    if (Array.isArray(data.points)) return `已更新点位，共 ${data.points.length} 个点`;
+    return "操作完成";
+  }
+  return String(data ?? "");
+}
+
+function isErrorPayload(data, message) {
+  if (data && typeof data === "object" && typeof data.code === "number") {
+    return data.code !== 0;
+  }
+  if (typeof message === "string") {
+    return /失败|错误|异常|请/.test(message);
+  }
+  return false;
+}
+
 function setResult(data) {
-  resultEl.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+  if (!resultEl) return;
+
+  const isEmpty = !data || (typeof data === "string" && data.trim() === "");
+  if (isEmpty) {
+    clearSuccessStatusTimer();
+    setResultText(defaultPromptText, false);
+    return;
+  }
+
+  const message = deriveMessage(data);
+  const isError = isErrorPayload(data, message);
+
+  clearSuccessStatusTimer();
+  setResultText(message, isError);
+
+  if (!isError) {
+    successStatusTimer = window.setTimeout(() => {
+      successStatusTimer = null;
+      setResultText(defaultPromptText, false);
+    }, SUCCESS_STATUS_MS);
+  }
 }
 
 async function load() {
-  setResult("加载中...");
+  // 不显示“加载中...”常驻占位，避免干扰画布提示
+  setResult("");
 
   try {
     const res = await fetch(`${apiBase}/api/roi/list`, {
@@ -39,7 +98,7 @@ function draw() {
   }
 
   if (points.length > 0) {
-    ctx.strokeStyle = "#00d2ff";
+    ctx.strokeStyle = "#2563eb";
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(points[0].x, points[0].y);

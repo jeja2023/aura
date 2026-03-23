@@ -5,25 +5,80 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>用户</title>
+  <script src="../common/theme-pref.js"></script>
+  <link rel="stylesheet" href="../common/theme.css" />
+  <link rel="stylesheet" href="../common/shell.css" />
+  <link rel="stylesheet" href="../common/forms.css" />
   <link rel="stylesheet" href="./user.css" />
 </head>
-<body>
-  <main class="page">
-    <h1>用户管理</h1>
-    <div class="row">
-      <input id="userName" placeholder="用户名" />
-      <input id="password" type="password" placeholder="密码" />
-      <input id="roleId" placeholder="角色ID，默认2" />
-    </div>
-    <div class="row">
-      <input id="statusUserId" placeholder="用户ID" />
-      <input id="statusValue" placeholder="状态(1启用/0禁用)" />
-    </div>
-    <button id="create">创建用户</button>
-    <button id="updateStatus">更新状态</button>
-    <button id="load">查询用户</button>
-    <pre id="result">等待操作</pre>
-  </main>
-  <script src="./user.js"></script>
+<body class="app-body" data-shell-title="用户管理">
+  <aside class="app-sidebar" id="auraSidebar" aria-label="主导航"></aside>
+  <div class="app-frame">
+    <header class="app-topbar">
+      <button type="button" class="app-sidebar-toggle" id="auraSidebarToggle" aria-label="展开或收起导航">菜单</button>
+      <h1 class="app-page-title"></h1>
+      <div class="app-topbar-actions"></div>
+    </header>
+    <main class="app-content">
+      <div class="page">
+        <section class="user-tabs" aria-label="用户管理 Tabs">
+          <div class="user-tabs-header" role="tablist" aria-label="切换操作">
+            <button id="tab-create" class="user-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="panel-create">创建用户</button>
+            <button id="tab-query" class="user-tab" type="button" role="tab" aria-selected="false" aria-controls="panel-query">查询用户</button>
+            <button id="tab-update" class="user-tab" type="button" role="tab" aria-selected="false" aria-controls="panel-update">更新用户状态</button>
+          </div>
+
+          <div class="user-tabs-body">
+            <div id="panel-create" class="user-tab-panel is-active" role="tabpanel" aria-labelledby="tab-create">
+              <div class="user-card" aria-label="创建用户">
+                <div class="user-card-title">创建用户</div>
+                <div class="user-card-controls">
+                  <input id="userName" type="text" placeholder="用户名" />
+                  <input id="password" type="password" placeholder="密码" />
+                  <select id="roleId" aria-label="角色">
+                    <option value="2" selected>普通用户（2）</option>
+                    <option value="1">管理员（1）</option>
+                  </select>
+                  <button id="create" class="btn-secondary" type="button">创建用户</button>
+                </div>
+                <pre id="createResult" class="user-result" hidden role="status" aria-live="polite"></pre>
+              </div>
+            </div>
+
+            <div id="panel-query" class="user-tab-panel" role="tabpanel" aria-labelledby="tab-query">
+              <div class="user-card" aria-label="查询用户">
+                <div class="user-card-title">查询用户</div>
+                <div class="user-card-controls">
+                  <input id="userKeyword" type="text" placeholder="用户名关键词" autocomplete="off" />
+                  <button id="load" class="btn-secondary" type="button">查询用户</button>
+                </div>
+                <pre id="queryResult" class="user-result" hidden role="status" aria-live="polite"></pre>
+                <div id="userListMeta" class="user-list-meta" aria-live="polite"></div>
+                <div id="userList" class="user-list" aria-live="polite"></div>
+              </div>
+            </div>
+
+            <div id="panel-update" class="user-tab-panel" role="tabpanel" aria-labelledby="tab-update">
+              <div class="user-card" aria-label="更新用户状态">
+                <div class="user-card-title">更新用户状态</div>
+                <div class="user-card-controls">
+                  <input id="statusUserId" type="text" placeholder="用户ID" autocomplete="off" />
+                  <select id="statusValue" aria-label="状态" autocomplete="off">
+                    <option value="" selected>选择状态</option>
+                    <option value="1">启用（1）</option>
+                    <option value="0">禁用（0）</option>
+                  </select>
+                  <button id="updateStatus" class="btn-secondary" type="button">更新状态</button>
+                </div>
+                <pre id="updateResult" class="user-result" hidden role="status" aria-live="polite"></pre>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+  <script defer src="../common/shell.js"></script>
+  <script defer src="./user.js"></script>
 </body>
 </html>

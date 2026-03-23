@@ -5,28 +5,44 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>导出</title>
+  <script src="../common/theme-pref.js"></script>
+  <link rel="stylesheet" href="../common/theme.css" />
+  <link rel="stylesheet" href="../common/shell.css" />
+  <link rel="stylesheet" href="../common/forms.css" />
   <link rel="stylesheet" href="./export.css" />
 </head>
-<body>
-  <main class="page">
-    <h1>报表导出</h1>
-    <label>格式
-      <select id="type">
-        <option value="csv">CSV</option>
-        <option value="xlsx">XLSX</option>
-      </select>
-    </label>
-    <label>数据集
-      <select id="dataset">
-        <option value="capture">抓拍</option>
-        <option value="alert">告警</option>
-        <option value="judge">研判</option>
-      </select>
-    </label>
-    <button id="run">创建导出文件</button>
-    <a id="download" target="_blank" rel="noreferrer">下载链接</a>
-    <pre id="result">等待导出</pre>
-  </main>
-  <script src="./export.js"></script>
+<body class="app-body" data-shell-title="报表导出">
+  <aside class="app-sidebar" id="auraSidebar" aria-label="主导航"></aside>
+  <div class="app-frame">
+    <header class="app-topbar">
+      <button type="button" class="app-sidebar-toggle" id="auraSidebarToggle" aria-label="展开或收起导航">菜单</button>
+      <h1 class="app-page-title"></h1>
+      <div class="app-topbar-actions"></div>
+    </header>
+    <main class="app-content">
+      <div class="page">
+        <section class="export-toolbar">
+          <label>格式
+            <select id="type">
+              <option value="csv">CSV</option>
+              <option value="xlsx">XLSX</option>
+            </select>
+          </label>
+          <label>数据集
+            <select id="dataset">
+              <option value="capture">抓拍</option>
+              <option value="alert">告警</option>
+              <option value="judge">研判</option>
+            </select>
+          </label>
+          <button id="run" type="button">创建导出文件</button>
+        </section>
+        <a id="download" target="_blank" rel="noreferrer">下载链接</a>
+        <p id="exportStatus" class="export-status" role="status" hidden aria-live="polite"></p>
+      </div>
+    </main>
+  </div>
+  <script defer src="../common/shell.js"></script>
+  <script defer src="./export.js"></script>
 </body>
 </html>

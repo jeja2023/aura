@@ -5,53 +5,45 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>寓瞳态势看板</title>
+  <script src="../common/theme-pref.js"></script>
+  <link rel="stylesheet" href="../common/theme.css" />
+  <link rel="stylesheet" href="../common/shell.css" />
+  <link rel="stylesheet" href="../common/forms.css" />
   <link rel="stylesheet" href="./index.css" />
 </head>
-<body>
-  <header class="top-bar">
-    <h1>寓瞳态势看板</h1>
-    <div class="top-actions">
-      <button class="btn-primary" id="refreshBtn">刷新概览</button>
-      <button class="btn-primary" id="logoutBtn">退出登录</button>
-    </div>
-  </header>
-  <main class="grid">
-    <section class="card">
-      <h2>页面导航</h2>
-      <ul class="nav-list">
-        <li id="loginNavItem"><a href="/login">登录页</a></li>
-        <li><a href="/device">设备页</a></li>
-        <li><a href="/roi">防区页</a></li>
-        <li><a href="/track">轨迹页</a></li>
-        <li><a href="/search">搜轨页</a></li>
-        <li><a href="/scene">三维态势页</a></li>
-        <li><a href="/alert">告警页</a></li>
-        <li><a href="/stats">统计页</a></li>
-        <li><a href="/campus">资源页</a></li>
-        <li><a href="/floor">楼层页</a></li>
-        <li><a href="/camera">摄像头页</a></li>
-        <li><a href="/judge">研判页</a></li>
-        <li><a href="/export">导出页</a></li>
-        <li><a href="/capture">抓拍页</a></li>
-        <li><a href="/log">日志页</a></li>
-        <li><a href="/role">角色页</a></li>
-        <li><a href="/user">用户页</a></li>
-      </ul>
-    </section>
-    <section class="card">
-      <h2>系统状态</h2>
-      <pre id="status">加载中...</pre>
-    </section>
-    <section class="card">
-      <h2>统计概览</h2>
-      <pre id="overview">加载中...</pre>
-    </section>
-    <section class="card">
-      <h2>态势事件流（SignalR）</h2>
-      <ul id="events" class="event-list"></ul>
-    </section>
-  </main>
-  <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"></script>
-  <script src="./index.js"></script>
+<body class="app-body" data-shell-title="寓瞳态势看板">
+  <aside class="app-sidebar" id="auraSidebar" aria-label="主导航"></aside>
+  <div class="app-frame">
+    <header class="app-topbar">
+      <button type="button" class="app-sidebar-toggle" id="auraSidebarToggle" aria-label="展开或收起导航">菜单</button>
+      <h1 class="app-page-title"></h1>
+      <div class="app-topbar-actions">
+        <button class="btn-primary" id="refreshBtn" type="button">刷新概览</button>
+      </div>
+    </header>
+    <main class="app-content">
+      <div class="dashboard">
+        <section class="card">
+          <h2>系统状态</h2>
+          <pre id="status" class="aura-status" role="status" hidden aria-live="polite"></pre>
+        </section>
+        <section class="card">
+          <h2>统计概览</h2>
+          <pre id="overview" class="aura-status" role="status" hidden aria-live="polite"></pre>
+        </section>
+        <section class="card card-wide">
+          <h2>态势事件流（SignalR）</h2>
+          <ul id="events" class="event-list"></ul>
+        </section>
+      </div>
+    </main>
+  </div>
+  <script defer src="../common/shell.js"></script>
+  <script
+    defer
+    id="auraSignalrVendorLoader"
+    data-aura-page-js="./index.js"
+    src="../common/signalr-vendor-loader.js"
+  ></script>
 </body>
 </html>

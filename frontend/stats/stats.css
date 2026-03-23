@@ -1,39 +1,10 @@
 /* 文件：统计页样式（stats.css） | File: Stats Styles */
-:root {
-  --bg: #f3f5f8;
-  --card: #ffffff;
-  --text: #1f2937;
-  --line: #d8dee8;
-  --primary: #00d2ff;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0b0e14;
-    --card: #141b26;
-    --text: #e5e7eb;
-    --line: #283244;
-    --primary: #00d2ff;
-  }
-}
-
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family: "Microsoft YaHei", sans-serif;
-}
-
 .page {
-  margin: 20px;
+  margin: 0;
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 16px;
-}
-
-.toolbar {
-  margin-bottom: 12px;
 }
 
 .grid {
@@ -48,19 +19,29 @@ body {
   padding: 10px;
 }
 
+.card h2 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  color: var(--text-main);
+}
+
 .chart {
   height: 280px;
 }
 
-button {
-  background: var(--primary);
-  border: none;
-  border-radius: 8px;
-  padding: 8px 12px;
-  cursor: pointer;
+/* 仅失败时显示，成功加载后不展示原始 JSON */
+.stats-status {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  font-size: 14px;
+  border-radius: var(--form-radius);
+  border: 1px solid var(--form-control-border);
+  background: var(--form-control-bg);
+  color: var(--text-muted);
 }
 
-pre {
-  margin-top: 12px;
-  white-space: pre-wrap;
+.stats-status.is-error {
+  color: var(--text-main);
+  border-color: rgba(var(--primary-rgb), 0.35);
+  background: rgba(var(--primary-rgb), 0.06);
 }

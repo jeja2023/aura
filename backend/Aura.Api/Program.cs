@@ -22,6 +22,12 @@ var mysqlConn = builder.Configuration.GetConnectionString("MySql") ?? "";
 var redisConn = builder.Configuration.GetConnectionString("Redis") ?? "";
 var aiBaseUrl = builder.Configuration["Ai:BaseUrl"] ?? "http://127.0.0.1:8000";
 
+builder.Services.ConfigureHttpJsonOptions(o =>
+{
+    o.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+    o.SerializerOptions.PropertyNameCaseInsensitive = true;
+});
+
 builder.Services.AddOpenApi();
 builder.Services.AddSingleton(new MySqlStore(mysqlConn));
 builder.Services.AddSingleton(new RedisCacheService(redisConn));
@@ -891,7 +897,7 @@ export.MapGet("/{type}", async (string type, string dataset = "capture") =>
             : store.Captures.Select(x => new { x.CaptureId, x.DeviceId, x.ChannelNo, x.CaptureTime, x.MetadataJson }).ToList();
         rows =
         [
-            ["capture_id", "device_id", "channel_no", "capture_time", "metadata_json"],
+            ["抓拍ID", "设备ID", "通道号", "抓拍时间", "元数据"],
             ..source.Select(x => new[] { $"{x.CaptureId}", $"{x.DeviceId}", $"{x.ChannelNo}", x.CaptureTime.ToString("yyyy-MM-dd HH:mm:ss"), EscapeCell(x.MetadataJson) })
         ];
     }
@@ -903,7 +909,7 @@ export.MapGet("/{type}", async (string type, string dataset = "capture") =>
             : store.Alerts.Select(x => new { x.AlertId, x.AlertType, Detail = x.Detail, x.CreatedAt }).ToList();
         rows =
         [
-            ["alert_id", "alert_type", "detail", "created_at"],
+            ["告警ID", "告警类型", "详情", "创建时间"],
             ..source.Select(x => new[] { $"{x.AlertId}", x.AlertType, EscapeCell(x.Detail), x.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss") })
         ];
     }
@@ -916,20 +922,24 @@ export.MapGet("/{type}", async (string type, string dataset = "capture") =>
             : store.JudgeResults.Select(x => new { x.JudgeId, x.Vid, x.RoomId, x.JudgeType, JudgeDate = x.JudgeDate.ToDateTime(TimeOnly.MinValue), x.DetailJson }).ToList();
         rows =
         [
-            ["judge_id", "vid", "room_id", "judge_type", "judge_date", "detail_json"],
+            ["研判ID", "人员虚拟编号", "房间ID", "研判类型", "研判日期", "详情数据"],
             ..source.Select(x => new[] { $"{x.JudgeId}", x.Vid, $"{x.RoomId}", x.JudgeType, x.JudgeDate.ToString("yyyy-MM-dd"), EscapeCell(x.DetailJson) })
         ];
     }
 
     var ext = type == "xlsx" ? "xlsx" : "csv";
-    var fileName = $"{dataset}_{DateTimeOffset.Now:yyyyMMddHHmmss}_{Guid.NewGuid():N}.{ext}";
+    var titleCn = ExportDatasetTitleCn(dataset);
+    var shortId = Guid.NewGuid().ToString("N")[..8];
+    var fileName = $"{titleCn}_{DateTimeOffset.Now:yyyyMMddHHmmss}_{shortId}.{ext}";
     var exportDir = Path.Combine(storageRoot, "outputs");
     Directory.CreateDirectory(exportDir);
     var localPath = Path.Combine(exportDir, fileName);
     if (type == "csv")
     {
-        var csv = string.Join(Environment.NewLine, rows.Select(r => string.Join(",", r.Select(ToCsvCell))));
-        await File.WriteAllTextAsync(localPath, csv, Encoding.UTF8);
+        /* UTF-8 BOM，便于 Excel 正确识别中文表头 */
+        var csvBody = string.Join(Environment.NewLine, rows.Select(r => string.Join(",", r.Select(ToCsvCell))));
+        var csv = "\uFEFF" + csvBody;
+        await File.WriteAllTextAsync(localPath, csv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
     }
     else
     {
@@ -943,7 +953,8 @@ export.MapGet("/{type}", async (string type, string dataset = "capture") =>
         await File.WriteAllTextAsync(localPath, html, Encoding.UTF8);
     }
     await db.InsertOperationAsync("楼栋管理员", "报表导出", $"type={type}, dataset={dataset}, file={fileName}");
-    return Results.Ok(new { code = 0, msg = "导出文件已生成", data = new { fileName, downloadUrl = $"/storage/outputs/{fileName}", type, dataset } });
+    var downloadUrl = $"/storage/outputs/{Uri.EscapeDataString(fileName)}";
+    return Results.Ok(new { code = 0, msg = "导出文件已生成", data = new { fileName, downloadUrl, type, dataset } });
 }).RequireAuthorization("楼栋管理员");
 
 var output = app.MapGroup("/api/output");
@@ -1313,6 +1324,14 @@ static bool IsPointInPolygon(List<PointVm> polygon, double x, double y)
     }
     return inside;
 }
+
+static string ExportDatasetTitleCn(string dataset) => dataset switch
+{
+    "capture" => "抓拍记录",
+    "alert" => "告警记录",
+    "judge" => "研判记录",
+    _ => "数据导出"
+};
 
 static string EscapeCell(string? text)
 {
