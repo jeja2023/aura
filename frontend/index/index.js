@@ -85,10 +85,17 @@ function formatTimeYMDHMS(time) {
   )}:${pad(d.getSeconds())}`;
 }
 
+function formatLocalYMDHMS(date) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(
+    date.getMinutes()
+  )}:${pad(date.getSeconds())}`;
+}
+
 function pushEvent(name, payload) {
   if (!eventListEl) return;
   const li = document.createElement("li");
-  const time = new Date().toLocaleTimeString();
+  const time = formatLocalYMDHMS(new Date());
   const tail = formatPayload(payload);
   li.textContent = `[${time}] ${name}${tail ? " " + tail : ""}`;
   eventListEl.prepend(li);
