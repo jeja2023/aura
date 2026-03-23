@@ -70,6 +70,26 @@ function formatPayload(payload) {
   return String(payload);
 }
 
+function localizeEventName(name) {
+  // SignalR 事件在前端统一为中文可读文案，避免展示英文 key
+  switch (name) {
+    case "signalr.connected":
+      return "SignalR已连接";
+    case "signalr.init":
+      return "SignalR初始化";
+    case "capture.received":
+      return "抓拍事件";
+    case "alert.created":
+      return "告警事件";
+    case "track.event":
+      return "轨迹事件";
+    case "judge.updated":
+      return "研判事件";
+    default:
+      return name;
+  }
+}
+
 function formatTimeYMDHMS(time) {
   // 兼容后端返回 ISO 形如：2026-03-23T16:20:53.2603573+08:00
   // 目标仅展示：2026-03-23 16:20:53（去掉 T 与毫秒/时区）
@@ -97,7 +117,7 @@ function pushEvent(name, payload) {
   const li = document.createElement("li");
   const time = formatLocalYMDHMS(new Date());
   const tail = formatPayload(payload);
-  li.textContent = `[${time}] ${name}${tail ? " " + tail : ""}`;
+  li.textContent = `[${time}] ${localizeEventName(name)}${tail ? " " + tail : ""}`;
   eventListEl.prepend(li);
   while (eventListEl.children.length > 80) {
     eventListEl.removeChild(eventListEl.lastChild);
