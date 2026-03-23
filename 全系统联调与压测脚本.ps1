@@ -9,7 +9,9 @@ function Call-Api([string]$Method, [string]$Path, $Body = $null, [string]$Token 
     $headers = @{}
     if ($Token -ne "") { $headers["Authorization"] = "Bearer $Token" }
     if ($Body -ne $null) {
-        return Invoke-RestMethod -Method $Method -Uri "$base$Path" -Headers $headers -Body ($Body | ConvertTo-Json -Depth 8) -ContentType "application/json"
+        # 必须用 ConvertTo-Json 生成合法 JSON；勿手写 '{"\"...}' 以免正文变成 {\ 开头导致服务端解析失败
+        $json = $Body | ConvertTo-Json -Compress -Depth 12
+        return Invoke-RestMethod -Method $Method -Uri "$base$Path" -Headers $headers -Body $json -ContentType "application/json; charset=utf-8"
     }
     return Invoke-RestMethod -Method $Method -Uri "$base$Path" -Headers $headers
 }

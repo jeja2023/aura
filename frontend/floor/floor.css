@@ -1,30 +1,6 @@
 /* 文件：楼层页样式（floor.css） | File: Floor Styles */
-:root {
-  --bg: #f3f5f8;
-  --card: #ffffff;
-  --text: #1f2937;
-  --line: #d8dee8;
-  --primary: #00d2ff;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0b0e14;
-    --card: #141b26;
-    --text: #e5e7eb;
-    --line: #283244;
-  }
-}
-
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family: "Microsoft YaHei", sans-serif;
-}
-
 .page {
-  margin: 20px;
+  margin: 0;
 }
 
 .card {
@@ -35,16 +11,20 @@ body {
   margin-bottom: 12px;
 }
 
-label {
-  margin-right: 10px;
+/* 底对齐由 forms.css 中 .card.floor-toolbar 统一处理 */
+
+.floor-toolbar > label,
+.floor-toolbar > input[type="file"],
+.floor-toolbar > button {
+  align-self: flex-end;
 }
 
-button {
-  border: none;
-  border-radius: 8px;
-  background: var(--primary);
-  padding: 8px 12px;
-  cursor: pointer;
+/* 统一该行控件高度，消除原生 file 控件与按钮的高度差 */
+.floor-toolbar > label > input,
+.floor-toolbar > input[type="file"],
+.floor-toolbar > .btn-primary,
+.floor-toolbar > .btn-secondary {
+  min-height: 40px;
 }
 
 #preview {

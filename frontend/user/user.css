@@ -1,53 +1,199 @@
 /* 文件：用户页样式（user.css） | File: User Styles */
-:root {
-  --bg: #f3f5f8;
-  --card: #ffffff;
-  --text: #1f2937;
-  --line: #d8dee8;
-  --primary: #00d2ff;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0b0e14;
-    --card: #141b26;
-    --text: #e5e7eb;
-    --line: #283244;
-    --primary: #00d2ff;
-  }
-}
-
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family: "Microsoft YaHei", sans-serif;
-}
-
 .page {
-  margin: 20px;
+  margin: 0;
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 16px;
 }
 
-input {
+/* 用户管理：创建/查询/更新三卡片同一行（小屏自动换行） */
+.user-cards {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+/* 用户管理：Tabs（一个页面内切换三个标签页） */
+.user-tabs-header {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.user-tab {
+  /* 注意：forms.css 会统一覆盖 button 的外观，这里用更高选择器在下方兜底 */
+}
+
+.user-tab.is-active {
+  /* 注意：激活态同样在下方兜底 */
+}
+
+.app-content .page .user-tabs-header .user-tab {
+  border: none !important;
+  background: transparent !important;
+  color: var(--muted) !important;
+  border-radius: 0 !important;
+  padding: 8px 12px !important;
+  cursor: pointer;
+  white-space: nowrap;
+  min-height: auto !important;
+  border-bottom: 2px solid transparent !important;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.app-content .page .user-tabs-header .user-tab:hover {
+  background: transparent !important;
+}
+
+.app-content .page .user-tabs-header .user-tab.is-active {
+  color: var(--primary) !important;
+  border-bottom-color: var(--primary) !important;
+  background: transparent !important;
+}
+
+.app-content .page .user-tabs-header .user-tab.is-active:hover {
+  background: transparent !important;
+}
+
+.user-tab-panel {
+  display: none;
+}
+
+.user-tab-panel.is-active {
+  display: block;
+}
+
+.user-card {
+  min-width: 280px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.user-tab-panel .user-card {
+  flex: none;
+  min-width: 0;
+}
+
+.user-card-title {
+  margin: 0 0 10px 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.user-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.user-card-controls {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 12px 16px;
+  align-items: flex-end;
+}
+
+.user-card-controls input,
+.user-card-controls select {
+  width: auto; /* 覆盖 forms.css 默认 width:100% */
+  max-width: 100%;
+}
+
+/* 创建用户 */
+.user-card-controls #userName {
+  flex: 0 1 160px;
+  min-width: 120px;
+}
+
+.user-card-controls #password {
+  flex: 0 1 170px;
+  min-width: 130px;
+}
+
+.user-card-controls #roleId {
+  flex: 0 1 160px;
+  min-width: 120px;
+}
+
+/* 查询用户 */
+.user-card-controls #userKeyword {
+  flex: 0 1 280px;
+  min-width: 180px;
+}
+
+/* 更新用户状态 */
+.user-card-controls #statusUserId {
+  flex: 0 1 140px;
+  min-width: 120px;
+}
+
+.user-card-controls #statusValue {
+  flex: 0 1 180px;
+  min-width: 120px;
+}
+
+.user-card-controls button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.user-result {
+  margin: 0;
+  padding: 8px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 8px;
+  background: var(--card);
+  color: var(--text);
+  min-height: 36px;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
-.row {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(120px, 1fr));
+.user-result.is-error {
+  color: var(--text-main);
+  border-color: rgba(var(--primary-rgb), 0.35);
+  background: rgba(var(--primary-rgb), 0.06);
+}
+
+.user-list {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 10px;
 }
 
-button {
-  background: var(--primary);
-  border: none;
+.user-list-meta {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.user-list-item {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
   border-radius: 8px;
-  padding: 8px 12px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.user-list-item:hover {
+  border-color: var(--primary);
+}
+
+@media (max-width: 980px) {
+  .user-tabs-header {
+    flex-wrap: wrap;
+  }
+  .user-card-controls {
+    flex-wrap: wrap;
+  }
 }

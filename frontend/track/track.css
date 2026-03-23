@@ -1,60 +1,35 @@
 /* 文件：轨迹页样式（track.css） | File: Track Styles */
-:root {
-  --bg: #f3f5f8;
-  --card: #ffffff;
-  --text: #1f2937;
-  --line: #d8dee8;
-  --primary: #00d2ff;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0b0e14;
-    --card: #141b26;
-    --text: #e5e7eb;
-    --line: #283244;
-    --primary: #00d2ff;
-  }
-}
-
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family: "Microsoft YaHei", sans-serif;
-}
-
 .page {
-  margin: 20px;
+  margin: 0;
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 16px;
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
-.bar {
-  display: flex;
-  gap: 8px;
+/* 工具条：输入框不占满整行，与按钮同一行、底边对齐（覆盖 forms 里 input 默认 width:100%） */
+.app-content .page .bar.track-toolbar {
+  flex-wrap: nowrap;
+  align-items: flex-end;
 }
 
-input {
-  padding: 10px;
-  border-radius: 8px;
-  border: 1px solid var(--line);
+.app-content .page .bar.track-toolbar #vid {
+  width: auto;
+  min-width: 11rem;
+  max-width: 20rem;
+  flex: 0 1 260px;
 }
 
-button {
-  background: var(--primary);
-  border: none;
-  border-radius: 8px;
-  padding: 8px 12px;
-  cursor: pointer;
+@media (max-width: 720px) {
+  .app-content .page .bar.track-toolbar {
+    flex-wrap: wrap;
+  }
 }
 
 #canvas {
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: #0f1724;
+  background: var(--canvas-bg);
 }

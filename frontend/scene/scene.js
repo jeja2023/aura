@@ -23,7 +23,24 @@ function getToken() {
 }
 
 function setResult(data) {
-  resultEl.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+  if (!resultEl) return;
+  if (typeof data === "string") {
+    resultEl.textContent = data;
+    return;
+  }
+  if (data && typeof data === "object") {
+    if (typeof data.msg === "string") {
+      resultEl.textContent = data.msg;
+      return;
+    }
+    if (Array.isArray(data.data)) {
+      resultEl.textContent = `共 ${data.data.length} 条结果`;
+      return;
+    }
+    resultEl.textContent = "操作完成";
+    return;
+  }
+  resultEl.textContent = String(data ?? "");
 }
 
 function resize() {
@@ -45,7 +62,7 @@ function init3D() {
   const light = new THREE.DirectionalLight(0xffffff, 1.1);
   light.position.set(20, 30, 20);
   scene.add(light);
-  scene.add(new THREE.AmbientLight(0xaaccff, 0.5));
+  scene.add(new THREE.AmbientLight(0x93c5fd, 0.45));
 
   animate();
 }
@@ -62,9 +79,14 @@ function clearFloors() {
 
 function buildFloors() {
   clearFloors();
-  const count = Math.max(1, floorData.length);
-  for (let i = 0; i < count; i++) {
-    const floor = floorData[i];
+  /* 仅遍历真实楼层；勿用 Math.max(1, length)，否则空列表时 floorData[0] 为 undefined 会报错 */
+  const list = (Array.isArray(floorData) ? floorData : []).filter(
+    (f) => f && (f.floorId != null || f.FloorId != null)
+  );
+  for (let i = 0; i < list.length; i++) {
+    const floor = list[i];
+    const floorId = floor.floorId ?? floor.FloorId;
+    const nodeId = floor.nodeId ?? floor.NodeId;
     const geo = new THREE.BoxGeometry(14, 1.8, 14);
     const mat = new THREE.MeshPhongMaterial({
       color: 0x2b3e57,
@@ -74,7 +96,7 @@ function buildFloors() {
     });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.y = i * 2.3 + 1;
-    mesh.userData = { floorId: floor.floorId, nodeId: floor.nodeId, idx: i };
+    mesh.userData = { floorId, nodeId, idx: i };
     scene.add(mesh);
     floorMeshes.push(mesh);
   }
@@ -85,9 +107,9 @@ function draw2DSlice(floorId) {
   sctx.clearRect(0, 0, slice2d.width, slice2d.height);
   sctx.fillStyle = "#1a2435";
   sctx.fillRect(0, 0, slice2d.width, slice2d.height);
-  sctx.strokeStyle = "#00d2ff";
+  sctx.strokeStyle = "#2563eb";
   sctx.strokeRect(18, 18, slice2d.width - 36, slice2d.height - 36);
-  sctx.fillStyle = "#d9e6ff";
+  sctx.fillStyle = "#dbeafe";
   sctx.font = "16px sans-serif";
   sctx.fillText(`Floor #${floorId} 2D Slice`, 24, 42);
 
@@ -147,10 +169,16 @@ async function loadBaseData() {
   ]);
   const fData = await fRes.json();
   const cData = await cRes.json();
-  floorData = fData.data || [];
-  cameraData = cData.data || [];
+  const rawFloors = fData.data;
+  const rawCams = cData.data;
+  floorData = Array.isArray(rawFloors) ? rawFloors : [];
+  cameraData = Array.isArray(rawCams) ? rawCams : [];
   buildFloors();
-  setResult({ floorCount: floorData.length, cameraCount: cameraData.length });
+  setResult({
+    floorCount: floorData.length,
+    cameraCount: cameraData.length,
+    hint: floorData.length === 0 ? "暂无楼层数据，请先在「楼层图纸」上传并创建楼层" : undefined
+  });
 }
 
 async function initSignalR() {

@@ -5,26 +5,44 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>三维态势</title>
+  <script src="../common/theme-pref.js"></script>
+  <link rel="stylesheet" href="../common/theme.css" />
+  <link rel="stylesheet" href="../common/shell.css" />
+  <link rel="stylesheet" href="../common/forms.css" />
   <link rel="stylesheet" href="./scene.css" />
 </head>
-<body>
-  <main class="page">
-    <section class="left">
-      <h1>3D 主视界（Three.js）</h1>
-      <div class="toolbar">
-        <button id="resetBtn">重置视角</button>
-        <button id="back3dBtn">返回3D总览</button>
+<body class="app-body" data-shell-title="三维空间态势">
+  <aside class="app-sidebar" id="auraSidebar" aria-label="主导航"></aside>
+  <div class="app-frame">
+    <header class="app-topbar">
+      <button type="button" class="app-sidebar-toggle" id="auraSidebarToggle" aria-label="展开或收起导航">菜单</button>
+      <h1 class="app-page-title"></h1>
+      <div class="app-topbar-actions"></div>
+    </header>
+    <main class="app-content scene-mode">
+      <div class="page">
+        <section class="left">
+          <div class="toolbar">
+            <button id="resetBtn" type="button">重置视角</button>
+            <button id="back3dBtn" type="button">返回3D总览</button>
+          </div>
+          <div id="stage3d"></div>
+        </section>
+        <section class="right">
+          <h2>2D 楼层切片</h2>
+          <canvas id="slice2d" width="520" height="360"></canvas>
+          <pre id="result">提示：点击3D楼层可下钻到2D切片。</pre>
+        </section>
       </div>
-      <div id="stage3d"></div>
-    </section>
-    <section class="right">
-      <h2>2D 楼层切片</h2>
-      <canvas id="slice2d" width="520" height="360"></canvas>
-      <pre id="result">提示：点击3D楼层可下钻到2D切片。</pre>
-    </section>
-  </main>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"></script>
-  <script src="./scene.js"></script>
+    </main>
+  </div>
+  <script defer src="../common/shell.js"></script>
+  <!-- 三维依赖仅从 frontend/common/vendor 本地加载（three、signalr），不经 CDN -->
+  <script
+    defer
+    id="auraSceneVendorLoader"
+    data-aura-page-js="./scene.js"
+    src="../common/scene-vendor-loader.js"
+  ></script>
 </body>
 </html>

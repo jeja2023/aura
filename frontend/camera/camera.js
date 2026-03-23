@@ -13,7 +13,24 @@ function getToken() {
 }
 
 function setResult(data) {
-  resultEl.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+  if (!resultEl) return;
+  if (typeof data === "string") {
+    resultEl.textContent = data;
+    return;
+  }
+  if (data && typeof data === "object") {
+    if (typeof data.msg === "string") {
+      resultEl.textContent = data.msg;
+      return;
+    }
+    if (Array.isArray(data.data)) {
+      resultEl.textContent = `共 ${data.data.length} 条结果`;
+      return;
+    }
+    resultEl.textContent = "操作完成";
+    return;
+  }
+  resultEl.textContent = String(data ?? "");
 }
 
 function draw() {

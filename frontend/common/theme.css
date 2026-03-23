@@ -1,0 +1,81 @@
+/* 文件：全局主题令牌（theme.css） | File: Global Theme Tokens */
+/* 主色：现代标准蓝（约 blue-600），仅浅色/深色两档，由 data-aura-theme 与 theme-pref.js 控制 */
+:root {
+  --primary-rgb: 37, 99, 235;
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --primary-text: #ffffff;
+  --bg-main: #f1f5f9;
+  --bg-card: #ffffff;
+  --bg-elevated: #ffffff;
+  --text-main: #0f172a;
+  --text-muted: #64748b;
+  --border-subtle: #e2e8f0;
+  --shadow: 0 4px 20px rgba(15, 23, 42, 0.06);
+  --sidebar-bg: #ffffff;
+  --sidebar-text: #0f172a;
+  --sidebar-muted: #64748b;
+  --sidebar-active-bg: rgba(var(--primary-rgb), 0.12);
+  --sidebar-border: #e2e8f0;
+  --canvas-bg: #0f1724;
+  --overlay-scrim: rgba(15, 23, 42, 0.45);
+  /* 表单控件（forms.css） */
+  --form-radius: 9px;
+  --form-control-bg: var(--bg-elevated);
+  --form-control-border: var(--border-subtle);
+  --form-placeholder-opacity: 0.72;
+  --btn-secondary-bg: var(--bg-elevated);
+  --btn-secondary-text: var(--text-main);
+  --btn-secondary-border: var(--border-subtle);
+  --btn-secondary-hover-bg: rgba(var(--primary-rgb), 0.08);
+  /* 文件选择控件在横排卡片中的统一宽度（forms.css） */
+  --form-file-input-basis: 320px;
+  --form-file-input-min: 200px;
+  --form-file-input-max: 380px;
+  /* 与历史页面变量名兼容 */
+  --bg: var(--bg-main);
+  --card: var(--bg-card);
+  --text: var(--text-main);
+  --line: var(--border-subtle);
+  --accent: var(--primary);
+}
+
+:root[data-aura-theme="dark"] {
+  --primary-rgb: 96, 165, 250;
+  --primary: #60a5fa;
+  --primary-hover: #3b82f6;
+  --primary-text: #ffffff;
+  --bg-main: #0c0f14;
+  --bg-card: #141b26;
+  --bg-elevated: #1a2332;
+  --text-main: #e5e7eb;
+  --text-muted: #94a3b8;
+  --border-subtle: #2d3a4f;
+  --shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+  --sidebar-bg: #080b10;
+  --sidebar-text: #e5e7eb;
+  --sidebar-muted: #8b9cb3;
+  --sidebar-active-bg: rgba(var(--primary-rgb), 0.2);
+  --sidebar-border: #1e293b;
+  --canvas-bg: #0f1724;
+  --overlay-scrim: rgba(0, 0, 0, 0.55);
+  --form-control-bg: var(--bg-elevated);
+  --form-control-border: var(--border-subtle);
+  --btn-secondary-bg: var(--bg-elevated);
+  --btn-secondary-text: var(--text-main);
+  --btn-secondary-border: var(--border-subtle);
+  --btn-secondary-hover-bg: rgba(var(--primary-rgb), 0.16);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body.app-body {
+  margin: 0;
+  background: var(--bg-main);
+  color: var(--text-main);
+  font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+}

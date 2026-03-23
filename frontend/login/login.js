@@ -23,6 +23,8 @@ async function login() {
   const user = document.getElementById("user").value.trim();
   const pass = document.getElementById("pass").value.trim();
   const result = document.getElementById("result");
+  result.hidden = true;
+  result.textContent = "";
 
   try {
     const res = await fetch(`${apiBase}/api/auth/login`, {
@@ -34,12 +36,15 @@ async function login() {
     if (data?.code === 0 && data?.data?.token) {
       saveLoginState(data.data.token);
       result.textContent = "登录成功，正在跳转...";
+      result.hidden = true;
       window.location.href = getReturnUrl();
       return;
     }
-    result.textContent = JSON.stringify(data, null, 2);
+    result.textContent = data?.msg || "登录失败";
+    result.hidden = false;
   } catch (error) {
     result.textContent = `登录失败：${error.message}`;
+    result.hidden = false;
   }
 }
 

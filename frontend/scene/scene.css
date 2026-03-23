@@ -1,29 +1,12 @@
 /* 文件：三维态势页样式（scene.css） | File: Scene Styles */
-:root {
-  --bg: #0b0e14;
-  --card: #141b26;
-  --line: #283244;
-  --text: #e5e7eb;
-  --accent: #00d2ff;
-}
-
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family: "Microsoft YaHei", sans-serif;
-}
-
 .page {
   display: grid;
   grid-template-columns: 1.6fr 1fr;
   gap: 12px;
   padding: 12px;
-  height: 100vh;
+  min-height: 0;
+  height: 100%;
+  box-sizing: border-box;
 }
 
 .left,
@@ -32,26 +15,30 @@ body {
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 10px;
+  min-height: 0;
+}
+
+.left {
+  display: flex;
+  flex-direction: column;
+}
+
+.right h2 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  color: var(--text-main);
 }
 
 .toolbar {
   display: flex;
   gap: 8px;
   margin-bottom: 8px;
-}
-
-button {
-  border: none;
-  border-radius: 8px;
-  background: var(--accent);
-  color: #00131a;
-  padding: 8px 12px;
-  cursor: pointer;
+  flex-shrink: 0;
 }
 
 #stage3d {
   width: 100%;
-  height: calc(100% - 70px);
+  flex: 1;
   min-height: 460px;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -62,5 +49,21 @@ button {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: #0f1724;
+  background: var(--canvas-bg);
+}
+
+.right pre {
+  font-size: 13px;
+}
+
+@media (max-width: 1100px) {
+  .page {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: min(90vh, 900px);
+  }
+
+  #stage3d {
+    min-height: 400px;
+  }
 }

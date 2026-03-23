@@ -5,31 +5,49 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>统计</title>
+  <script src="../common/theme-pref.js"></script>
+  <link rel="stylesheet" href="../common/theme.css" />
+  <link rel="stylesheet" href="../common/shell.css" />
+  <link rel="stylesheet" href="../common/forms.css" />
   <link rel="stylesheet" href="./stats.css" />
 </head>
-<body>
-  <main class="page">
-    <h1>ECharts 统计驾驶舱</h1>
-    <div class="toolbar">
-      <button id="load">刷新统计</button>
-    </div>
-    <section class="grid">
-      <div class="card">
-        <h2>近7日抓拍/告警</h2>
-        <div id="dailyChart" class="chart"></div>
+<body class="app-body" data-shell-title="统计驾驶舱">
+  <aside class="app-sidebar" id="auraSidebar" aria-label="主导航"></aside>
+  <div class="app-frame">
+    <header class="app-topbar">
+      <button type="button" class="app-sidebar-toggle" id="auraSidebarToggle" aria-label="展开或收起导航">菜单</button>
+      <h1 class="app-page-title"></h1>
+      <div class="app-topbar-actions"></div>
+    </header>
+    <main class="app-content">
+      <div class="page">
+        <div class="toolbar">
+          <button id="load" type="button">刷新统计</button>
+        </div>
+        <section class="grid">
+          <div class="card">
+            <h2>近7日抓拍/告警</h2>
+            <div id="dailyChart" class="chart"></div>
+          </div>
+          <div class="card">
+            <h2>设备抓拍Top10</h2>
+            <div id="deviceChart" class="chart"></div>
+          </div>
+          <div class="card">
+            <h2>告警类型占比</h2>
+            <div id="alertChart" class="chart"></div>
+          </div>
+        </section>
+        <p id="statsStatus" class="stats-status" role="status" hidden aria-live="polite"></p>
       </div>
-      <div class="card">
-        <h2>设备抓拍Top10</h2>
-        <div id="deviceChart" class="chart"></div>
-      </div>
-      <div class="card">
-        <h2>告警类型占比</h2>
-        <div id="alertChart" class="chart"></div>
-      </div>
-    </section>
-    <pre id="result">等待查询</pre>
-  </main>
-  <script src="https://cdn.jsdelivr.net/npm/echarts@5.6.0/dist/echarts.min.js"></script>
-  <script src="./stats.js"></script>
+    </main>
+  </div>
+  <script defer src="../common/shell.js"></script>
+  <script
+    defer
+    id="auraEchartsVendorLoader"
+    data-aura-page-js="./stats.js"
+    src="../common/echarts-vendor-loader.js"
+  ></script>
 </body>
 </html>

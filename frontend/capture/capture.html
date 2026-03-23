@@ -5,20 +5,34 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>抓拍</title>
+  <script src="../common/theme-pref.js"></script>
+  <link rel="stylesheet" href="../common/theme.css" />
+  <link rel="stylesheet" href="../common/shell.css" />
+  <link rel="stylesheet" href="../common/forms.css" />
   <link rel="stylesheet" href="./capture.css" />
 </head>
-<body>
-  <main class="page">
-    <h1>抓拍记录</h1>
-    <div class="row">
-      <input id="deviceId" placeholder="设备ID，默认1" />
-      <input id="channelNo" placeholder="通道号，默认1" />
-      <input id="meta" placeholder="元数据，如：异常-夜间滞留" />
-    </div>
-    <button id="create">新增模拟抓拍</button>
-    <button id="load">查询抓拍</button>
-    <pre id="result">等待查询</pre>
-  </main>
-  <script src="./capture.js"></script>
+<body class="app-body" data-shell-title="抓拍记录">
+  <aside class="app-sidebar" id="auraSidebar" aria-label="主导航"></aside>
+  <div class="app-frame">
+    <header class="app-topbar">
+      <button type="button" class="app-sidebar-toggle" id="auraSidebarToggle" aria-label="展开或收起导航">菜单</button>
+      <h1 class="app-page-title"></h1>
+      <div class="app-topbar-actions"></div>
+    </header>
+    <main class="app-content">
+      <div class="page">
+        <div class="capture-toolbar">
+          <input id="deviceId" placeholder="设备ID，默认1" />
+          <input id="channelNo" placeholder="通道号，默认1" />
+          <input id="meta" placeholder="元数据，如：异常-夜间滞留" />
+          <button id="create" type="button">新增模拟抓拍</button>
+          <button id="load" type="button">查询抓拍</button>
+        </div>
+        <pre id="result" class="aura-status" role="status" hidden aria-live="polite"></pre>
+      </div>
+    </main>
+  </div>
+  <script defer src="../common/shell.js"></script>
+  <script defer src="./capture.js"></script>
 </body>
 </html>
