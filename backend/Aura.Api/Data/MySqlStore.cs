@@ -813,11 +813,11 @@ internal sealed class MySqlStore
 
 internal sealed record DbUser(string UserName, string PasswordHash, string? RoleName);
 internal sealed record DbDevice(long DeviceId, string Name, string Ip, int Port, string Brand, string Protocol, string Status, DateTime CreatedAt);
-internal sealed record DbCapture(long CaptureId, long DeviceId, int ChannelNo, DateTimeOffset CaptureTime, string MetadataJson);
-internal sealed record DbAlert(long AlertId, string AlertType, string Detail, DateTimeOffset CreatedAt);
+internal sealed record DbCapture(long CaptureId, long DeviceId, int ChannelNo, DateTime CaptureTime, string MetadataJson);
+internal sealed record DbAlert(long AlertId, string AlertType, string Detail, DateTime CreatedAt);
 internal sealed record DbOperation(long OperationId, string OperatorName, string Action, string Detail, DateTimeOffset CreatedAt);
 internal sealed record DbRole(long RoleId, string RoleName, string PermissionJson);
-internal sealed record DbUserListItem(long UserId, string UserName, int Status, string? RoleName, DateTime CreatedAt);
+internal sealed record DbUserListItem(long UserId, string UserName, long Status, string? RoleName, DateTime CreatedAt);
 internal sealed record DbCampusNode(long NodeId, long? ParentId, string LevelType, string NodeName);
 internal sealed record DbFloor(long FloorId, long NodeId, string FilePath, decimal ScaleRatio);
 internal sealed record DbCamera(long CameraId, long FloorId, long DeviceId, int ChannelNo, decimal PosX, decimal PosY);

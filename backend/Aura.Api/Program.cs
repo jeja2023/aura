@@ -1519,7 +1519,9 @@ stats.MapGet("/overview", async () =>
     var captures = await db.GetCapturesAsync();
     var alerts = await db.GetAlertsAsync();
     var devices = await db.GetDevicesAsync();
-    var sourceCaptures = captures.Count > 0 ? captures.Select(x => new { x.DeviceId, x.CaptureTime }).ToList() : store.Captures.Select(x => new { x.DeviceId, x.CaptureTime }).ToList();
+    var sourceCaptures = captures.Count > 0
+        ? captures.Select(x => new { x.DeviceId, CaptureTime = new DateTimeOffset(x.CaptureTime) }).ToList()
+        : store.Captures.Select(x => new { x.DeviceId, x.CaptureTime }).ToList();
     var totalCapture = sourceCaptures.Count;
     var totalAlert = alerts.Count > 0 ? alerts.Count : store.Alerts.Count;
     var onlineDevice = devices.Count > 0 ? devices.Count(x => x.Status == "online") : store.Devices.Count(x => x.Status == "online");
@@ -1530,10 +1532,10 @@ stats.MapGet("/dashboard", async () =>
     var captures = await db.GetCapturesAsync();
     var alerts = await db.GetAlertsAsync();
     var sourceCaptures = captures.Count > 0
-        ? captures.Select(x => new { x.DeviceId, x.CaptureTime }).ToList()
+        ? captures.Select(x => new { x.DeviceId, CaptureTime = new DateTimeOffset(x.CaptureTime) }).ToList()
         : store.Captures.Select(x => new { x.DeviceId, x.CaptureTime }).ToList();
     var sourceAlerts = alerts.Count > 0
-        ? alerts.Select(x => new { x.AlertType, x.CreatedAt }).ToList()
+        ? alerts.Select(x => new { x.AlertType, CreatedAt = new DateTimeOffset(x.CreatedAt) }).ToList()
         : store.Alerts.Select(x => new { x.AlertType, x.CreatedAt }).ToList();
 
     var today = DateOnly.FromDateTime(DateTime.Now);
@@ -1579,7 +1581,7 @@ export.MapGet("/{type}", async (HttpRequest request, string type, string dataset
     {
         var captures = await db.GetCapturesAsync(maxRows);
         var source = captures.Count > 0
-            ? captures.Select(x => new { x.CaptureId, x.DeviceId, x.ChannelNo, x.CaptureTime, x.MetadataJson }).ToList()
+            ? captures.Select(x => new { x.CaptureId, x.DeviceId, x.ChannelNo, CaptureTime = new DateTimeOffset(x.CaptureTime), x.MetadataJson }).ToList()
             : store.Captures.Select(x => new { x.CaptureId, x.DeviceId, x.ChannelNo, x.CaptureTime, x.MetadataJson }).ToList();
         rows =
         [
@@ -1591,7 +1593,7 @@ export.MapGet("/{type}", async (HttpRequest request, string type, string dataset
     {
         var alerts = await db.GetAlertsAsync(maxRows);
         var source = alerts.Count > 0
-            ? alerts.Select(x => new { x.AlertId, x.AlertType, x.Detail, x.CreatedAt }).ToList()
+            ? alerts.Select(x => new { x.AlertId, x.AlertType, x.Detail, CreatedAt = new DateTimeOffset(x.CreatedAt) }).ToList()
             : store.Alerts.Select(x => new { x.AlertId, x.AlertType, Detail = x.Detail, x.CreatedAt }).ToList();
         rows =
         [
