@@ -1,3 +1,4 @@
+/* 文件：后端启动入口（Program.cs） | File: Backend Startup Entry */
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;

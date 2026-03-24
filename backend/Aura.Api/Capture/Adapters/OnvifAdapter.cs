@@ -1,3 +1,4 @@
+/* 文件：ONVIF抓拍适配器（OnvifAdapter.cs） | File: ONVIF Capture Adapter */
 using System.Text.Json;
 using System.Text.Json.Nodes;
 

@@ -1,3 +1,4 @@
+/* 文件：海康ISAPI抓拍适配器（HikvisionIsapiAdapter.cs） | File: Hikvision ISAPI Capture Adapter */
 using System.Text.Json;
 using System.Text.Json.Nodes;
 

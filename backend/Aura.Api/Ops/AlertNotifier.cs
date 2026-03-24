@@ -1,3 +1,4 @@
+/* 文件：告警通知器（AlertNotifier.cs） | File: Alert Notifier */
 namespace Aura.Api.Ops;
 
 internal sealed record AlertNotifyMessage(
