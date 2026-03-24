@@ -136,6 +136,31 @@ CREATE TABLE IF NOT EXISTS log_operation (
   PRIMARY KEY (op_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='操作审计日志';
 
+-- =========================
+-- 性能关键索引（按查询模式）
+-- =========================
+
+-- 抓拍查询：按 capture_time 范围 + 反向排序分页
+CREATE INDEX IF NOT EXISTS idx_capture_time_desc
+  ON capture_record(capture_time, capture_id);
+
+-- 轨迹查询：
+-- 1) 按 event_time 范围（用于研判）
+-- 2) 按 vid 精确查询 + event_id 反向排序（用于回溯）
+CREATE INDEX IF NOT EXISTS idx_track_event_time_desc
+  ON track_event(event_time, event_id);
+CREATE INDEX IF NOT EXISTS idx_track_event_vid_desc
+  ON track_event(vid, event_id);
+
+-- 研判结果查询：
+-- 按 judge_date / judge_type 条件过滤 + judge_id 反向排序
+CREATE INDEX IF NOT EXISTS idx_judge_date_type_desc
+  ON judge_result(judge_date, judge_type, judge_id);
+
+-- 告警查询：目前主要按 alert_id 反向排序返回
+CREATE INDEX IF NOT EXISTS idx_alert_id_desc
+  ON alert_record(alert_id);
+
 INSERT IGNORE INTO sys_role (role_id, role_name, permission_json) VALUES
   (1, 'super_admin', JSON_ARRAY('all')),
   (2, 'building_admin', JSON_ARRAY('device', 'roi', 'track', 'alert', 'stats'));

@@ -18,10 +18,6 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 
-function getToken() {
-  return localStorage.getItem("token") ?? "";
-}
-
 function setResult(data) {
   if (!resultEl) return;
   if (typeof data === "string") {
@@ -162,10 +158,9 @@ function flashFloorByCameraId(cameraId) {
 }
 
 async function loadBaseData() {
-  const headers = { Authorization: `Bearer ${getToken()}` };
   const [fRes, cRes] = await Promise.all([
-    fetch(`${apiBase}/api/floor/list`, { headers }),
-    fetch(`${apiBase}/api/camera/list`, { headers })
+    fetch(`${apiBase}/api/floor/list`, { credentials: "include" }),
+    fetch(`${apiBase}/api/camera/list`, { credentials: "include" })
   ]);
   const fData = await fRes.json();
   const cData = await cRes.json();
@@ -187,7 +182,10 @@ async function initSignalR() {
     return;
   }
   const connection = new window.signalR.HubConnectionBuilder()
-    .withUrl(`${apiBase}/hubs/events`)
+    .withUrl(`${apiBase}/hubs/events`, {
+      // 纯 Cookie 会话下由浏览器自动携带 HttpOnly Cookie；accessTokenFactory 保持兼容占位
+      accessTokenFactory: () => ""
+    })
     .withAutomaticReconnect()
     .build();
 

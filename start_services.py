@@ -6,6 +6,7 @@ import signal
 import subprocess
 import sys
 import time
+import json
 import urllib.request
 import urllib.error
 import ssl
@@ -19,6 +20,7 @@ API_DIR = ROOT / "backend" / "Aura.Api"
 FRONTEND_URL = "https://localhost:5001/"
 AI_HEALTH_URL = "http://127.0.0.1:8000/"
 API_HEALTH_URL = "https://localhost:5001/api/health"
+DEV_CONFIG = API_DIR / "appsettings.Development.json"
 
 
 def _pick_ai_python() -> str:
@@ -51,7 +53,31 @@ def _start_process(cmd: list[str], cwd: Path, name: str) -> subprocess.Popen:
         raise RuntimeError(f"{name} 启动失败，未找到命令：{cmd[0]}") from ex
 
 
+def _preflight_check() -> None:
+    if not DEV_CONFIG.exists():
+        raise RuntimeError(f"缺少开发配置文件：{DEV_CONFIG}")
+    try:
+        cfg = json.loads(DEV_CONFIG.read_text(encoding="utf-8"))
+    except Exception as ex:
+        raise RuntimeError(f"读取开发配置失败：{ex}") from ex
+
+    jwt_key = str(((cfg.get("Jwt") or {}).get("Key") or "")).strip()
+    mysql_conn = str(((cfg.get("ConnectionStrings") or {}).get("MySql") or "")).strip()
+    redis_conn = str(((cfg.get("ConnectionStrings") or {}).get("Redis") or "")).strip()
+    ai_base_url = str(((cfg.get("Ai") or {}).get("BaseUrl") or "")).strip()
+    if not jwt_key:
+        raise RuntimeError("开发配置缺少 Jwt:Key")
+    if "PLEASE_" in mysql_conn.upper() or not mysql_conn:
+        raise RuntimeError("开发配置中的 MySql 连接串仍为占位值，请先配置后再启动。")
+    if "PLEASE_" in redis_conn.upper() or not redis_conn:
+        raise RuntimeError("开发配置中的 Redis 连接串仍为占位值，请先配置后再启动。")
+    if not ai_base_url:
+        raise RuntimeError("开发配置缺少 Ai:BaseUrl")
+    print("[预检] 开发配置检查通过。")
+
+
 def main() -> int:
+    _preflight_check()
     ai_python = _pick_ai_python()
     ai_cmd = [ai_python, "-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", "8000"]
     api_cmd = ["dotnet", "run"]

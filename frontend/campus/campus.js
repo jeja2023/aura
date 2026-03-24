@@ -6,10 +6,6 @@ const resultEl = document.getElementById("result");
 let successStatusTimer = null;
 const SUCCESS_STATUS_MS = 5000;
 
-function getToken() {
-  return localStorage.getItem("token") ?? "";
-}
-
 function clearSuccessStatusTimer() {
   if (successStatusTimer != null) {
     clearTimeout(successStatusTimer);
@@ -75,7 +71,7 @@ async function load() {
 
   try {
     const res = await fetch(`${apiBase}/api/campus/tree`, {
-      headers: { Authorization: `Bearer ${getToken()}` }
+      credentials: "include"
     });
     const data = await res.json();
     setResult(data);

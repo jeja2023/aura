@@ -11,10 +11,6 @@ let successStatusTimer = null;
 const SUCCESS_STATUS_MS = 5000;
 const defaultPromptText = resultEl?.textContent ?? "";
 
-function getToken() {
-  return localStorage.getItem("token") ?? "";
-}
-
 function clearSuccessStatusTimer() {
   if (successStatusTimer != null) {
     clearTimeout(successStatusTimer);
@@ -79,7 +75,7 @@ async function load() {
 
   try {
     const res = await fetch(`${apiBase}/api/roi/list`, {
-      headers: { Authorization: `Bearer ${getToken()}` }
+      credentials: "include"
     });
     const data = await res.json();
     setResult(data);
@@ -168,9 +164,9 @@ document.getElementById("saveBtn").addEventListener("click", async () => {
   try {
     const res = await fetch(`${apiBase}/api/roi/save`, {
       method: "POST",
+      credentials: "include",
       headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${getToken()}`
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
         cameraId,

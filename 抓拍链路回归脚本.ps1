@@ -6,7 +6,10 @@ $ErrorActionPreference = "Stop"
 
 $base = "https://localhost:5001"
 $user = "admin"
-$pass = "admin123"
+$pass = $env:AURA_ADMIN_PASSWORD
+if ([string]::IsNullOrWhiteSpace($pass)) {
+    throw "请先设置环境变量 AURA_ADMIN_PASSWORD（不再内置默认密码）。"
+}
 
 function Invoke-Api([string]$Method, [string]$Path, $Body = $null, [string]$Token = "") {
     $headers = @{}

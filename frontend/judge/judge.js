@@ -6,10 +6,6 @@ const resultEl = document.getElementById("result");
 let successStatusTimer = null;
 const SUCCESS_STATUS_MS = 5000;
 
-function getToken() {
-  return localStorage.getItem("token") ?? "";
-}
-
 function clearSuccessStatusTimer() {
   if (successStatusTimer != null) {
     clearTimeout(successStatusTimer);
@@ -83,9 +79,9 @@ function getDate() {
 async function post(path, body) {
   const res = await fetch(`${apiBase}${path}`, {
     method: "POST",
+    credentials: "include",
     headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${getToken()}`
+      "Content-Type": "application/json"
     },
     body: JSON.stringify(body)
   });
@@ -97,8 +93,8 @@ async function load() {
 
   try {
     const date = getDate();
-    const res = await fetch(`${apiBase}/api/judge/daily?date=${encodeURIComponent(date)}`, {
-      headers: { Authorization: `Bearer ${getToken()}` }
+    const res = await fetch(`${apiBase}/api/judge/daily?date=${encodeURIComponent(date)}&limit=2000`, {
+      credentials: "include"
     });
     const data = await res.json();
     setResult(data);

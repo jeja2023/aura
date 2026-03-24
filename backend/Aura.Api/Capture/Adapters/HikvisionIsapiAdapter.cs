@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Aura.Api.Capture.Adapters;
 
@@ -19,7 +20,8 @@ public sealed class HikvisionIsapiAdapter : ICaptureAdapter
             ChannelNo = channelNo,
             CaptureTime = captureTime,
             ImageBase64 = imageBase64,
-            MetadataJson = rawPayload.GetRawText()
+            // metadata 里不应包含 imageBase64，避免重复体积传输与入库膨胀
+            MetadataJson = RemoveImageBase64(rawPayload)
         };
     }
 
@@ -46,5 +48,25 @@ public sealed class HikvisionIsapiAdapter : ICaptureAdapter
             }
         }
         return defaultValue;
+    }
+
+    private static string RemoveImageBase64(JsonElement rawPayload)
+    {
+        try
+        {
+            if (rawPayload.ValueKind != JsonValueKind.Object) return rawPayload.GetRawText();
+            var node = JsonNode.Parse(rawPayload.GetRawText());
+            if (node is JsonObject obj)
+            {
+                obj.Remove("imageBase64");
+                obj.Remove("image_base64");
+            }
+            return node?.ToJsonString() ?? "{}";
+        }
+        catch
+        {
+            // 兜底：无法解析时退回原始 JSON，避免链路整体失败
+            return rawPayload.GetRawText();
+        }
     }
 }

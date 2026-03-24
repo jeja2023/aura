@@ -11,10 +11,6 @@ let step = 0;
 let successStatusTimer = null;
 const SUCCESS_STATUS_MS = 5000;
 
-function getToken() {
-  return localStorage.getItem("token") ?? "";
-}
-
 function clearSuccessStatusTimer() {
   if (successStatusTimer != null) {
     clearTimeout(successStatusTimer);
@@ -86,11 +82,11 @@ async function load() {
 
   try {
     const [trackRes, cameraRes] = await Promise.all([
-      fetch(`${apiBase}/api/track/${encodeURIComponent(vid)}`, {
-        headers: { Authorization: `Bearer ${getToken()}` }
+      fetch(`${apiBase}/api/track/${encodeURIComponent(vid)}?limit=500`, {
+        credentials: "include"
       }),
       fetch(`${apiBase}/api/camera/list`, {
-        headers: { Authorization: `Bearer ${getToken()}` }
+        credentials: "include"
       })
     ]);
     const trackData = await trackRes.json();

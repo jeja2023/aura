@@ -8,10 +8,6 @@ const points = [];
 let dragIndex = -1;
 let bgReady = false;
 
-function getToken() {
-  return localStorage.getItem("token") ?? "";
-}
-
 function setResult(data) {
   if (!resultEl) return;
   if (typeof data === "string") {
@@ -107,9 +103,9 @@ document.getElementById("saveBtn").addEventListener("click", async () => {
   for (const p of unsaved) {
     const res = await fetch(`${apiBase}/api/camera/create`, {
       method: "POST",
+      credentials: "include",
       headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${getToken()}`
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
         floorId: p.floorId,
@@ -128,7 +124,7 @@ document.getElementById("saveBtn").addEventListener("click", async () => {
 
 document.getElementById("listBtn").addEventListener("click", async () => {
   const res = await fetch(`${apiBase}/api/camera/list`, {
-    headers: { Authorization: `Bearer ${getToken()}` }
+    credentials: "include"
   });
   const data = await res.json();
   setResult(data);

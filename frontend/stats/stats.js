@@ -15,10 +15,6 @@ function clearSuccessStatusTimer() {
   }
 }
 
-function getToken() {
-  return localStorage.getItem("token") ?? "";
-}
-
 /** 上线展示：成功时不输出原始 JSON，仅错误时显示简短说明 */
 function setStatus(message, isError) {
   if (!statusEl) return;
@@ -40,10 +36,10 @@ async function load() {
   try {
     const [overviewRes, dashboardRes] = await Promise.all([
       fetch(`${apiBase}/api/stats/overview`, {
-        headers: { Authorization: `Bearer ${getToken()}` }
+        credentials: "include"
       }),
       fetch(`${apiBase}/api/stats/dashboard`, {
-        headers: { Authorization: `Bearer ${getToken()}` }
+        credentials: "include"
       })
     ]);
     const overview = await overviewRes.json();

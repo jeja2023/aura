@@ -43,6 +43,36 @@ internal sealed class AiClient
         }
     }
 
+    public async Task<AiExtractResult> ExtractByPathAsync(string imagePath, string metadataJson)
+    {
+        if (string.IsNullOrWhiteSpace(imagePath))
+        {
+            return new AiExtractResult(false, 0, "图片路径为空，跳过AI提取", []);
+        }
+
+        try
+        {
+            var res = await _httpClient.PostAsJsonAsync($"{_baseUrl}/ai/extract-file", new
+            {
+                image_path = imagePath,
+                metadata_json = metadataJson
+            });
+            if (!res.IsSuccessStatusCode)
+            {
+                return new AiExtractResult(false, 0, $"AI服务响应异常：{(int)res.StatusCode}", []);
+            }
+
+            var json = await res.Content.ReadFromJsonAsync<AiExtractResponse>();
+            var dim = json?.data?.dim ?? 0;
+            var feature = json?.data?.feature ?? [];
+            return new AiExtractResult(true, dim, "AI提取成功", feature);
+        }
+        catch (Exception ex)
+        {
+            return new AiExtractResult(false, 0, $"AI调用失败：{ex.Message}", []);
+        }
+    }
+
     public async Task<bool> UpsertAsync(string vid, List<float> feature)
     {
         try
