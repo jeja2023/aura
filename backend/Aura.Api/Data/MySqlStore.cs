@@ -134,7 +134,8 @@ internal sealed class MySqlStore
                 FROM capture_record
                 ORDER BY capture_id DESC
                 LIMIT @Limit
-                """);
+                """,
+                new { Limit = limit });
             return rows.ToList();
         }
         catch (Exception ex)
@@ -177,7 +178,8 @@ internal sealed class MySqlStore
                 FROM alert_record
                 ORDER BY alert_id DESC
                 LIMIT @Limit
-                """);
+                """,
+                new { Limit = limit });
             return rows.ToList();
         }
         catch (Exception ex)
@@ -599,7 +601,7 @@ internal sealed class MySqlStore
             await using var conn = CreateConnection();
             var rows = await conn.QueryAsync<DbUserListItem>(
                 """
-                SELECT u.user_id AS UserId, u.user_name AS UserName, u.status AS `Status`,
+                SELECT u.user_id AS UserId, u.user_name AS UserName, CAST(u.status AS SIGNED) AS `Status`,
                        r.role_name AS RoleName, u.created_at AS CreatedAt
                 FROM sys_user u
                 LEFT JOIN sys_role r ON u.role_id = r.role_id
@@ -631,6 +633,28 @@ internal sealed class MySqlStore
         {
             _logger?.LogError(ex, "数据库写入用户失败。userName={UserName}, roleId={RoleId}", userName, roleId);
             return null;
+        }
+    }
+
+    public async Task<bool> UpdateUserPasswordByUserNameAsync(string userName, string passwordHash)
+    {
+        try
+        {
+            await using var conn = CreateConnection();
+            var affected = await conn.ExecuteAsync(
+                """
+                UPDATE sys_user
+                SET password_hash=@PasswordHash
+                WHERE user_name=@UserName
+                LIMIT 1
+                """,
+                new { UserName = userName, PasswordHash = passwordHash });
+            return affected > 0;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "数据库重置用户密码失败。userName={UserName}", userName);
+            return false;
         }
     }
 
@@ -793,7 +817,7 @@ internal sealed record DbCapture(long CaptureId, long DeviceId, int ChannelNo, D
 internal sealed record DbAlert(long AlertId, string AlertType, string Detail, DateTimeOffset CreatedAt);
 internal sealed record DbOperation(long OperationId, string OperatorName, string Action, string Detail, DateTimeOffset CreatedAt);
 internal sealed record DbRole(long RoleId, string RoleName, string PermissionJson);
-internal sealed record DbUserListItem(long UserId, string UserName, int Status, string? RoleName, DateTimeOffset CreatedAt);
+internal sealed record DbUserListItem(long UserId, string UserName, int Status, string? RoleName, DateTime CreatedAt);
 internal sealed record DbCampusNode(long NodeId, long? ParentId, string LevelType, string NodeName);
 internal sealed record DbFloor(long FloorId, long NodeId, string FilePath, decimal ScaleRatio);
 internal sealed record DbCamera(long CameraId, long FloorId, long DeviceId, int ChannelNo, decimal PosX, decimal PosY);

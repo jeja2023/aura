@@ -191,20 +191,46 @@ if (app.Environment.IsDevelopment())
 {
     try
     {
-        var users = await db.GetUsersAsync();
-        if (users.Count == 0)
+        var devResetAdminPasswordOnce = app.Configuration.GetValue("Dev:ResetAdminPasswordOnce", false);
+        static string GenerateDevPassword()
         {
             var bytes = RandomNumberGenerator.GetBytes(18);
-            var devPassword = Convert.ToBase64String(bytes)
+            return Convert.ToBase64String(bytes)
                 .Replace('+', '-')
                 .Replace('/', '_')
                 .TrimEnd('=');
+        }
+
+        var users = await db.GetUsersAsync();
+        if (users.Count == 0)
+        {
+            var devPassword = GenerateDevPassword();
             var hash = BCrypt.Net.BCrypt.HashPassword(devPassword);
             var insertedId = await db.InsertUserAsync("admin", hash, 1);
             if (insertedId.HasValue)
             {
                 Console.WriteLine($"开发环境管理员已自动创建：用户名=admin, 密码={devPassword}");
             }
+        }
+        else if (devResetAdminPasswordOnce)
+        {
+            var devPassword = GenerateDevPassword();
+            var hash = BCrypt.Net.BCrypt.HashPassword(devPassword);
+            var resetOk = await db.UpdateUserPasswordByUserNameAsync("admin", hash);
+            if (!resetOk)
+            {
+                // admin 不存在时补建，避免开发环境因账号状态异常无法登录
+                var insertedId = await db.InsertUserAsync("admin", hash, 1);
+                if (insertedId.HasValue)
+                {
+                    Console.WriteLine($"开发环境管理员不存在，已自动重建：用户名=admin, 密码={devPassword}");
+                }
+            }
+            else
+            {
+                Console.WriteLine($"开发环境管理员密码已一次性重置：用户名=admin, 新密码={devPassword}");
+            }
+            Console.WriteLine("提示：Dev:ResetAdminPasswordOnce 仅在本次启动生效；请将其改回 false 或移除。");
         }
     }
     catch
