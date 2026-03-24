@@ -8,19 +8,74 @@ using Aura.Api.Cache;
 using Aura.Api.Capture;
 using Aura.Api.Capture.Adapters;
 using Aura.Api.Data;
+using Aura.Api.Ops;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
-var jwtKey = builder.Configuration["Jwt:Key"] ?? "aura-dev-jwt-key-please-change";
+var isDev = builder.Environment.IsDevelopment();
+var jwtKey = builder.Configuration["Jwt:Key"];
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "Aura.Api";
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "Aura.Client";
 var jwtExpireMinutes = int.TryParse(builder.Configuration["Jwt:ExpireMinutes"], out var m) ? m : 480;
+if (string.IsNullOrWhiteSpace(jwtKey))
+{
+    if (!isDev) throw new InvalidOperationException("JWT Key 未配置（生产环境必须配置）");
+    jwtKey = "aura-dev-jwt-key-please-change";
+}
+if (!isDev && (jwtKey.Contains("aura-dev-jwt-key-please-change", StringComparison.OrdinalIgnoreCase) || jwtKey.Contains("PLEASE_REPLACE", StringComparison.OrdinalIgnoreCase)))
+{
+    throw new InvalidOperationException("JWT Key 不能使用开发/占位默认值");
+}
+
+var globalHmacSecret = builder.Configuration["Security:HmacSecret"];
+if (string.IsNullOrWhiteSpace(globalHmacSecret))
+{
+    if (!isDev) throw new InvalidOperationException("HMAC 密钥未配置（生产环境必须配置）");
+    globalHmacSecret = "demo-hmac-secret";
+}
+if (!isDev && globalHmacSecret.Contains("demo-hmac-secret", StringComparison.OrdinalIgnoreCase))
+{
+    throw new InvalidOperationException("HMAC 密钥不能使用开发默认值");
+}
+
+var captureIpWhitelist = builder.Configuration.GetSection("Security:CaptureIpWhitelist").Get<string[]>();
+
+const int MaxImageBase64Chars = 5_000_000;
+const int MaxMetadataJsonChars = 200_000;
+const long MaxCaptureRequestBytes = 12L * 1024 * 1024;
 var mysqlConn = builder.Configuration.GetConnectionString("MySql") ?? "";
 var redisConn = builder.Configuration.GetConnectionString("Redis") ?? "";
 var aiBaseUrl = builder.Configuration["Ai:BaseUrl"] ?? "http://127.0.0.1:8000";
+var alertWebhookUrl = builder.Configuration["Ops:Alert:WebhookUrl"];
+var alertNotifyFilePath = builder.Configuration["Ops:Alert:FilePath"];
+var alertHealthFailWindowMinutes = int.TryParse(builder.Configuration["Ops:Alert:HealthFailIfRecentFailureMinutes"], out var alertWindowMinutes)
+    ? Math.Max(0, alertWindowMinutes)
+    : 10;
+var cspPolicy = builder.Configuration["Security:CspPolicy"]
+    ?? "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ws: wss:;";
+if (!isDev)
+{
+    if (string.IsNullOrWhiteSpace(mysqlConn)
+        || mysqlConn.Contains("PLEASE_SET_CONNECTIONSTRING_MYSQL", StringComparison.OrdinalIgnoreCase)
+        || mysqlConn.Contains("PLEASE_REPLACE", StringComparison.OrdinalIgnoreCase))
+    {
+        throw new InvalidOperationException("MySQL 连接串未配置或仍为占位值（生产环境必须配置有效连接串）");
+    }
+    if (mysqlConn.Contains("AllowPublicKeyRetrieval=True", StringComparison.OrdinalIgnoreCase))
+    {
+        throw new InvalidOperationException("生产环境禁止 MySQL 连接串使用 AllowPublicKeyRetrieval=True");
+    }
+    if (string.IsNullOrWhiteSpace(redisConn)
+        || redisConn.Contains("PLEASE_SET_CONNECTIONSTRING_REDIS", StringComparison.OrdinalIgnoreCase)
+        || redisConn.Contains("PLEASE_REPLACE", StringComparison.OrdinalIgnoreCase))
+    {
+        throw new InvalidOperationException("Redis 连接串未配置或仍为占位值（生产环境必须配置有效连接串）");
+    }
+}
 
 builder.Services.ConfigureHttpJsonOptions(o =>
 {
@@ -29,9 +84,20 @@ builder.Services.ConfigureHttpJsonOptions(o =>
 });
 
 builder.Services.AddOpenApi();
-builder.Services.AddSingleton(new MySqlStore(mysqlConn));
-builder.Services.AddSingleton(new RedisCacheService(redisConn));
-builder.Services.AddSingleton(new RetryQueueService(redisConn));
+builder.Services.AddSingleton<MySqlStore>(sp =>
+    new MySqlStore(mysqlConn, sp.GetRequiredService<ILogger<MySqlStore>>()));
+builder.Services.AddSingleton<RedisCacheService>(sp =>
+    new RedisCacheService(redisConn, sp.GetRequiredService<ILogger<RedisCacheService>>()));
+builder.Services.AddSingleton<RetryQueueService>(sp =>
+    new RetryQueueService(redisConn, sp.GetRequiredService<ILogger<RetryQueueService>>()));
+builder.Services.AddSingleton<IAlertNotifier>(sp =>
+    new AlertNotifier(
+        new HttpClient(),
+        sp.GetRequiredService<ILogger<AlertNotifier>>(),
+        alertWebhookUrl,
+        alertNotifyFilePath));
+builder.Services.AddSingleton<DailyJudgeScheduleState>();
+builder.Services.AddHostedService<DailyJudgeHostedService>();
 builder.Services.AddSignalR();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -46,6 +112,34 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidAudience = jwtAudience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
             ClockSkew = TimeSpan.FromMinutes(1)
+        };
+
+        // SignalR WebSocket 场景下通常不会带 Authorization 头，改为从 querystring 的 access_token 读取
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                if (string.IsNullOrWhiteSpace(context.Token))
+                {
+                    var cookieToken = context.Request.Cookies["aura_token"];
+                    if (!string.IsNullOrWhiteSpace(cookieToken))
+                    {
+                        context.Token = cookieToken;
+                    }
+                }
+
+                var path = context.HttpContext.Request.Path;
+                if (string.IsNullOrWhiteSpace(context.Token)
+                    && path.StartsWithSegments("/hubs/events", StringComparison.OrdinalIgnoreCase))
+                {
+                    var accessToken = context.Request.Query["access_token"].FirstOrDefault();
+                    if (!string.IsNullOrWhiteSpace(accessToken))
+                    {
+                        context.Token = accessToken;
+                    }
+                }
+                return Task.CompletedTask;
+            }
         };
     });
 builder.Services.AddAuthorization(options =>
@@ -63,28 +157,262 @@ var hikAdapter = new HikvisionIsapiAdapter();
 var onvifAdapter = new OnvifAdapter();
 var cppSdkAdapter = new CppSdkAdapter();
 var aiClient = new AiClient(new HttpClient(), aiBaseUrl);
+var alertNotifier = app.Services.GetRequiredService<IAlertNotifier>();
 var hubContext = app.Services.GetRequiredService<IHubContext<EventHub>>();
+var dailyJudgeState = app.Services.GetRequiredService<DailyJudgeScheduleState>();
 var projectRoot = Directory.GetParent(app.Environment.ContentRootPath)?.Parent?.FullName ?? app.Environment.ContentRootPath;
 var storageRoot = Path.Combine(projectRoot, "storage");
 var frontendRoot = Path.Combine(projectRoot, "frontend");
+var captureRetryRootCfg = app.Configuration["Storage:CaptureRetryRoot"]?.Trim();
+var captureRetryPreferInlineBase64 = app.Configuration.GetValue("CaptureRetry:PreferInlineBase64", false);
+var captureRetryAllowInlineFallback = app.Configuration.GetValue<bool?>("CaptureRetry:AllowInlineBase64Fallback")
+    ?? app.Environment.IsDevelopment();
+var saveCaptureImageOnSuccess = app.Configuration.GetValue("Storage:SaveCaptureImageOnSuccess", true);
+var captureRetryImageFolder = string.IsNullOrWhiteSpace(captureRetryRootCfg)
+    ? Path.Combine(storageRoot, "uploads", "capture-retry")
+    : Path.GetFullPath(captureRetryRootCfg);
 Directory.CreateDirectory(storageRoot);
 Directory.CreateDirectory(Path.Combine(storageRoot, "uploads"));
 Directory.CreateDirectory(Path.Combine(storageRoot, "uploads", "floors"));
+Directory.CreateDirectory(captureRetryImageFolder);
 Directory.CreateDirectory(Path.Combine(storageRoot, "outputs"));
+if (captureRetryPreferInlineBase64)
+{
+    Console.WriteLine("已启用 CaptureRetry:PreferInlineBase64：AI 失败时抓拍图仅入 Redis 队列不落盘，适用于多实例无共享卷（请关注队列大小与内存）。");
+}
+if (!captureRetryAllowInlineFallback)
+{
+    Console.WriteLine("已禁用 CaptureRetry:AllowInlineBase64Fallback：AI 失败且图片落盘失败时不再写入内联 Base64 队列，避免大对象放大。");
+}
+
+// 开发环境：防止删除默认账号后“无法登录”的功能性回退。
+// 若 sys_user 为空，则自动创建一个随机强密码的开发管理员账号（仅打印到本机控制台）。
+if (app.Environment.IsDevelopment())
+{
+    try
+    {
+        var users = await db.GetUsersAsync();
+        if (users.Count == 0)
+        {
+            var bytes = RandomNumberGenerator.GetBytes(18);
+            var devPassword = Convert.ToBase64String(bytes)
+                .Replace('+', '-')
+                .Replace('/', '_')
+                .TrimEnd('=');
+            var hash = BCrypt.Net.BCrypt.HashPassword(devPassword);
+            var insertedId = await db.InsertUserAsync("admin", hash, 1);
+            if (insertedId.HasValue)
+            {
+                Console.WriteLine($"开发环境管理员已自动创建：用户名=admin, 密码={devPassword}");
+            }
+        }
+    }
+    catch
+    {
+        // 自动创建失败不影响生产逻辑；仅用于开发可用性兜底
+    }
+}
+
+static string SanitizeRateKeySegment(string? value)
+{
+    if (string.IsNullOrWhiteSpace(value)) return "unknown";
+    var s = value.Replace(':', '_').Replace('\r', '_').Replace('\n', '_').Trim();
+    return s.Length <= 128 ? s : s[..128];
+}
+
+/// <param name="explicitDimension">抓拍等匿名接口传入设备 ID 等，避免 NAT 下同 IP 误伤；已登录接口可省略，将按 JWT 主体或 IP 计数。</param>
+async Task<IResult?> CheckRateLimitAsync(HttpRequest request, string bucket, long limit, TimeSpan window, string? explicitDimension = null)
+{
+    if (!cache.Enabled) return null;
+
+    string segment;
+    if (!string.IsNullOrWhiteSpace(explicitDimension))
+        segment = "d:" + SanitizeRateKeySegment(explicitDimension);
+    else
+    {
+        var user = request.HttpContext.User;
+        if (user?.Identity?.IsAuthenticated == true)
+        {
+            var sub = user.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? user.FindFirstValue(JwtRegisteredClaimNames.Sub)
+                ?? user.FindFirstValue(ClaimTypes.Name);
+            segment = "u:" + SanitizeRateKeySegment(sub);
+        }
+        else
+        {
+            var ip = request.HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+            segment = "ip:" + SanitizeRateKeySegment(ip);
+        }
+    }
+
+    var key = $"aura:rl:{bucket}:{segment}";
+    var count = await cache.TryConsumeFixedWindowAsync(key, window, limit);
+    if (!count.HasValue) return null;
+    if (count.Value > limit)
+        return Results.Json(new { code = 42901, msg = "请求过多，请稍后再试" }, statusCode: 429);
+    return null;
+}
+
+Task BroadcastEventAsync(string eventName, object payload)
+{
+    // 统一通过角色分组推送，避免无差别 All 广播
+    return hubContext.Clients.Groups("role:building_admin", "role:super_admin").SendAsync(eventName, payload);
+}
+
+Task NotifyAlertAsync(string alertType, string detail, string source)
+{
+    return alertNotifier.NotifyAsync(new AlertNotifyMessage(alertType, detail, source, DateTimeOffset.Now));
+}
+
+static string? TryExtractPureBase64(string imageBase64)
+{
+    if (string.IsNullOrWhiteSpace(imageBase64)) return null;
+
+    // 支持 data URL：data:image/jpeg;base64,AAAA...
+    var idx = imageBase64.IndexOf("base64,", StringComparison.OrdinalIgnoreCase);
+    if (idx >= 0)
+    {
+        var start = idx + "base64,".Length;
+        return imageBase64[start..];
+    }
+
+    var comma = imageBase64.IndexOf(',');
+    if (imageBase64.StartsWith("data:", StringComparison.OrdinalIgnoreCase) && comma >= 0)
+    {
+        return imageBase64[(comma + 1)..];
+    }
+
+    // 纯 base64：直接使用
+    return imageBase64;
+}
+
+static string? ToPublicStorageUrl(string? storageRootPath, string? localPath)
+{
+    if (string.IsNullOrWhiteSpace(localPath) || string.IsNullOrWhiteSpace(storageRootPath))
+        return null;
+
+    try
+    {
+        var fullRoot = Path.GetFullPath(storageRootPath);
+        var fullLocal = Path.GetFullPath(localPath);
+        if (!fullLocal.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var rel = Path.GetRelativePath(fullRoot, fullLocal).Replace('\\', '/');
+        return $"/storage/{rel}";
+    }
+    catch
+    {
+        return null;
+    }
+}
+
+async Task<string?> SaveRetryImageAsync(string imageBase64)
+{
+    // 多实例无共享盘时配置 PreferInlineBase64，仅走队列内 base64，避免落盘路径不可读
+    if (captureRetryPreferInlineBase64) return null;
+
+    var pure = TryExtractPureBase64(imageBase64);
+    if (string.IsNullOrWhiteSpace(pure)) return null;
+
+    byte[] bytes;
+    try
+    {
+        bytes = Convert.FromBase64String(pure);
+    }
+    catch
+    {
+        return null;
+    }
+
+    // 限制落盘文件大小，防止异常 base64 导致磁盘被打爆
+    const long MaxImageBytes = 10L * 1024 * 1024;
+    if (bytes.Length <= 0 || bytes.Length > MaxImageBytes) return null;
+
+    var folder = captureRetryImageFolder;
+    Directory.CreateDirectory(folder);
+    var safeName = $"{DateTimeOffset.Now.ToUnixTimeMilliseconds()}_{Guid.NewGuid():N}.bin";
+    var localPath = Path.Combine(folder, safeName);
+    await File.WriteAllBytesAsync(localPath, bytes);
+    return localPath;
+}
+
+async Task<string?> SaveCaptureArchiveImageAsync(long deviceId, DateTimeOffset captureTime, string imageBase64)
+{
+    var pure = TryExtractPureBase64(imageBase64);
+    if (string.IsNullOrWhiteSpace(pure)) return null;
+
+    byte[] bytes;
+    try
+    {
+        bytes = Convert.FromBase64String(pure);
+    }
+    catch
+    {
+        return null;
+    }
+
+    const long MaxImageBytes = 10L * 1024 * 1024;
+    if (bytes.Length <= 0 || bytes.Length > MaxImageBytes) return null;
+
+    var day = captureTime.ToString("yyyyMMdd");
+    var folder = Path.Combine(storageRoot, "uploads", "capture", deviceId.ToString(), day);
+    Directory.CreateDirectory(folder);
+    var safeName = $"{captureTime:HHmmss}_{Guid.NewGuid():N}.bin";
+    var localPath = Path.Combine(folder, safeName);
+    await File.WriteAllBytesAsync(localPath, bytes);
+    return ToPublicStorageUrl(storageRoot, localPath);
+}
 
 async Task<IResult> SaveCaptureAsync(CapturePayload normalized, string source)
 {
-    var aiResult = await aiClient.ExtractAsync(normalized.ImageBase64, normalized.MetadataJson);
+    string? captureImagePathForDb = null; // 仅在 AI 失败时写入；成功时保持为空即可减少磁盘 IO
+    string? retryImagePath = await SaveRetryImageAsync(normalized.ImageBase64); // 优先落盘，主链路 AI 可按文件读取
+    string? retryImageBase64ForQueue = null; // 当落盘失败/未启用落盘时兜底使用 base64
+    var shouldEnqueueRetry = false;
+
+    var aiResult = !string.IsNullOrWhiteSpace(retryImagePath)
+        ? await aiClient.ExtractByPathAsync(retryImagePath, normalized.MetadataJson)
+        : await aiClient.ExtractAsync(normalized.ImageBase64, normalized.MetadataJson);
     if (!aiResult.Success)
     {
-        await retryQueue.EnqueueAsync(new RetryTask(
-            normalized.DeviceId,
-            normalized.ChannelNo,
-            normalized.ImageBase64,
-            normalized.MetadataJson,
-            source,
-            0,
-            DateTimeOffset.Now));
+        captureImagePathForDb = ToPublicStorageUrl(storageRoot, retryImagePath);
+        if (!string.IsNullOrWhiteSpace(retryImagePath))
+        {
+            shouldEnqueueRetry = true;
+            retryImageBase64ForQueue = null;
+        }
+        else if (captureRetryAllowInlineFallback)
+        {
+            // 仅在显式允许时回退到内联 Base64（默认生产禁用）
+            shouldEnqueueRetry = true;
+            retryImageBase64ForQueue = normalized.ImageBase64;
+        }
+        else
+        {
+            shouldEnqueueRetry = false;
+        }
+    }
+    else if (saveCaptureImageOnSuccess)
+    {
+        // AI 成功：若已存在落盘文件，直接复用路径；否则按归档策略再落盘
+        captureImagePathForDb = ToPublicStorageUrl(storageRoot, retryImagePath)
+                                ?? await SaveCaptureArchiveImageAsync(normalized.DeviceId, normalized.CaptureTime, normalized.ImageBase64);
+    }
+    else
+    {
+        // AI 成功且不保留图片时，清理临时文件
+        if (!string.IsNullOrWhiteSpace(retryImagePath))
+        {
+            try
+            {
+                if (File.Exists(retryImagePath)) File.Delete(retryImagePath);
+            }
+            catch
+            {
+                // 清理失败不影响主流程
+            }
+        }
     }
 
     var metadata = AttachAiResult(normalized.MetadataJson, aiResult);
@@ -94,7 +422,7 @@ async Task<IResult> SaveCaptureAsync(CapturePayload normalized, string source)
         normalized.ChannelNo,
         normalized.CaptureTime,
         metadata);
-    var dbId = await db.InsertCaptureAsync(record.DeviceId, record.ChannelNo, record.CaptureTime, record.MetadataJson);
+    var dbId = await db.InsertCaptureAsync(record.DeviceId, record.ChannelNo, record.CaptureTime, record.MetadataJson, captureImagePathForDb);
     var saved = dbId.HasValue ? record with { CaptureId = dbId.Value } : record;
     if (!dbId.HasValue) store.Captures.Add(saved);
     if (aiResult.Success && aiResult.Feature.Count > 0)
@@ -104,13 +432,32 @@ async Task<IResult> SaveCaptureAsync(CapturePayload normalized, string source)
     }
     await db.InsertOperationAsync("采集网关", source, $"设备={normalized.DeviceId}, 通道={normalized.ChannelNo}, AI={aiResult.Message}");
     AddOperationLog(store, "采集网关", source, $"设备={normalized.DeviceId}, 通道={normalized.ChannelNo}, AI={aiResult.Message}");
-    await hubContext.Clients.All.SendAsync("capture.received", new { saved.CaptureId, saved.DeviceId, saved.ChannelNo, saved.CaptureTime, source });
+    await BroadcastEventAsync("capture.received", new { saved.CaptureId, saved.DeviceId, saved.ChannelNo, saved.CaptureTime, source });
+    if (!aiResult.Success && shouldEnqueueRetry)
+    {
+        // AI 失败时：将 capture_id 作为幂等锚点，确保重试成功可回写向量与元数据
+        await retryQueue.EnqueueAsync(new RetryTask(
+            saved.CaptureId,
+            normalized.DeviceId,
+            normalized.ChannelNo,
+            retryImagePath,
+            retryImageBase64ForQueue,
+            normalized.MetadataJson,
+            source,
+            0,
+            DateTimeOffset.Now));
+    }
+    else if (!aiResult.Success && !shouldEnqueueRetry)
+    {
+        await db.InsertOperationAsync("重试任务", "AI重试入队已跳过", $"captureId={saved.CaptureId}, 原因=图片落盘失败且禁止内联Base64回退");
+    }
     if (!string.IsNullOrWhiteSpace(normalized.MetadataJson) && normalized.MetadataJson.Contains("异常"))
     {
         var a = new AlertEntity(Interlocked.Increment(ref store.AlertSeed), "异常滞留", $"抓拍记录{saved.CaptureId}命中异常关键词", DateTimeOffset.Now);
         var aid = await db.InsertAlertAsync(a.AlertType, a.Detail);
         if (!aid.HasValue) store.Alerts.Add(a);
-        await hubContext.Clients.All.SendAsync("alert.created", new { alertType = a.AlertType, detail = a.Detail, at = a.CreatedAt });
+        await NotifyAlertAsync(a.AlertType, a.Detail, "抓拍关键词命中");
+        await BroadcastEventAsync("alert.created", new { alertType = a.AlertType, detail = a.Detail, at = a.CreatedAt });
     }
     return Results.Ok(new { code = 0, msg = $"{source}接收成功", data = saved });
 }
@@ -120,8 +467,7 @@ async Task<JudgeRunResult> RunHomeJudgeAsync(DateOnly judgeDate)
     await db.DeleteJudgeResultsByDateAsync(judgeDate, "home_room");
     var start = judgeDate.ToDateTime(TimeOnly.MinValue);
     var end = start.AddDays(1);
-    var eventsDb = await db.GetTrackEventsAsync(null);
-    var events = eventsDb.Where(x => x.EventTime >= start && x.EventTime < end).ToList();
+    var events = await db.GetTrackEventsInRangeAsync(start, end);
     if (events.Count == 0)
     {
         return new JudgeRunResult(judgeDate, "home_room", 0, 0);
@@ -163,8 +509,7 @@ async Task<JudgeRunResult> RunGroupRentAndStayJudgeAsync(DateOnly judgeDate, int
     await db.DeleteJudgeResultsByDateAsync(judgeDate, "abnormal_stay");
     var start = judgeDate.ToDateTime(TimeOnly.MinValue);
     var end = start.AddDays(1);
-    var eventsDb = await db.GetTrackEventsAsync(null);
-    var events = eventsDb.Where(x => x.EventTime >= start && x.EventTime < end).ToList();
+    var events = await db.GetTrackEventsInRangeAsync(start, end);
     if (events.Count == 0) return new JudgeRunResult(judgeDate, "group_rent+abnormal_stay", 0, 0);
     var roisDb = await db.GetRoisAsync();
     var roiMap = roisDb.ToDictionary(x => x.RoiId, x => x.RoomNodeId);
@@ -181,7 +526,8 @@ async Task<JudgeRunResult> RunGroupRentAndStayJudgeAsync(DateOnly judgeDate, int
             if (id.HasValue) saveCount++;
             var aid = await db.InsertAlertAsync("群租预警", $"房间={room.Key}, 人数={distinctVid.Length}");
             if (!aid.HasValue) store.Alerts.Add(new AlertEntity(Interlocked.Increment(ref store.AlertSeed), "群租预警", $"房间={room.Key}, 人数={distinctVid.Length}", DateTimeOffset.Now));
-            await hubContext.Clients.All.SendAsync("alert.created", new { alertType = "群租预警", roomId = room.Key, count = distinctVid.Length, date = judgeDate });
+            await NotifyAlertAsync("群租预警", $"房间={room.Key}, 人数={distinctVid.Length}", "群租研判");
+            await BroadcastEventAsync("alert.created", new { alertType = "群租预警", roomId = room.Key, count = distinctVid.Length, date = judgeDate });
         }
     }
 
@@ -197,6 +543,7 @@ async Task<JudgeRunResult> RunGroupRentAndStayJudgeAsync(DateOnly judgeDate, int
             if (id.HasValue) saveCount++;
             var aid = await db.InsertAlertAsync("异常滞留", $"VID={personRoom.Key.Vid}, 房间={personRoom.Key.RoomId}, 分钟={Math.Round(minutes, 1)}");
             if (!aid.HasValue) store.Alerts.Add(new AlertEntity(Interlocked.Increment(ref store.AlertSeed), "异常滞留", $"VID={personRoom.Key.Vid}, 房间={personRoom.Key.RoomId}, 分钟={Math.Round(minutes, 1)}", DateTimeOffset.Now));
+            await NotifyAlertAsync("异常滞留", $"VID={personRoom.Key.Vid}, 房间={personRoom.Key.RoomId}, 分钟={Math.Round(minutes, 1)}", "滞留研判");
         }
     }
     await db.InsertOperationAsync("系统任务", "群租/滞留研判", $"日期={judgeDate:yyyy-MM-dd}, 结果={saveCount}");
@@ -213,21 +560,24 @@ async Task<JudgeRunResult> RunNightAbsenceJudgeAsync(DateOnly judgeDate, int cut
     if (home.Count == 0) return new JudgeRunResult(judgeDate, "night_absence", 0, 0);
     var start = judgeDate.ToDateTime(new TimeOnly(cutoffHour, 0));
     var end = start.AddHours(8);
-    var eventsDb = await db.GetTrackEventsAsync(null);
+    var eventsDb = await db.GetTrackEventsInRangeAsync(start, end);
     var roisDb = await db.GetRoisAsync();
     var roiMap = roisDb.ToDictionary(x => x.RoiId, x => x.RoomNodeId);
-    var events = eventsDb.Where(x => x.EventTime >= start && x.EventTime < end && roiMap.ContainsKey(x.RoiId)).ToList();
+    var events = eventsDb.Where(x => roiMap.ContainsKey(x.RoiId)).ToList();
+    var existedPairs = events
+        .Select(x => (Vid: x.Vid, RoomId: roiMap[x.RoiId]))
+        .ToHashSet();
     var saveCount = 0;
     foreach (var row in home)
     {
-        var exists = events.Any(x => x.Vid == row.Vid && roiMap[x.RoiId] == row.RoomId);
-        if (exists) continue;
+        if (existedPairs.Contains((row.Vid, row.RoomId))) continue;
         var detail = JsonSerializer.Serialize(new { cutoffHour, message = "截止时间后未回到归属房间" });
         var id = await db.InsertJudgeResultAsync(row.Vid, row.RoomId, "night_absence", judgeDate, detail);
         if (id.HasValue) saveCount++;
         var aid = await db.InsertAlertAsync("夜不归宿", $"VID={row.Vid}, 房间={row.RoomId}, 日期={judgeDate:yyyy-MM-dd}");
         if (!aid.HasValue) store.Alerts.Add(new AlertEntity(Interlocked.Increment(ref store.AlertSeed), "夜不归宿", $"VID={row.Vid}, 房间={row.RoomId}, 日期={judgeDate:yyyy-MM-dd}", DateTimeOffset.Now));
-        await hubContext.Clients.All.SendAsync("alert.created", new { alertType = "夜不归宿", vid = row.Vid, roomId = row.RoomId, date = judgeDate });
+        await NotifyAlertAsync("夜不归宿", $"VID={row.Vid}, 房间={row.RoomId}, 日期={judgeDate:yyyy-MM-dd}", "夜不归宿研判");
+        await BroadcastEventAsync("alert.created", new { alertType = "夜不归宿", vid = row.Vid, roomId = row.RoomId, date = judgeDate });
     }
     await db.InsertOperationAsync("系统任务", "夜不归宿研判", $"日期={judgeDate:yyyy-MM-dd}, 结果={saveCount}");
     return new JudgeRunResult(judgeDate, "night_absence", home.Count, saveCount);
@@ -236,6 +586,19 @@ async Task<JudgeRunResult> RunNightAbsenceJudgeAsync(DateOnly judgeDate, int cut
 if (app.Environment.IsDevelopment()) app.MapOpenApi();
 
 app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHsts();
+}
+app.Use(async (context, next) =>
+{
+    context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    context.Response.Headers["X-Frame-Options"] = "DENY";
+    context.Response.Headers["Referrer-Policy"] = "no-referrer";
+    context.Response.Headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
+    context.Response.Headers["Content-Security-Policy"] = cspPolicy;
+    await next();
+});
 if (Directory.Exists(frontendRoot))
 {
     app.Use(async (context, next) =>
@@ -300,9 +663,81 @@ app.MapHub<EventHub>("/hubs/events");
 
 app.MapGet("/", () => Results.Redirect("/index/"));
 app.MapGet("/api/health", () => Results.Ok(new { code = 0, msg = "寓瞳中枢服务运行正常", time = DateTimeOffset.Now }));
+app.MapGet("/api/ops/readiness", () =>
+{
+    var now = DateTimeOffset.Now;
+    var jwtConfigured = !string.IsNullOrWhiteSpace(jwtKey)
+                        && !jwtKey.Contains("PLEASE_", StringComparison.OrdinalIgnoreCase)
+                        && !jwtKey.Contains("aura-dev-jwt-key-please-change", StringComparison.OrdinalIgnoreCase);
+    var hmacConfigured = !string.IsNullOrWhiteSpace(globalHmacSecret)
+                         && !globalHmacSecret.Contains("PLEASE_", StringComparison.OrdinalIgnoreCase)
+                         && !globalHmacSecret.Contains("demo-hmac-secret", StringComparison.OrdinalIgnoreCase);
+    var mysqlConfigured = !string.IsNullOrWhiteSpace(mysqlConn)
+                          && !mysqlConn.Contains("PLEASE_", StringComparison.OrdinalIgnoreCase);
+    var redisConfigured = !string.IsNullOrWhiteSpace(redisConn)
+                          && !redisConn.Contains("PLEASE_", StringComparison.OrdinalIgnoreCase);
+    var aiConfigured = !string.IsNullOrWhiteSpace(aiBaseUrl);
+    var alertStats = alertNotifier.GetStats();
+    var alertRecentWindowStart = now.AddMinutes(-alertHealthFailWindowMinutes);
+    var hasRecentFailure = alertHealthFailWindowMinutes > 0
+        && alertStats.LastFailureAt.HasValue
+        && alertStats.LastFailureAt.Value >= alertRecentWindowStart;
+    var alertNotifyHealthy = !hasRecentFailure;
+
+    var checks = new Dictionary<string, bool>
+    {
+        ["jwt"] = jwtConfigured,
+        ["hmac"] = hmacConfigured,
+        ["mysql"] = mysqlConfigured,
+        ["redis"] = redisConfigured,
+        ["ai"] = aiConfigured,
+        ["alertNotify"] = alertNotifyHealthy
+    };
+    var ready = checks.Values.All(x => x);
+    return Results.Ok(new
+    {
+        code = 0,
+        msg = ready ? "就绪检查通过" : "就绪检查未通过",
+        data = new
+        {
+            environment = app.Environment.EnvironmentName,
+            ready,
+            checks,
+            alertNotify = new
+            {
+                healthFailIfRecentFailureMinutes = alertHealthFailWindowMinutes,
+                hasRecentFailure,
+                recentWindowStart = alertRecentWindowStart,
+                stats = alertStats
+            }
+        },
+        time = now
+    });
+}).RequireAuthorization("超级管理员");
+app.MapPost("/api/ops/alert-notify-test", async (OpsAlertNotifyTestReq req) =>
+{
+    var alertType = string.IsNullOrWhiteSpace(req.AlertType) ? "运维自检" : req.AlertType.Trim();
+    var detail = string.IsNullOrWhiteSpace(req.Detail)
+        ? "告警通知通道自检消息"
+        : req.Detail.Trim();
+    await alertNotifier.NotifyAsync(new AlertNotifyMessage(alertType, detail, "ops.alert-notify-test", DateTimeOffset.Now));
+    await db.InsertOperationAsync("系统管理员", "告警通知自检", $"类型={alertType}");
+    return Results.Ok(new { code = 0, msg = "告警通知自检已发送", data = new { alertType, detail, at = DateTimeOffset.Now } });
+}).RequireAuthorization("超级管理员");
+app.MapGet("/api/ops/alert-notify-stats", () =>
+{
+    var stats = alertNotifier.GetStats();
+    return Results.Ok(new
+    {
+        code = 0,
+        msg = "获取告警通知统计成功",
+        data = stats,
+        time = DateTimeOffset.Now
+    });
+}).RequireAuthorization("超级管理员");
 
 var auth = app.MapGroup("/api/auth");
-auth.MapPost("/login", async (LoginReq req) =>
+auth.MapPost("/login", async (HttpContext http, LoginReq req) =>
 {
     if (string.IsNullOrWhiteSpace(req.UserName) || string.IsNullOrWhiteSpace(req.Password))
         return Results.BadRequest(new { code = 40001, msg = "用户名或密码不能为空" });
@@ -314,13 +749,30 @@ auth.MapPost("/login", async (LoginReq req) =>
             return Results.BadRequest(new { code = 40003, msg = "用户名或密码错误" });
         var roleDb = ConvertRole(dbUser.RoleName);
         var tokenDb = BuildJwtToken(req.UserName, roleDb, jwtKey, jwtIssuer, jwtAudience, jwtExpireMinutes);
+        http.Response.Cookies.Append("aura_token", tokenDb, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = http.Request.IsHttps,
+            SameSite = SameSiteMode.Lax,
+            Path = "/",
+            Expires = DateTimeOffset.UtcNow.AddMinutes(jwtExpireMinutes)
+        });
         return Results.Ok(new { code = 0, msg = "登录成功", data = new { token = tokenDb, expireAt = DateTimeOffset.Now.AddMinutes(jwtExpireMinutes), userName = req.UserName, role = roleDb } });
     }
 
-    if (req.UserName != "admin" || req.Password != "admin123")
-        return Results.BadRequest(new { code = 40003, msg = "用户名或密码错误" });
-    var token = BuildJwtToken(req.UserName, "super_admin", jwtKey, jwtIssuer, jwtAudience, jwtExpireMinutes);
-    return Results.Ok(new { code = 0, msg = "登录成功", data = new { token, expireAt = DateTimeOffset.Now.AddMinutes(jwtExpireMinutes), userName = req.UserName, role = "super_admin" } });
+    return Results.BadRequest(new { code = 40003, msg = "用户名或密码错误" });
+});
+auth.MapPost("/logout", (HttpContext http) =>
+{
+    http.Response.Cookies.Append("aura_token", "", new CookieOptions
+    {
+        HttpOnly = true,
+        Secure = http.Request.IsHttps,
+        SameSite = SameSiteMode.Lax,
+        Path = "/",
+        Expires = DateTimeOffset.UnixEpoch
+    });
+    return Results.Ok(new { code = 0, msg = "已退出登录" });
 });
 auth.MapGet("/me", (ClaimsPrincipal user) => Results.Ok(new { code = 0, msg = "查询成功", data = new { userName = user.Identity?.Name ?? "unknown", role = user.FindFirst(ClaimTypes.Role)?.Value ?? "none" } })).RequireAuthorization();
 
@@ -502,10 +954,10 @@ floor.MapPost("/upload", async (HttpRequest request) =>
         return Results.BadRequest(new { code = 40032, msg = "未找到上传文件" });
     }
     var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
-    var allow = new[] { ".png", ".jpg", ".jpeg", ".webp", ".svg" };
+    var allow = new[] { ".png", ".jpg", ".jpeg", ".webp" };
     if (!allow.Contains(ext))
     {
-        return Results.BadRequest(new { code = 40033, msg = "仅支持 png/jpg/jpeg/webp/svg" });
+        return Results.BadRequest(new { code = 40033, msg = "仅支持 png/jpg/jpeg/webp" });
     }
 
     var folder = Path.Combine(storageRoot, "uploads", "floors");
@@ -629,10 +1081,12 @@ device.MapPost("/register", async (DeviceRegisterReq req) =>
     {
         var savedDb = entity with { DeviceId = dbId.Value };
         await db.InsertOperationAsync("系统管理员", "设备注册", $"设备={savedDb.Name}, IP={savedDb.Ip}");
+        if (cache.Enabled) await cache.DeleteAsync("device:list");
         return Results.Ok(new { code = 0, msg = "设备注册成功", data = savedDb });
     }
     store.Devices.Add(entity);
     AddOperationLog(store, "系统管理员", "设备注册", $"设备={entity.Name}, IP={entity.Ip}");
+    if (cache.Enabled) await cache.DeleteAsync("device:list");
     return Results.Ok(new { code = 0, msg = "设备注册成功", data = entity });
 }).RequireAuthorization("超级管理员");
 device.MapPost("/ping/{deviceId:long}", (long deviceId) =>
@@ -651,27 +1105,90 @@ capture.MapPost("/push", async (HttpRequest request, JsonElement req) =>
 {
     var normalized = hikAdapter.Normalize(req);
     var signature = request.Headers["X-Signature"].ToString();
-    var secret = builder.Configuration["Security:HmacSecret"] ?? "demo-hmac-secret";
+
+    if (request.ContentLength.HasValue && request.ContentLength.Value > MaxCaptureRequestBytes)
+        return Results.BadRequest(new { code = 40006, msg = "请求体过大" });
+    if (string.IsNullOrWhiteSpace(normalized.ImageBase64))
+        return Results.BadRequest(new { code = 40007, msg = "图片Base64不能为空" });
+    if (normalized.ImageBase64.Length > MaxImageBase64Chars)
+        return Results.BadRequest(new { code = 40008, msg = "图片 Base64 过大" });
+    if (!string.IsNullOrWhiteSpace(normalized.MetadataJson) && normalized.MetadataJson.Length > MaxMetadataJsonChars)
+        return Results.BadRequest(new { code = 40009, msg = "元数据过大" });
+
     var payload = $"{normalized.DeviceId}|{normalized.ChannelNo}|{normalized.CaptureTime:O}";
-    if (!VerifyHmac(payload, signature, secret)) return Results.Unauthorized();
-    if (!IsIpAllowed(request, builder.Configuration.GetSection("Security:CaptureIpWhitelist").Get<string[]>())) return Results.BadRequest(new { code = 40004, msg = "来源IP不在白名单中" });
+    var deviceSecret = await db.GetDeviceHmacSecretAsync(normalized.DeviceId);
+    var secretToUse = string.IsNullOrWhiteSpace(deviceSecret)
+        ? (isDev ? globalHmacSecret : null)
+        : deviceSecret;
+    if (string.IsNullOrWhiteSpace(secretToUse)) return Results.Unauthorized();
+    if (!VerifyHmac(payload, signature, secretToUse)) return Results.Unauthorized();
+    if (!IsIpAllowed(request, captureIpWhitelist)) return Results.BadRequest(new { code = 40004, msg = "来源IP不在白名单中" });
+
+    var rl = await CheckRateLimitAsync(request, "capture.push", 30, TimeSpan.FromMinutes(1), normalized.DeviceId.ToString());
+    if (rl is not null) return rl;
 
     return await SaveCaptureAsync(normalized, "海康ISAPI抓拍");
 });
-capture.MapPost("/sdk", async (JsonElement req) =>
+capture.MapPost("/sdk", async (HttpRequest request, JsonElement req) =>
 {
     var normalized = cppSdkAdapter.Normalize(req);
+
+    if (request.ContentLength.HasValue && request.ContentLength.Value > MaxCaptureRequestBytes)
+        return Results.BadRequest(new { code = 40006, msg = "请求体过大" });
+    if (string.IsNullOrWhiteSpace(normalized.ImageBase64))
+        return Results.BadRequest(new { code = 40007, msg = "图片Base64不能为空" });
+    if (normalized.ImageBase64.Length > MaxImageBase64Chars)
+        return Results.BadRequest(new { code = 40008, msg = "图片 Base64 过大" });
+    if (!string.IsNullOrWhiteSpace(normalized.MetadataJson) && normalized.MetadataJson.Length > MaxMetadataJsonChars)
+        return Results.BadRequest(new { code = 40009, msg = "元数据过大" });
+
+    var signature = request.Headers["X-Signature"].ToString();
+    var payload = $"{normalized.DeviceId}|{normalized.ChannelNo}|{normalized.CaptureTime:O}";
+    var deviceSecret = await db.GetDeviceHmacSecretAsync(normalized.DeviceId);
+    var secretToUse = string.IsNullOrWhiteSpace(deviceSecret)
+        ? (isDev ? globalHmacSecret : null)
+        : deviceSecret;
+    if (string.IsNullOrWhiteSpace(secretToUse)) return Results.Unauthorized();
+    if (!VerifyHmac(payload, signature, secretToUse)) return Results.Unauthorized();
+    if (!IsIpAllowed(request, captureIpWhitelist)) return Results.BadRequest(new { code = 40004, msg = "来源IP不在白名单中" });
+
+    var rl = await CheckRateLimitAsync(request, "capture.sdk", 30, TimeSpan.FromMinutes(1), normalized.DeviceId.ToString());
+    if (rl is not null) return rl;
+
     return await SaveCaptureAsync(normalized, "C++SDK抓拍");
 });
-capture.MapPost("/onvif", async (JsonElement req) =>
+capture.MapPost("/onvif", async (HttpRequest request, JsonElement req) =>
 {
     var normalized = onvifAdapter.Normalize(req);
+
+    if (request.ContentLength.HasValue && request.ContentLength.Value > MaxCaptureRequestBytes)
+        return Results.BadRequest(new { code = 40006, msg = "请求体过大" });
+    if (string.IsNullOrWhiteSpace(normalized.ImageBase64))
+        return Results.BadRequest(new { code = 40007, msg = "图片Base64不能为空" });
+    if (normalized.ImageBase64.Length > MaxImageBase64Chars)
+        return Results.BadRequest(new { code = 40008, msg = "图片 Base64 过大" });
+    if (!string.IsNullOrWhiteSpace(normalized.MetadataJson) && normalized.MetadataJson.Length > MaxMetadataJsonChars)
+        return Results.BadRequest(new { code = 40009, msg = "元数据过大" });
+
+    var signature = request.Headers["X-Signature"].ToString();
+    var payload = $"{normalized.DeviceId}|{normalized.ChannelNo}|{normalized.CaptureTime:O}";
+    var deviceSecret = await db.GetDeviceHmacSecretAsync(normalized.DeviceId);
+    var secretToUse = string.IsNullOrWhiteSpace(deviceSecret)
+        ? (isDev ? globalHmacSecret : null)
+        : deviceSecret;
+    if (string.IsNullOrWhiteSpace(secretToUse)) return Results.Unauthorized();
+    if (!VerifyHmac(payload, signature, secretToUse)) return Results.Unauthorized();
+    if (!IsIpAllowed(request, captureIpWhitelist)) return Results.BadRequest(new { code = 40004, msg = "来源IP不在白名单中" });
+
+    var rl = await CheckRateLimitAsync(request, "capture.onvif", 30, TimeSpan.FromMinutes(1), normalized.DeviceId.ToString());
+    if (rl is not null) return rl;
+
     return await SaveCaptureAsync(normalized, "ONVIF抓拍");
 });
 capture.MapPost("/mock", async (CaptureMockReq req) =>
 {
     var record = new CaptureEntity(Interlocked.Increment(ref store.CaptureSeed), req.DeviceId, req.ChannelNo, DateTimeOffset.Now, req.MetadataJson);
-    var dbId = await db.InsertCaptureAsync(record.DeviceId, record.ChannelNo, record.CaptureTime, record.MetadataJson);
+    var dbId = await db.InsertCaptureAsync(record.DeviceId, record.ChannelNo, record.CaptureTime, record.MetadataJson, null);
     var saved = dbId.HasValue ? record with { CaptureId = dbId.Value } : record;
     if (!dbId.HasValue) store.Captures.Add(saved);
     await db.InsertOperationAsync("楼栋管理员", "模拟抓拍", $"设备={req.DeviceId}, 通道={req.ChannelNo}");
@@ -690,43 +1207,149 @@ retry.MapGet("/status", async () =>
     var count = await retryQueue.LengthAsync();
     return Results.Ok(new { code = 0, msg = "查询成功", data = new { enabled = retryQueue.Enabled, pending = count } });
 }).RequireAuthorization("超级管理员");
-retry.MapPost("/process", async (RetryProcessReq req) =>
+retry.MapPost("/process", async (HttpRequest request, RetryProcessReq req) =>
 {
+    var rl = await CheckRateLimitAsync(request, "retry.process", 30, TimeSpan.FromMinutes(1));
+    if (rl is not null) return rl;
+
+    const string processLockKey = "aura:lock:retry-process";
+    const int processLockMinutes = 30;
+    string? lockToken = null;
+    if (cache.Enabled)
+    {
+        lockToken = await cache.TryAcquireLockAsync(processLockKey, TimeSpan.FromMinutes(processLockMinutes));
+        if (lockToken is null)
+            return Results.Json(new { code = 42902, msg = "重试任务处理正在进行中，请稍后再试（其他实例或会话可能正在执行）" }, statusCode: 429);
+    }
+
     var take = req.Take <= 0 ? 10 : Math.Min(req.Take, 100);
     var success = 0;
     var failed = 0;
-    for (var i = 0; i < take; i++)
+    try
     {
-        var task = await retryQueue.DequeueAsync();
-        if (task is null)
+        for (var i = 0; i < take; i++)
         {
-            break;
+            var task = await retryQueue.DequeueAsync();
+            if (task is null)
+            {
+                break;
+            }
+
+            AiExtractResult ai;
+            if (!string.IsNullOrWhiteSpace(task.ImagePath))
+            {
+                ai = await aiClient.ExtractByPathAsync(task.ImagePath, task.MetadataJson);
+                if (!ai.Success && !string.IsNullOrWhiteSpace(task.ImageBase64))
+                {
+                    ai = await aiClient.ExtractAsync(task.ImageBase64, task.MetadataJson);
+                }
+            }
+            else
+            {
+                ai = await aiClient.ExtractAsync(task.ImageBase64 ?? "", task.MetadataJson);
+            }
+            if (ai.Success)
+            {
+                success++;
+                // 将重试的 AI 结果写回抓拍记录：更新 metadata，并补写向量
+                var newMetadata = AttachAiResult(task.MetadataJson, ai);
+                _ = await db.UpdateCaptureMetadataAsync(task.CaptureId, newMetadata);
+                if (ai.Feature.Count > 0)
+                {
+                    var vectorId = $"C_{task.CaptureId}";
+                    await aiClient.UpsertAsync(vectorId, ai.Feature);
+                }
+
+                await db.InsertOperationAsync("重试任务", "AI重试成功", $"captureId={task.CaptureId}, 设备={task.DeviceId}, 通道={task.ChannelNo}");
+
+                // 成功后清理落盘的临时图片，避免磁盘无限增长
+                if (!string.IsNullOrWhiteSpace(task.ImagePath))
+                {
+                    try
+                    {
+                        if (File.Exists(task.ImagePath)) File.Delete(task.ImagePath);
+                    }
+                    catch
+                    {
+                        // 删除失败不影响主流程
+                    }
+                }
+                continue;
+            }
+            failed++;
+            if (task.RetryCount < 3)
+            {
+                await retryQueue.EnqueueAsync(task with { RetryCount = task.RetryCount + 1 });
+            }
+            else
+            {
+                // 达到最大重试次数后清理落盘图片，避免磁盘无限增长
+                if (!string.IsNullOrWhiteSpace(task.ImagePath))
+                {
+                    try
+                    {
+                        if (File.Exists(task.ImagePath)) File.Delete(task.ImagePath);
+                    }
+                    catch
+                    {
+                        // 删除失败不影响主流程
+                    }
+                }
+            }
+            await db.InsertOperationAsync("重试任务", "AI重试失败", $"设备={task.DeviceId}, 通道={task.ChannelNo}, 原因={ai.Message}");
         }
-        var ai = await aiClient.ExtractAsync(task.ImageBase64, task.MetadataJson);
-        if (ai.Success)
-        {
-            success++;
-            await db.InsertOperationAsync("重试任务", "AI重试成功", $"设备={task.DeviceId}, 通道={task.ChannelNo}");
-            continue;
-        }
-        failed++;
-        if (task.RetryCount < 3)
-        {
-            await retryQueue.EnqueueAsync(task with { RetryCount = task.RetryCount + 1 });
-        }
-        await db.InsertOperationAsync("重试任务", "AI重试失败", $"设备={task.DeviceId}, 通道={task.ChannelNo}, 原因={ai.Message}");
     }
+    finally
+    {
+        if (lockToken is not null)
+            await cache.ReleaseLockAsync(processLockKey, lockToken);
+    }
+
     return Results.Ok(new { code = 0, msg = "处理完成", data = new { take, success, failed } });
 }).RequireAuthorization("超级管理员");
-capture.MapGet("/list", async () =>
+capture.MapGet("/list", async (HttpRequest httpReq) =>
 {
-    var rows = await db.GetCapturesAsync();
+    const int defaultLimit = 500;
+    const int maxLimit = 2000;
+    const int maxPageSize = 200;
+
+    if (int.TryParse(httpReq.Query["page"].FirstOrDefault(), out var pageNum) && pageNum > 0)
+    {
+        var pageSize = int.TryParse(httpReq.Query["pageSize"].FirstOrDefault(), out var ps) ? ps : 20;
+        pageSize = Math.Clamp(pageSize, 1, maxPageSize);
+        DateTimeOffset? from = null;
+        DateTimeOffset? to = null;
+        var fromQ = httpReq.Query["from"].FirstOrDefault();
+        var toQ = httpReq.Query["to"].FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(fromQ) && DateTimeOffset.TryParse(fromQ, out var f)) from = f;
+        if (!string.IsNullOrWhiteSpace(toQ) && DateTimeOffset.TryParse(toQ, out var t)) to = t;
+
+        var (dbRows, total) = await db.GetCapturesPagedAsync(from, to, pageNum, pageSize);
+        if (dbRows.Count > 0)
+        {
+            var mapped = dbRows.Select(x => new CaptureEntity(x.CaptureId, x.DeviceId, x.ChannelNo, x.CaptureTime, x.MetadataJson));
+            return Results.Ok(new { code = 0, msg = "查询成功", data = mapped, pagination = new { total, page = pageNum, pageSize } });
+        }
+
+        IEnumerable<CaptureEntity> mem = store.Captures;
+        if (from.HasValue) mem = mem.Where(x => x.CaptureTime >= from.Value);
+        if (to.HasValue) mem = mem.Where(x => x.CaptureTime <= to.Value);
+        var ordered = mem.OrderByDescending(x => x.CaptureId).ToList();
+        var memTotal = ordered.Count;
+        var slice = ordered.Skip((pageNum - 1) * pageSize).Take(pageSize).ToList();
+        return Results.Ok(new { code = 0, msg = "查询成功", data = slice, pagination = new { total = memTotal, page = pageNum, pageSize } });
+    }
+
+    var limitStr = httpReq.Query["limit"].FirstOrDefault();
+    var lim = int.TryParse(limitStr, out var ll) ? ll : defaultLimit;
+    lim = Math.Clamp(lim, 1, maxLimit);
+    var rows = await db.GetCapturesAsync(lim);
     if (rows.Count > 0)
     {
         var mapped = rows.Select(x => new CaptureEntity(x.CaptureId, x.DeviceId, x.ChannelNo, x.CaptureTime, x.MetadataJson));
         return Results.Ok(new { code = 0, msg = "查询成功", data = mapped });
     }
-    return Results.Ok(new { code = 0, msg = "查询成功", data = store.Captures.OrderByDescending(x => x.CaptureId) });
+    return Results.Ok(new { code = 0, msg = "查询成功", data = store.Captures.OrderByDescending(x => x.CaptureId).Take(lim) });
 }).RequireAuthorization("楼栋管理员");
 
 var roi = app.MapGroup("/api/roi");
@@ -751,74 +1374,105 @@ roi.MapPost("/save", async (RoiReq req) =>
 }).RequireAuthorization("楼栋管理员");
 
 var track = app.MapGroup("/api/track");
-track.MapGet("/{vid}", async (string vid) =>
+track.MapGet("/{vid}", async (HttpRequest httpReq, string vid) =>
 {
-    var rows = await db.GetTrackEventsAsync(vid);
+    const int defaultLimit = 500;
+    const int maxLimit = 2000;
+    var limitStr = httpReq.Query["limit"].FirstOrDefault();
+    var lim = int.TryParse(limitStr, out var l) ? l : defaultLimit;
+    lim = Math.Clamp(lim, 1, maxLimit);
+
+    var rows = await db.GetTrackEventsAsync(vid, lim);
     if (rows.Count > 0)
     {
-        return Results.Ok(new { code = 0, msg = "查询成功", data = new { vid, points = rows.Select(x => new { x.CameraId, x.RoiId, time = x.EventTime }) } });
+        return Results.Ok(new { code = 0, msg = "查询成功", data = new { vid, limit = lim, points = rows.Select(x => new { x.CameraId, x.RoiId, time = x.EventTime }) } });
     }
     var points = store.TrackEvents
         .Where(x => x.Vid == vid)
         .OrderByDescending(x => x.EventTime)
+        .Take(lim)
         .Select(x => new { x.CameraId, x.RoiId, time = x.EventTime });
-    return Results.Ok(new { code = 0, msg = "查询成功", data = new { vid, points } });
+    return Results.Ok(new { code = 0, msg = "查询成功", data = new { vid, limit = lim, points } });
 }).RequireAuthorization("楼栋管理员");
 
 var judge = app.MapGroup("/api/judge");
-judge.MapPost("/run/home", async (JudgeRunReq req) =>
+judge.MapPost("/run/home", async (HttpRequest request, JudgeRunReq req) =>
 {
+    var rl = await CheckRateLimitAsync(request, "judge.run.home", 1, TimeSpan.FromMinutes(10));
+    if (rl is not null) return rl;
+
     var date = string.IsNullOrWhiteSpace(req.Date) ? DateOnly.FromDateTime(DateTime.Now) : DateOnly.Parse(req.Date);
     var ret = await RunHomeJudgeAsync(date);
-    await hubContext.Clients.All.SendAsync("judge.updated", ret);
+    await BroadcastEventAsync("judge.updated", ret);
     return Results.Ok(new { code = 0, msg = "归寝研判完成", data = ret });
 }).RequireAuthorization("楼栋管理员");
-judge.MapPost("/run/abnormal", async (JudgeAbnormalReq req) =>
+judge.MapPost("/run/abnormal", async (HttpRequest request, JudgeAbnormalReq req) =>
 {
+    var rl = await CheckRateLimitAsync(request, "judge.run.abnormal", 1, TimeSpan.FromMinutes(10));
+    if (rl is not null) return rl;
+
     var date = string.IsNullOrWhiteSpace(req.Date) ? DateOnly.FromDateTime(DateTime.Now) : DateOnly.Parse(req.Date);
     var threshold = req.GroupThreshold <= 1 ? 2 : req.GroupThreshold;
     var stayMinutes = req.StayMinutes <= 0 ? 120 : req.StayMinutes;
     var ret = await RunGroupRentAndStayJudgeAsync(date, threshold, stayMinutes);
-    await hubContext.Clients.All.SendAsync("judge.updated", ret);
+    await BroadcastEventAsync("judge.updated", ret);
     return Results.Ok(new { code = 0, msg = "群租/滞留研判完成", data = ret });
 }).RequireAuthorization("楼栋管理员");
-judge.MapPost("/run/night", async (JudgeNightReq req) =>
+judge.MapPost("/run/night", async (HttpRequest request, JudgeNightReq req) =>
 {
+    var rl = await CheckRateLimitAsync(request, "judge.run.night", 1, TimeSpan.FromMinutes(10));
+    if (rl is not null) return rl;
+
     var date = string.IsNullOrWhiteSpace(req.Date) ? DateOnly.FromDateTime(DateTime.Now) : DateOnly.Parse(req.Date);
     var cutoff = req.CutoffHour is < 0 or > 23 ? 23 : req.CutoffHour;
     var ret = await RunNightAbsenceJudgeAsync(date, cutoff);
-    await hubContext.Clients.All.SendAsync("judge.updated", ret);
+    await BroadcastEventAsync("judge.updated", ret);
     return Results.Ok(new { code = 0, msg = "夜不归宿研判完成", data = ret });
 }).RequireAuthorization("楼栋管理员");
-judge.MapPost("/run/daily", async (JudgeNightReq req) =>
+judge.MapPost("/run/daily", async (HttpRequest request, JudgeNightReq req) =>
 {
+    var rl = await CheckRateLimitAsync(request, "judge.run.daily", 1, TimeSpan.FromMinutes(10));
+    if (rl is not null) return rl;
+
     var date = string.IsNullOrWhiteSpace(req.Date) ? DateOnly.FromDateTime(DateTime.Now) : DateOnly.Parse(req.Date);
     var cutoff = req.CutoffHour is < 0 or > 23 ? 23 : req.CutoffHour;
     var home = await RunHomeJudgeAsync(date);
     var abnormal = await RunGroupRentAndStayJudgeAsync(date, 2, 120);
     var night = await RunNightAbsenceJudgeAsync(date, cutoff);
     var summary = new[] { home, abnormal, night };
-    await hubContext.Clients.All.SendAsync("judge.updated", summary);
+    await BroadcastEventAsync("judge.updated", summary);
     return Results.Ok(new { code = 0, msg = "每日研判完成", data = summary });
 }).RequireAuthorization("楼栋管理员");
-judge.MapGet("/daily", async (string? date) =>
+judge.MapGet("/daily", async (HttpRequest httpReq, string? date) =>
 {
+    const int defaultLimit = 2000;
+    const int maxLimit = 5000;
+    var limitStr = httpReq.Query["limit"].FirstOrDefault();
+    var lim = int.TryParse(limitStr, out var l) ? l : defaultLimit;
+    lim = Math.Clamp(lim, 1, maxLimit);
+
     var day = string.IsNullOrWhiteSpace(date) ? DateOnly.FromDateTime(DateTime.Now) : DateOnly.Parse(date);
-    var rows = await db.GetJudgeResultsAsync(day, null);
-    if (rows.Count > 0) return Results.Ok(new { code = 0, msg = "查询成功", data = rows });
-    return Results.Ok(new { code = 0, msg = "查询成功", data = store.JudgeResults.Where(x => x.JudgeDate == day).OrderByDescending(x => x.JudgeId) });
+    var rows = await db.GetJudgeResultsAsync(day, null, lim);
+    if (rows.Count > 0) return Results.Ok(new { code = 0, msg = "查询成功", data = rows, limit = lim });
+    return Results.Ok(new { code = 0, msg = "查询成功", data = store.JudgeResults.Where(x => x.JudgeDate == day).OrderByDescending(x => x.JudgeId).Take(lim), limit = lim });
 }).RequireAuthorization("楼栋管理员");
 
 var alert = app.MapGroup("/api/alert");
-alert.MapGet("/list", async () =>
+alert.MapGet("/list", async (HttpRequest httpReq) =>
 {
-    var rows = await db.GetAlertsAsync();
+    const int defaultLimit = 500;
+    const int maxLimit = 2000;
+    var limitStr = httpReq.Query["limit"].FirstOrDefault();
+    var lim = int.TryParse(limitStr, out var l) ? l : defaultLimit;
+    lim = Math.Clamp(lim, 1, maxLimit);
+
+    var rows = await db.GetAlertsAsync(lim);
     if (rows.Count > 0)
     {
         var mapped = rows.Select(x => new AlertEntity(x.AlertId, x.AlertType, x.Detail, x.CreatedAt));
         return Results.Ok(new { code = 0, msg = "查询成功", data = mapped });
     }
-    return Results.Ok(new { code = 0, msg = "查询成功", data = store.Alerts.OrderByDescending(x => x.AlertId) });
+    return Results.Ok(new { code = 0, msg = "查询成功", data = store.Alerts.OrderByDescending(x => x.AlertId).Take(lim) });
 }).RequireAuthorization("楼栋管理员");
 alert.MapPost("/create", async (CreateAlertReq req) =>
 {
@@ -828,7 +1482,8 @@ alert.MapPost("/create", async (CreateAlertReq req) =>
     if (!dbId.HasValue) store.Alerts.Add(saved);
     await db.InsertOperationAsync("楼栋管理员", "手动告警", $"类型={req.AlertType}");
     AddOperationLog(store, "楼栋管理员", "手动告警", $"类型={req.AlertType}");
-    await hubContext.Clients.All.SendAsync("alert.created", new { alertType = saved.AlertType, detail = saved.Detail, at = saved.CreatedAt });
+    await NotifyAlertAsync(saved.AlertType, saved.Detail, "手动告警");
+    await BroadcastEventAsync("alert.created", new { alertType = saved.AlertType, detail = saved.Detail, at = saved.CreatedAt });
     return Results.Ok(new { code = 0, msg = "告警创建成功", data = saved });
 }).RequireAuthorization("楼栋管理员");
 
@@ -879,19 +1534,24 @@ stats.MapGet("/dashboard", async () =>
 }).RequireAuthorization("楼栋管理员");
 
 var export = app.MapGroup("/api/export");
-export.MapGet("/{type}", async (string type, string dataset = "capture") =>
+export.MapGet("/{type}", async (HttpRequest request, string type, string dataset = "capture", int maxRows = 5000) =>
 {
+    var rl = await CheckRateLimitAsync(request, "export", 5, TimeSpan.FromMinutes(1));
+    if (rl is not null) return rl;
+
     type = type.Trim().ToLowerInvariant();
     dataset = dataset.Trim().ToLowerInvariant();
     if (type is not ("csv" or "xlsx"))
         return Results.BadRequest(new { code = 40061, msg = "仅支持csv/xlsx" });
     if (dataset is not ("capture" or "alert" or "judge"))
         return Results.BadRequest(new { code = 40062, msg = "dataset仅支持capture/alert/judge" });
+    if (maxRows <= 0) maxRows = 5000;
+    maxRows = Math.Min(maxRows, 20000);
 
     List<string[]> rows;
     if (dataset == "capture")
     {
-        var captures = await db.GetCapturesAsync();
+        var captures = await db.GetCapturesAsync(maxRows);
         var source = captures.Count > 0
             ? captures.Select(x => new { x.CaptureId, x.DeviceId, x.ChannelNo, x.CaptureTime, x.MetadataJson }).ToList()
             : store.Captures.Select(x => new { x.CaptureId, x.DeviceId, x.ChannelNo, x.CaptureTime, x.MetadataJson }).ToList();
@@ -903,7 +1563,7 @@ export.MapGet("/{type}", async (string type, string dataset = "capture") =>
     }
     else if (dataset == "alert")
     {
-        var alerts = await db.GetAlertsAsync();
+        var alerts = await db.GetAlertsAsync(maxRows);
         var source = alerts.Count > 0
             ? alerts.Select(x => new { x.AlertId, x.AlertType, x.Detail, x.CreatedAt }).ToList()
             : store.Alerts.Select(x => new { x.AlertId, x.AlertType, Detail = x.Detail, x.CreatedAt }).ToList();
@@ -916,7 +1576,7 @@ export.MapGet("/{type}", async (string type, string dataset = "capture") =>
     else
     {
         var date = DateOnly.FromDateTime(DateTime.Now);
-        var judgeRows = await db.GetJudgeResultsAsync(date, null);
+        var judgeRows = await db.GetJudgeResultsAsync(date, null, maxRows);
         var source = judgeRows.Count > 0
             ? judgeRows.Select(x => new { x.JudgeId, x.Vid, x.RoomId, x.JudgeType, x.JudgeDate, x.DetailJson }).ToList()
             : store.JudgeResults.Select(x => new { x.JudgeId, x.Vid, x.RoomId, x.JudgeType, JudgeDate = x.JudgeDate.ToDateTime(TimeOnly.MinValue), x.DetailJson }).ToList();
@@ -963,18 +1623,8 @@ output.MapGet("/events", async (DateTimeOffset? from, DateTimeOffset? to, int pa
     if (page <= 0) page = 1;
     if (pageSize <= 0) pageSize = 200;
     if (pageSize > 1000) pageSize = 1000;
-    var rows = await db.GetCapturesAsync();
-    var source = rows.Count > 0
-        ? rows.Select(x => new CaptureEntity(x.CaptureId, x.DeviceId, x.ChannelNo, x.CaptureTime, x.MetadataJson)).ToList()
-        : store.Captures.ToList();
-    var q = source.AsEnumerable();
-    if (from.HasValue) q = q.Where(x => x.CaptureTime >= from.Value);
-    if (to.HasValue) q = q.Where(x => x.CaptureTime <= to.Value);
-    var total = q.Count();
-    var data = q.OrderByDescending(x => x.CaptureTime)
-        .Skip((page - 1) * pageSize)
-        .Take(pageSize)
-        .Select(x => new { eventType = "capture", captureId = x.CaptureId, x.DeviceId, x.ChannelNo, captureTime = x.CaptureTime, metadata = x.MetadataJson });
+    var (rows, total) = await db.GetCapturesPagedAsync(from, to, page, pageSize);
+    var data = rows.Select(x => new { eventType = "capture", captureId = x.CaptureId, x.DeviceId, x.ChannelNo, captureTime = x.CaptureTime, metadata = x.MetadataJson });
     return Results.Ok(new { code = 0, msg = "输出成功", data, pager = new { page, pageSize, total } });
 }).RequireAuthorization("超级管理员");
 output.MapGet("/persons", async (int minCapture = 1) =>
@@ -994,11 +1644,22 @@ output.MapGet("/persons", async (int minCapture = 1) =>
 }).RequireAuthorization("超级管理员");
 
 var vector = app.MapGroup("/api/vector");
-vector.MapPost("/extract", async (VectorExtractReq req) =>
+vector.MapPost("/extract", async (HttpRequest request, VectorExtractReq req) =>
 {
+    var rl = await CheckRateLimitAsync(request, "vector.extract", 20, TimeSpan.FromMinutes(1));
+    if (rl is not null) return rl;
+
     if (string.IsNullOrWhiteSpace(req.ImageBase64))
     {
         return Results.BadRequest(new { code = 40051, msg = "图片Base64不能为空" });
+    }
+    if (req.ImageBase64.Length > MaxImageBase64Chars)
+    {
+        return Results.BadRequest(new { code = 40053, msg = "图片 Base64 过大" });
+    }
+    if (!string.IsNullOrWhiteSpace(req.MetadataJson) && req.MetadataJson!.Length > MaxMetadataJsonChars)
+    {
+        return Results.BadRequest(new { code = 40054, msg = "元数据过大" });
     }
     var ai = await aiClient.ExtractAsync(req.ImageBase64, req.MetadataJson ?? "{}");
     if (!ai.Success)
@@ -1007,9 +1668,17 @@ vector.MapPost("/extract", async (VectorExtractReq req) =>
     }
     return Results.Ok(new { code = 0, msg = "提取成功", data = new { ai.Dim, ai.Feature } });
 }).RequireAuthorization("楼栋管理员");
-vector.MapPost("/search", async (VectorSearchReq req) =>
+vector.MapPost("/search", async (HttpRequest request, VectorSearchReq req) =>
 {
+    var rl = await CheckRateLimitAsync(request, "vector.search", 60, TimeSpan.FromMinutes(1));
+    if (rl is not null) return rl;
+
     var topK = req.TopK <= 0 ? 10 : Math.Min(req.TopK, 50);
+    if (req.Feature is null || req.Feature.Count == 0)
+        return Results.BadRequest(new { code = 40071, msg = "特征向量不能为空" });
+    // 系统规划维度固定为 512；避免维度不一致导致向量库异常或性能劣化
+    if (req.Feature.Count != 512)
+        return Results.BadRequest(new { code = 40072, msg = "特征向量维度必须为 512" });
     var rows = await aiClient.SearchAsync(req.Feature, topK);
     return Results.Ok(new { code = 0, msg = "查询成功", data = rows });
 }).RequireAuthorization("楼栋管理员");
@@ -1038,7 +1707,7 @@ space.MapPost("/collision/check", async (SpaceCollisionReq req) =>
         events.Add(local);
     }
     AddOperationLog(store, "空间引擎", "空间碰撞判定", $"camera={req.CameraId}, x={req.PosX}, y={req.PosY}, hit={matched.Count}");
-    await hubContext.Clients.All.SendAsync("track.event", new { vid, cameraId = req.CameraId, roiCount = matched.Count, eventTime });
+    await BroadcastEventAsync("track.event", new { vid, cameraId = req.CameraId, roiCount = matched.Count, eventTime });
     return Results.Ok(new
     {
         code = 0,
@@ -1144,31 +1813,33 @@ operation.MapGet("/list", async (string? keyword, int page = 1, int pageSize = 2
     return Results.Ok(new { code = 0, msg = "查询成功", data = rows, pager = new { page, pageSize, total } });
 }).RequireAuthorization("超级管理员");
 
-_ = Task.Run(async () =>
+dailyJudgeState.RunDailyAsync = async (today) =>
 {
-    DateOnly? lastDate = null;
-    while (true)
+    const string lockKey = "aura:lock:daily-judges";
+    const int lockMinutes = 60;
+    string? lockToken = null;
+    try
     {
-        try
-        {
-            var now = DateTime.Now;
-            var today = DateOnly.FromDateTime(now);
-            if (now.Hour == 0 && now.Minute < 5 && lastDate != today)
-            {
-                await RunHomeJudgeAsync(today);
-                await RunGroupRentAndStayJudgeAsync(today, 2, 120);
-                await RunNightAbsenceJudgeAsync(today, 23);
-                lastDate = today;
-                await db.InsertOperationAsync("系统任务", "归寝定时任务", $"日期={today:yyyy-MM-dd}");
-            }
-        }
-        catch
-        {
-            // 定时任务异常不影响主流程
-        }
-        await Task.Delay(TimeSpan.FromMinutes(1));
+        if (cache.Enabled)
+            lockToken = await cache.TryAcquireLockAsync(lockKey, TimeSpan.FromMinutes(lockMinutes));
+        var canRun = cache.Enabled ? lockToken is not null : true;
+        if (!canRun) return;
+
+        await RunHomeJudgeAsync(today);
+        await RunGroupRentAndStayJudgeAsync(today, 2, 120);
+        await RunNightAbsenceJudgeAsync(today, 23);
+        await db.InsertOperationAsync("系统任务", "归寝定时任务", $"日期={today:yyyy-MM-dd}");
     }
-});
+    catch
+    {
+        // 定时任务异常不影响主流程
+    }
+    finally
+    {
+        if (lockToken is not null)
+            await cache.ReleaseLockAsync(lockKey, lockToken);
+    }
+};
 
 app.Run();
 
@@ -1369,6 +2040,7 @@ internal sealed record JudgeRunReq(string? Date);
 internal sealed record JudgeAbnormalReq(string? Date, int GroupThreshold, int StayMinutes);
 internal sealed record JudgeNightReq(string? Date, int CutoffHour);
 internal sealed record JudgeRunResult(DateOnly JudgeDate, string JudgeType, int SourceCount, int ResultCount);
+internal sealed record OpsAlertNotifyTestReq(string? AlertType, string? Detail);
 internal sealed record PointVm(double X, double Y);
 
 internal sealed record DeviceEntity(long DeviceId, string Name, string Ip, int Port, string Brand, string Protocol, string Status, DateTimeOffset CreatedAt);
@@ -1431,4 +2103,74 @@ internal sealed class AppStore
     public List<VirtualPersonEntity> VirtualPersons { get; } = [];
 }
 
-internal sealed class EventHub : Hub;
+[Authorize(Policy = "楼栋管理员")]
+internal sealed class EventHub : Hub
+{
+    public override async Task OnConnectedAsync()
+    {
+        var role = Context.User?.FindFirstValue(ClaimTypes.Role);
+        if (!string.IsNullOrWhiteSpace(role))
+        {
+            await Groups.AddToGroupAsync(Context.ConnectionId, $"role:{role}");
+        }
+        await base.OnConnectedAsync();
+    }
+
+    public override async Task OnDisconnectedAsync(Exception? exception)
+    {
+        var role = Context.User?.FindFirstValue(ClaimTypes.Role);
+        if (!string.IsNullOrWhiteSpace(role))
+        {
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"role:{role}");
+        }
+        await base.OnDisconnectedAsync(exception);
+    }
+}
+
+internal sealed class DailyJudgeScheduleState
+{
+    public Func<DateOnly, Task>? RunDailyAsync { get; set; }
+}
+
+internal sealed class DailyJudgeHostedService : BackgroundService
+{
+    private readonly DailyJudgeScheduleState _state;
+    private readonly ILogger<DailyJudgeHostedService> _logger;
+    private DateOnly? _lastDate;
+
+    public DailyJudgeHostedService(DailyJudgeScheduleState state, ILogger<DailyJudgeHostedService> logger)
+    {
+        _state = state;
+        _logger = logger;
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                var now = DateTime.Now;
+                var today = DateOnly.FromDateTime(now);
+                if (now.Hour == 0 && now.Minute < 5 && _lastDate != today)
+                {
+                    var run = _state.RunDailyAsync;
+                    if (run is not null)
+                    {
+                        var startedAt = DateTimeOffset.Now;
+                        await run(today);
+                        _lastDate = today;
+                        var costMs = (long)(DateTimeOffset.Now - startedAt).TotalMilliseconds;
+                        _logger.LogInformation("每日研判后台任务执行完成。date={Date}, costMs={CostMs}", today, costMs);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "每日研判后台任务执行异常。");
+            }
+
+            await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
+        }
+    }
+}

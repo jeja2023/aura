@@ -9,10 +9,6 @@ const permissionMenuEl = document.getElementById("permissionMenu");
 let successStatusTimer = null;
 const SUCCESS_STATUS_MS = 5000;
 
-function getToken() {
-  return localStorage.getItem("token") ?? "";
-}
-
 function clearSuccessStatusTimer() {
   if (successStatusTimer != null) {
     clearTimeout(successStatusTimer);
@@ -77,7 +73,7 @@ async function load() {
   setResult("");
   try {
     const res = await fetch(`${apiBase}/api/role/list`, {
-      headers: { Authorization: `Bearer ${getToken()}` }
+      credentials: "include"
     });
     setResult(await res.json());
   } catch (error) {
@@ -97,9 +93,9 @@ async function createRole() {
   try {
     const res = await fetch(`${apiBase}/api/role/create`, {
       method: "POST",
+      credentials: "include",
       headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${getToken()}`
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({ roleName, permissionJson })
     });

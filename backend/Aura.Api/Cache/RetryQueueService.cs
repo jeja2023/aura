@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
 
 namespace Aura.Api.Cache;
@@ -6,12 +7,15 @@ namespace Aura.Api.Cache;
 internal sealed class RetryQueueService
 {
     private readonly IDatabase? _db;
+    private readonly ILogger<RetryQueueService> _logger;
     private const string QueueKey = "aura:retry:capture";
 
-    public RetryQueueService(string? connectionString)
+    public RetryQueueService(string? connectionString, ILogger<RetryQueueService> logger)
     {
+        _logger = logger;
         if (string.IsNullOrWhiteSpace(connectionString))
         {
+            _logger.LogWarning("Redis 重试队列未启用：连接串为空。");
             return;
         }
         try
@@ -19,9 +23,10 @@ internal sealed class RetryQueueService
             var mux = ConnectionMultiplexer.Connect(connectionString);
             _db = mux.GetDatabase();
         }
-        catch
+        catch (Exception ex)
         {
             _db = null;
+            _logger.LogError(ex, "Redis 重试队列初始化失败，已降级为禁用状态。");
         }
     }
 
@@ -33,8 +38,15 @@ internal sealed class RetryQueueService
         {
             return;
         }
-        var json = JsonSerializer.Serialize(task);
-        await _db.ListRightPushAsync(QueueKey, json);
+        try
+        {
+            var json = JsonSerializer.Serialize(task);
+            await _db.ListRightPushAsync(QueueKey, json);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "重试任务入队失败。captureId={CaptureId}, deviceId={DeviceId}, retry={RetryCount}", task.CaptureId, task.DeviceId, task.RetryCount);
+        }
     }
 
     public async Task<RetryTask?> DequeueAsync()
@@ -43,12 +55,20 @@ internal sealed class RetryQueueService
         {
             return null;
         }
-        var value = await _db.ListLeftPopAsync(QueueKey);
-        if (!value.HasValue)
+        try
         {
+            var value = await _db.ListLeftPopAsync(QueueKey);
+            if (!value.HasValue)
+            {
+                return null;
+            }
+            return JsonSerializer.Deserialize<RetryTask>(value.ToString());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "重试任务出队失败。");
             return null;
         }
-        return JsonSerializer.Deserialize<RetryTask>(value.ToString());
     }
 
     public async Task<long> LengthAsync()
@@ -57,14 +77,24 @@ internal sealed class RetryQueueService
         {
             return 0;
         }
-        return await _db.ListLengthAsync(QueueKey);
+        try
+        {
+            return await _db.ListLengthAsync(QueueKey);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "查询重试队列长度失败。");
+            return 0;
+        }
     }
 }
 
 internal sealed record RetryTask(
+    long CaptureId,
     long DeviceId,
     int ChannelNo,
-    string ImageBase64,
+    string? ImagePath,
+    string? ImageBase64,
     string MetadataJson,
     string Source,
     int RetryCount,

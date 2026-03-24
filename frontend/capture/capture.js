@@ -6,10 +6,6 @@ const resultEl = document.getElementById("result");
 let successStatusTimer = null;
 const SUCCESS_STATUS_MS = 5000;
 
-function getToken() {
-  return localStorage.getItem("token") ?? "";
-}
-
 function clearSuccessStatusTimer() {
   if (successStatusTimer != null) {
     clearTimeout(successStatusTimer);
@@ -79,7 +75,8 @@ async function createMock() {
   try {
     const res = await fetch(`${apiBase}/api/capture/mock`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ deviceId, channelNo, metadataJson })
     });
     const data = await res.json();
@@ -93,8 +90,8 @@ async function load() {
   setResult("");
 
   try {
-    const res = await fetch(`${apiBase}/api/capture/list`, {
-      headers: { Authorization: `Bearer ${getToken()}` }
+    const res = await fetch(`${apiBase}/api/capture/list?limit=500`, {
+      credentials: "include"
     });
     const data = await res.json();
     setResult(data);

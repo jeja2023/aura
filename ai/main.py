@@ -74,6 +74,11 @@ class ImageReq(BaseModel):
     metadata_json: str = "{}"
 
 
+class ImageFileReq(BaseModel):
+    image_path: str
+    metadata_json: str = "{}"
+
+
 class SearchReq(BaseModel):
     feature: list[float]
     top_k: int = 10
@@ -138,6 +143,22 @@ def _extract_feature_by_onnx(image_base64: str) -> list[float]:
     return _normalize_feature(feat)
 
 
+def _extract_feature_by_file_path(image_path: str) -> list[float]:
+    if _ort_session is None:
+        raise RuntimeError(_model_error or "onnx session not initialized")
+    p = Path(image_path)
+    if not p.exists():
+        raise RuntimeError(f"image path not found: {image_path}")
+    with Image.open(str(p)) as img:
+        rgb = img.convert("RGB")
+        tensor = _preprocess(rgb)
+    outputs = _ort_session.run(None, {_ort_input_name: tensor})
+    if not outputs:
+        raise RuntimeError("onnx returned empty outputs")
+    feat = np.asarray(outputs[0]).reshape(-1).astype(np.float32).tolist()
+    return _normalize_feature(feat)
+
+
 def _cosine(a: list[float], b: list[float]) -> float:
     return sum(x * y for x, y in zip(a, b))
 
@@ -146,6 +167,15 @@ def _cosine(a: list[float], b: list[float]) -> float:
 def extract(req: ImageReq):
     try:
         feature = _extract_feature_by_onnx(req.image_base64)
+        return {"code": 0, "msg": "特征提取成功", "data": {"feature": feature, "dim": len(feature)}}
+    except Exception as ex:
+        return {"code": 50001, "msg": f"特征提取失败: {ex}", "data": {"feature": [], "dim": 0}}
+
+
+@app.post("/ai/extract-file")
+def extract_file(req: ImageFileReq):
+    try:
+        feature = _extract_feature_by_file_path(req.image_path)
         return {"code": 0, "msg": "特征提取成功", "data": {"feature": feature, "dim": len(feature)}}
     except Exception as ex:
         return {"code": 50001, "msg": f"特征提取失败: {ex}", "data": {"feature": [], "dim": 0}}

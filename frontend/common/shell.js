@@ -132,9 +132,13 @@
     btn.id = "auraLogoutBtn";
     btn.className = "btn-primary";
     btn.textContent = "退出登录";
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", async () => {
       localStorage.removeItem("token");
-      document.cookie = "aura_token=; path=/; Max-Age=0; SameSite=Lax";
+      try {
+        await fetch("/api/auth/logout", { method: "POST" });
+      } catch {
+        // 网络异常不阻断前端登出跳转
+      }
       window.location.href = "/login/";
     });
     slot.appendChild(btn);

@@ -6,10 +6,6 @@ const resultEl = document.getElementById("result");
 let successStatusTimer = null;
 const SUCCESS_STATUS_MS = 5000;
 
-function getToken() {
-  return localStorage.getItem("token") ?? "";
-}
-
 function clearSuccessStatusTimer() {
   if (successStatusTimer != null) {
     clearTimeout(successStatusTimer);
@@ -95,9 +91,9 @@ async function runSearch() {
     const imageBase64 = await fileToBase64(file);
     const extRes = await fetch(`${apiBase}/api/vector/extract`, {
       method: "POST",
+      credentials: "include",
       headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${getToken()}`
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
         imageBase64,
@@ -112,9 +108,9 @@ async function runSearch() {
     const feature = extData.data.feature;
     const seaRes = await fetch(`${apiBase}/api/vector/search`, {
       method: "POST",
+      credentials: "include",
       headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${getToken()}`
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({ feature, topK })
     });

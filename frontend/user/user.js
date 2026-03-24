@@ -24,10 +24,6 @@ function escapeHtml(text) {
     .replaceAll("'", "&#39;");
 }
 
-function getToken() {
-  return localStorage.getItem("token") ?? "";
-}
-
 function clearSuccessStatusTimer() {
   if (successStatusTimer != null) {
     clearTimeout(successStatusTimer);
@@ -103,7 +99,7 @@ async function load() {
   setElResult(queryResultEl, "");
   try {
     const res = await fetch(`${apiBase}/api/user/list`, {
-      headers: { Authorization: `Bearer ${getToken()}` }
+      credentials: "include"
     });
     const payload = await res.json();
     latestUserPayload = payload;
@@ -180,9 +176,9 @@ async function createUser() {
   try {
     const res = await fetch(`${apiBase}/api/user/create`, {
       method: "POST",
+      credentials: "include",
       headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${getToken()}`
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({ userName, password, roleId })
     });
@@ -203,9 +199,9 @@ async function updateStatus() {
   try {
     const res = await fetch(`${apiBase}/api/user/status/${userId}`, {
       method: "POST",
+      credentials: "include",
       headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${getToken()}`
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({ status })
     });

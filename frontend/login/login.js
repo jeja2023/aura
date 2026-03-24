@@ -15,8 +15,7 @@ function getReturnUrl() {
 }
 
 function saveLoginState(token) {
-  localStorage.setItem("token", token);
-  document.cookie = `aura_token=${encodeURIComponent(token)}; path=/; SameSite=Lax`;
+  void token;
 }
 
 async function login() {
@@ -49,10 +48,6 @@ async function login() {
 }
 
 function bootstrap() {
-  const token = localStorage.getItem("token") ?? "";
-  if (token) {
-    document.cookie = `aura_token=${encodeURIComponent(token)}; path=/; SameSite=Lax`;
-  }
   document.getElementById("submit").addEventListener("click", login);
 }
 

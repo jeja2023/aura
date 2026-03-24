@@ -6,10 +6,6 @@ const downloadEl = document.getElementById("download");
 let successStatusTimer = null;
 const SUCCESS_STATUS_MS = 5000;
 
-function getToken() {
-  return localStorage.getItem("token") ?? "";
-}
-
 function clearSuccessStatusTimer() {
   if (successStatusTimer != null) {
     clearTimeout(successStatusTimer);
@@ -40,7 +36,7 @@ async function run() {
 
   try {
     const res = await fetch(`${apiBase}/api/export/${encodeURIComponent(type)}?dataset=${encodeURIComponent(dataset)}`, {
-      headers: { Authorization: `Bearer ${getToken()}` }
+      credentials: "include"
     });
     const data = await res.json();
 

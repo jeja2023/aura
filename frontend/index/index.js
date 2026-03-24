@@ -8,10 +8,6 @@ const SUCCESS_STATUS_MS = 5000;
 let statusSuccessTimer = null;
 let overviewSuccessTimer = null;
 
-function getToken() {
-  return localStorage.getItem("token") ?? "";
-}
-
 function clearStatusTimer(timerRefName) {
   if (timerRefName === "status") {
     if (statusSuccessTimer != null) clearTimeout(statusSuccessTimer);
@@ -146,7 +142,7 @@ async function loadOverview() {
   setPre(overviewEl, "", false, "overview");
   try {
     const res = await fetch(`${apiBase}/api/stats/overview`, {
-      headers: { Authorization: `Bearer ${getToken()}` }
+      credentials: "include"
     });
     if (res.status === 401) {
       setPre(overviewEl, "概览加载失败：登录已失效，请重新登录。", true, "overview");
@@ -179,7 +175,10 @@ async function initSignalR() {
     return;
   }
   const connection = new window.signalR.HubConnectionBuilder()
-    .withUrl(`${apiBase}/hubs/events`)
+    .withUrl(`${apiBase}/hubs/events`, {
+      // 纯 Cookie 会话下由浏览器自动携带 HttpOnly Cookie；accessTokenFactory 保持兼容占位
+      accessTokenFactory: () => ""
+    })
     .withAutomaticReconnect()
     .build();
 

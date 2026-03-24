@@ -7,10 +7,6 @@ const previewEl = document.getElementById("preview");
 let successStatusTimer = null;
 const SUCCESS_STATUS_MS = 5000;
 
-function getToken() {
-  return localStorage.getItem("token") ?? "";
-}
-
 function clearSuccessStatusTimer() {
   if (successStatusTimer != null) {
     clearTimeout(successStatusTimer);
@@ -87,7 +83,7 @@ async function uploadAndCreate() {
     form.append("file", file);
     const uploadRes = await fetch(`${apiBase}/api/floor/upload`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${getToken()}` },
+      credentials: "include",
       body: form
     });
     const uploadData = await uploadRes.json();
@@ -100,9 +96,9 @@ async function uploadAndCreate() {
     previewEl.src = `${apiBase}${filePath}`;
     const createRes = await fetch(`${apiBase}/api/floor/create`, {
       method: "POST",
+      credentials: "include",
       headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${getToken()}`
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({ nodeId, filePath, scaleRatio })
     });
@@ -117,7 +113,7 @@ async function loadList() {
   setResult("");
   try {
     const res = await fetch(`${apiBase}/api/floor/list`, {
-      headers: { Authorization: `Bearer ${getToken()}` }
+      credentials: "include"
     });
     const data = await res.json();
     setResult(data);

@@ -1,4 +1,5 @@
 using Dapper;
+using Microsoft.Extensions.Logging;
 using MySqlConnector;
 
 namespace Aura.Api.Data;
@@ -6,10 +7,12 @@ namespace Aura.Api.Data;
 internal sealed class MySqlStore
 {
     private readonly string _connectionString;
+    private readonly ILogger<MySqlStore>? _logger;
 
-    public MySqlStore(string connectionString)
+    public MySqlStore(string connectionString, ILogger<MySqlStore>? logger = null)
     {
         _connectionString = connectionString;
+        _logger = logger;
     }
 
     private MySqlConnection CreateConnection() => new(_connectionString);
@@ -29,8 +32,9 @@ internal sealed class MySqlStore
                 """,
                 new { userName });
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogError(ex, "数据库查询用户失败。userName={UserName}", userName);
             return null;
         }
     }
@@ -49,8 +53,9 @@ internal sealed class MySqlStore
                 """);
             return rows.ToList();
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogError(ex, "数据库查询设备列表失败。");
             return [];
         }
     }
@@ -69,32 +74,55 @@ internal sealed class MySqlStore
             var id = await conn.ExecuteScalarAsync<long>("SELECT LAST_INSERT_ID()");
             return id;
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogError(ex, "数据库写入设备失败。name={Name}, ip={Ip}, port={Port}", name, ip, port);
             return null;
         }
     }
 
-    public async Task<long?> InsertCaptureAsync(long deviceId, int channelNo, DateTimeOffset captureTime, string metadataJson)
+    public async Task<long?> InsertCaptureAsync(long deviceId, int channelNo, DateTimeOffset captureTime, string metadataJson, string? imagePath)
     {
         try
         {
             await using var conn = CreateConnection();
             await conn.ExecuteAsync(
                 """
-                INSERT INTO capture_record(device_id, channel_no, capture_time, metadata_json, created_at)
-                VALUES(@DeviceId, @ChannelNo, @CaptureTime, @MetadataJson, NOW())
+                INSERT INTO capture_record(device_id, channel_no, capture_time, image_path, metadata_json, created_at)
+                VALUES(@DeviceId, @ChannelNo, @CaptureTime, @ImagePath, @MetadataJson, NOW())
                 """,
-                new { DeviceId = deviceId, ChannelNo = channelNo, CaptureTime = captureTime, MetadataJson = metadataJson });
+                new { DeviceId = deviceId, ChannelNo = channelNo, CaptureTime = captureTime, ImagePath = imagePath, MetadataJson = metadataJson });
             return await conn.ExecuteScalarAsync<long>("SELECT LAST_INSERT_ID()");
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogError(ex, "数据库写入抓拍记录失败。deviceId={DeviceId}, channelNo={ChannelNo}", deviceId, channelNo);
             return null;
         }
     }
 
-    public async Task<List<DbCapture>> GetCapturesAsync()
+    public async Task<bool> UpdateCaptureMetadataAsync(long captureId, string metadataJson)
+    {
+        try
+        {
+            await using var conn = CreateConnection();
+            var affected = await conn.ExecuteAsync(
+                """
+                UPDATE capture_record
+                SET metadata_json = CAST(@MetadataJson AS JSON)
+                WHERE capture_id=@CaptureId
+                """,
+                new { CaptureId = captureId, MetadataJson = metadataJson });
+            return affected > 0;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "数据库更新抓拍元数据失败。captureId={CaptureId}", captureId);
+            return false;
+        }
+    }
+
+    public async Task<List<DbCapture>> GetCapturesAsync(int limit = 500)
     {
         try
         {
@@ -102,15 +130,16 @@ internal sealed class MySqlStore
             var rows = await conn.QueryAsync<DbCapture>(
                 """
                 SELECT capture_id AS CaptureId, device_id AS DeviceId, channel_no AS ChannelNo,
-                       capture_time AS CaptureTime, COALESCE(CAST(metadata_json AS CHAR), '{}') AS MetadataJson
+                       capture_time AS CaptureTime, COALESCE(CAST(metadata_json AS CHAR), '') AS MetadataJson
                 FROM capture_record
                 ORDER BY capture_id DESC
-                LIMIT 500
+                LIMIT @Limit
                 """);
             return rows.ToList();
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogError(ex, "数据库查询抓拍列表失败。limit={Limit}", limit);
             return [];
         }
     }
@@ -128,13 +157,14 @@ internal sealed class MySqlStore
                 new { AlertType = alertType, Detail = detail });
             return await conn.ExecuteScalarAsync<long>("SELECT LAST_INSERT_ID()");
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogError(ex, "数据库写入告警失败。alertType={AlertType}", alertType);
             return null;
         }
     }
 
-    public async Task<List<DbAlert>> GetAlertsAsync()
+    public async Task<List<DbAlert>> GetAlertsAsync(int limit = 500)
     {
         try
         {
@@ -146,12 +176,13 @@ internal sealed class MySqlStore
                        created_at AS CreatedAt
                 FROM alert_record
                 ORDER BY alert_id DESC
-                LIMIT 500
+                LIMIT @Limit
                 """);
             return rows.ToList();
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogError(ex, "数据库查询告警列表失败。limit={Limit}", limit);
             return [];
         }
     }
@@ -169,8 +200,9 @@ internal sealed class MySqlStore
                 new { OperatorName = operatorName, Action = action, Detail = detail });
             return await conn.ExecuteScalarAsync<long>("SELECT LAST_INSERT_ID()");
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogError(ex, "数据库写入操作日志失败。operator={OperatorName}, action={Action}", operatorName, action);
             return null;
         }
     }
@@ -196,8 +228,9 @@ internal sealed class MySqlStore
                 new { kw = $"%{keyword}%", offset = (page - 1) * pageSize, pageSize });
             return (rows.ToList(), total);
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogError(ex, "数据库查询操作日志失败。keyword={Keyword}, page={Page}, pageSize={PageSize}", keyword, page, pageSize);
             return ([], 0);
         }
     }
@@ -215,8 +248,9 @@ internal sealed class MySqlStore
                 """);
             return rows.ToList();
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogError(ex, "数据库查询园区资源树失败。");
             return [];
         }
     }
@@ -234,8 +268,9 @@ internal sealed class MySqlStore
                 new { ParentId = parentId, LevelType = levelType, NodeName = nodeName });
             return await conn.ExecuteScalarAsync<long>("SELECT LAST_INSERT_ID()");
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogError(ex, "数据库写入园区节点失败。levelType={LevelType}, nodeName={NodeName}", levelType, nodeName);
             return null;
         }
     }
@@ -250,8 +285,9 @@ internal sealed class MySqlStore
                 new { NodeName = nodeName, NodeId = nodeId });
             return affected > 0;
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogError(ex, "数据库更新园区节点失败。nodeId={NodeId}", nodeId);
             return false;
         }
     }
@@ -266,8 +302,9 @@ internal sealed class MySqlStore
                 new { NodeId = nodeId });
             return affected > 0;
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogError(ex, "数据库删除园区节点失败。nodeId={NodeId}", nodeId);
             return false;
         }
     }
@@ -285,8 +322,9 @@ internal sealed class MySqlStore
                 """);
             return rows.ToList();
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogError(ex, "数据库查询楼层列表失败。");
             return [];
         }
     }
@@ -304,8 +342,9 @@ internal sealed class MySqlStore
                 new { NodeId = nodeId, FilePath = filePath, ScaleRatio = scaleRatio });
             return await conn.ExecuteScalarAsync<long>("SELECT LAST_INSERT_ID()");
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogError(ex, "数据库写入楼层失败。nodeId={NodeId}", nodeId);
             return null;
         }
     }
@@ -324,8 +363,9 @@ internal sealed class MySqlStore
                 """);
             return rows.ToList();
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogError(ex, "数据库查询摄像头列表失败。");
             return [];
         }
     }
@@ -343,8 +383,9 @@ internal sealed class MySqlStore
                 new { FloorId = floorId, DeviceId = deviceId, ChannelNo = channelNo, PosX = posX, PosY = posY });
             return await conn.ExecuteScalarAsync<long>("SELECT LAST_INSERT_ID()");
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogError(ex, "数据库写入摄像头失败。floorId={FloorId}, deviceId={DeviceId}, channelNo={ChannelNo}", floorId, deviceId, channelNo);
             return null;
         }
     }
@@ -363,8 +404,9 @@ internal sealed class MySqlStore
                 """);
             return rows.ToList();
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogError(ex, "数据库查询 ROI 列表失败。");
             return [];
         }
     }
@@ -382,8 +424,9 @@ internal sealed class MySqlStore
                 new { CameraId = cameraId, RoomNodeId = roomNodeId, VerticesJson = verticesJson });
             return await conn.ExecuteScalarAsync<long>("SELECT LAST_INSERT_ID()");
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogError(ex, "数据库写入 ROI 失败。cameraId={CameraId}, roomNodeId={RoomNodeId}", cameraId, roomNodeId);
             return null;
         }
     }
@@ -401,14 +444,18 @@ internal sealed class MySqlStore
                 new { Vid = vid, CameraId = cameraId, RoiId = roiId, EventTime = eventTime });
             return await conn.ExecuteScalarAsync<long>("SELECT LAST_INSERT_ID()");
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogError(ex, "数据库写入轨迹事件失败。vid={Vid}, cameraId={CameraId}, roiId={RoiId}", vid, cameraId, roiId);
             return null;
         }
     }
 
-    public async Task<List<DbTrackEvent>> GetTrackEventsAsync(string? vid)
+    public async Task<List<DbTrackEvent>> GetTrackEventsAsync(string? vid, int limit = 500, int maxLimit = 2000)
     {
+        if (limit <= 0) limit = 500;
+        if (limit > maxLimit) limit = maxLimit;
+
         try
         {
             await using var conn = CreateConnection();
@@ -420,13 +467,14 @@ internal sealed class MySqlStore
                 FROM track_event
                 {where}
                 ORDER BY event_id DESC
-                LIMIT 1000
+                LIMIT @Limit
                 """,
-                new { Vid = vid });
+                new { Vid = vid, Limit = limit });
             return rows.ToList();
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogError(ex, "数据库查询轨迹失败。vid={Vid}, limit={Limit}", vid, limit);
             return [];
         }
     }
@@ -444,8 +492,9 @@ internal sealed class MySqlStore
                 new { Vid = vid, RoomId = roomId, JudgeType = judgeType, JudgeDate = judgeDate.ToDateTime(TimeOnly.MinValue), DetailJson = detailJson });
             return await conn.ExecuteScalarAsync<long>("SELECT LAST_INSERT_ID()");
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogError(ex, "数据库写入研判结果失败。vid={Vid}, roomId={RoomId}, judgeType={JudgeType}", vid, roomId, judgeType);
             return null;
         }
     }
@@ -461,13 +510,14 @@ internal sealed class MySqlStore
                 new { JudgeDate = judgeDate.ToDateTime(TimeOnly.MinValue), JudgeType = judgeType });
             return affected >= 0;
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogError(ex, "数据库删除研判结果失败。judgeDate={JudgeDate}, judgeType={JudgeType}", judgeDate, judgeType);
             return false;
         }
     }
 
-    public async Task<List<DbJudgeResult>> GetJudgeResultsAsync(DateOnly? judgeDate, string? judgeType)
+    public async Task<List<DbJudgeResult>> GetJudgeResultsAsync(DateOnly? judgeDate, string? judgeType, int maxRows = 2000)
     {
         try
         {
@@ -477,25 +527,27 @@ internal sealed class MySqlStore
             if (!string.IsNullOrWhiteSpace(judgeType)) where += " AND judge_type=@JudgeType ";
             var sql = """
                 SELECT judge_id AS JudgeId, vid AS Vid, room_id AS RoomId, judge_type AS JudgeType,
-                       judge_date AS JudgeDate, COALESCE(CAST(detail_json AS CHAR), '{}') AS DetailJson, created_at AS CreatedAt
+                       judge_date AS JudgeDate, COALESCE(CAST(detail_json AS CHAR), '') AS DetailJson, created_at AS CreatedAt
                 FROM judge_result
                 """
                 + where +
                 """
                 ORDER BY judge_id DESC
-                LIMIT 2000
+                LIMIT @MaxRows
                 """;
             var rows = await conn.QueryAsync<DbJudgeResult>(
                 sql,
                 new
                 {
                     JudgeDate = judgeDate?.ToDateTime(TimeOnly.MinValue),
-                    JudgeType = judgeType
+                    JudgeType = judgeType,
+                    MaxRows = maxRows
                 });
             return rows.ToList();
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogError(ex, "数据库查询研判结果失败。judgeDate={JudgeDate}, judgeType={JudgeType}, maxRows={MaxRows}", judgeDate, judgeType, maxRows);
             return [];
         }
     }
@@ -513,8 +565,9 @@ internal sealed class MySqlStore
                 """);
             return rows.ToList();
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogError(ex, "数据库查询角色列表失败。");
             return [];
         }
     }
@@ -532,8 +585,9 @@ internal sealed class MySqlStore
                 new { RoleName = roleName, PermissionJson = permissionJson });
             return await conn.ExecuteScalarAsync<long>("SELECT LAST_INSERT_ID()");
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogError(ex, "数据库写入角色失败。roleName={RoleName}", roleName);
             return null;
         }
     }
@@ -553,8 +607,9 @@ internal sealed class MySqlStore
                 """);
             return rows.ToList();
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogError(ex, "数据库查询用户列表失败。");
             return [];
         }
     }
@@ -572,8 +627,9 @@ internal sealed class MySqlStore
                 new { UserName = userName, PasswordHash = passwordHash, RoleId = roleId });
             return await conn.ExecuteScalarAsync<long>("SELECT LAST_INSERT_ID()");
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogError(ex, "数据库写入用户失败。userName={UserName}, roleId={RoleId}", userName, roleId);
             return null;
         }
     }
@@ -588,8 +644,9 @@ internal sealed class MySqlStore
                 new { Status = status, UserId = userId });
             return affected > 0;
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogError(ex, "数据库更新用户状态失败。userId={UserId}, status={Status}", userId, status);
             return false;
         }
     }
@@ -602,8 +659,9 @@ internal sealed class MySqlStore
             await conn.ExecuteAsync("DELETE FROM virtual_person");
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogError(ex, "数据库清空虚拟人员失败。");
             return false;
         }
     }
@@ -620,9 +678,10 @@ internal sealed class MySqlStore
                 """,
                 new { Vid = vid, FirstSeen = firstSeen, LastSeen = lastSeen, DeviceId = deviceId, CaptureCount = captureCount });
         }
-        catch
+        catch (Exception ex)
         {
             // 忽略，保持上层可继续执行
+            _logger?.LogWarning(ex, "数据库写入虚拟人员失败。vid={Vid}, deviceId={DeviceId}", vid, deviceId);
         }
     }
 
@@ -640,9 +699,90 @@ internal sealed class MySqlStore
                 """);
             return rows.ToList();
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogError(ex, "数据库查询虚拟人员列表失败。");
             return [];
+        }
+    }
+
+    public async Task<string?> GetDeviceHmacSecretAsync(long deviceId)
+    {
+        try
+        {
+            await using var conn = CreateConnection();
+            return await conn.QueryFirstOrDefaultAsync<string?>(
+                """
+                SELECT COALESCE(hmac_secret, '') AS HmacSecret
+                FROM nvr_device
+                WHERE device_id=@DeviceId
+                LIMIT 1
+                """,
+                new { DeviceId = deviceId });
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "数据库查询设备级 HMAC 密钥失败。deviceId={DeviceId}", deviceId);
+            return null;
+        }
+    }
+
+    public async Task<List<DbTrackEvent>> GetTrackEventsInRangeAsync(DateTimeOffset start, DateTimeOffset end, int maxRows = 200000)
+    {
+        try
+        {
+            await using var conn = CreateConnection();
+            var rows = await conn.QueryAsync<DbTrackEvent>(
+                """
+                SELECT event_id AS EventId, vid AS Vid, camera_id AS CameraId,
+                       roi_id AS RoiId, event_time AS EventTime
+                FROM track_event
+                WHERE event_time >= @Start AND event_time < @End
+                ORDER BY event_id DESC
+                LIMIT @MaxRows
+                """,
+                new { Start = start, End = end, MaxRows = maxRows });
+            return rows.ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "数据库按时间范围查询轨迹失败。start={Start}, end={End}, maxRows={MaxRows}", start, end, maxRows);
+            return [];
+        }
+    }
+
+    public async Task<(List<DbCapture> Rows, int Total)> GetCapturesPagedAsync(DateTimeOffset? from, DateTimeOffset? to, int page, int pageSize)
+    {
+        if (page <= 0) page = 1;
+        if (pageSize <= 0) pageSize = 20;
+
+        try
+        {
+            await using var conn = CreateConnection();
+            var where = " WHERE 1=1 ";
+            if (from.HasValue) where += " AND capture_time >= @From ";
+            if (to.HasValue) where += " AND capture_time <= @To ";
+
+            var total = await conn.ExecuteScalarAsync<int>($"SELECT COUNT(1) FROM capture_record {where}", new { From = from, To = to });
+
+            var offset = (page - 1) * pageSize;
+            var rows = await conn.QueryAsync<DbCapture>(
+                $"""
+                SELECT capture_id AS CaptureId, device_id AS DeviceId, channel_no AS ChannelNo,
+                       capture_time AS CaptureTime, COALESCE(CAST(metadata_json AS CHAR), '') AS MetadataJson
+                FROM capture_record
+                {where}
+                ORDER BY capture_time DESC, capture_id DESC
+                LIMIT @Offset, @PageSize
+                """,
+                new { From = from, To = to, Offset = offset, PageSize = pageSize });
+
+            return (rows.ToList(), total);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "数据库分页查询抓拍失败。from={From}, to={To}, page={Page}, pageSize={PageSize}", from, to, page, pageSize);
+            return ([], 0);
         }
     }
 }
