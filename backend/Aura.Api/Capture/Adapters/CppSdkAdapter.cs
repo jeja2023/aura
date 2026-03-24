@@ -1,3 +1,4 @@
+/* 文件：C++ SDK抓拍适配器（CppSdkAdapter.cs） | File: C++ SDK Capture Adapter */
 using System.Text.Json;
 using System.Text.Json.Nodes;
 

@@ -1,3 +1,4 @@
+/* 文件：AI客户端（AiClient.cs） | File: AI Client */
 using System.Net.Http.Json;
 
 namespace Aura.Api.Ai;

@@ -1,3 +1,4 @@
+/* 文件：MySQL存储服务（MySqlStore.cs） | File: MySQL Store Service */
 using Dapper;
 using Microsoft.Extensions.Logging;
 using MySqlConnector;

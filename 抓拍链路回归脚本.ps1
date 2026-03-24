@@ -1,5 +1,5 @@
-# 抓拍链路回归脚本（PowerShell）
-# 用途：快速回归登录、抓拍、查询、向量检索、重试队列。
+# 文件：抓拍链路回归脚本（抓拍链路回归脚本.ps1） | File: Capture Pipeline Regression Script
+# 用途：快速回归登录、抓拍、查询、向量检索与重试队列。
 
 $ErrorActionPreference = "Stop"
 [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }

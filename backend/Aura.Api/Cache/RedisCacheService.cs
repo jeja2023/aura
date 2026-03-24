@@ -1,3 +1,4 @@
+/* 文件：Redis缓存服务（RedisCacheService.cs） | File: Redis Cache Service */
 using StackExchange.Redis;
 using Microsoft.Extensions.Logging;
 

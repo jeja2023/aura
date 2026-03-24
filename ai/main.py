@@ -1,3 +1,4 @@
+# 文件：AI推理服务入口（main.py） | File: AI Inference Service Entry
 # pyright: reportMissingImports=false
 from datetime import datetime
 import base64
