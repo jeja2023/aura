@@ -74,6 +74,7 @@ dotnet run
 ## 开发环境账号说明
 
 - 开发环境启动时，若 `sys_user` 为空，后端会自动创建 `admin` 账号并在后端控制台打印随机强密码。
+- 仅开发环境可用：将 `appsettings.Development.json` 中 `Dev:ResetAdminPasswordOnce` 设为 `true`，重启后端可一次性重置 `admin` 密码并在控制台打印；随后请改回 `false`。
 - 回归脚本与联调脚本不再内置默认密码，请先设置环境变量：`AURA_ADMIN_PASSWORD`。
 
 > 生产环境请务必关闭开发自动建号能力，统一走正式账号流程，并替换 `appsettings.Production.json` 中全部占位密钥。
