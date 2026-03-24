@@ -1,0 +1,46 @@
+name: docker-build-push-example
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "backend/**"
+      - "ai/**"
+      - "docker/**"
+      - ".github/workflows/docker-build-push.example.yml"
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    env:
+      API_IMAGE_REPO: ${{ secrets.API_IMAGE_REPO }}
+      AI_IMAGE_REPO: ${{ secrets.AI_IMAGE_REPO }}
+      IMAGE_TAG: ${{ github.sha }}
+      PYTHON_BASE_IMAGE: ${{ secrets.PYTHON_BASE_IMAGE }}
+      DOTNET_SDK_IMAGE: ${{ secrets.DOTNET_SDK_IMAGE }}
+      DOTNET_ASPNET_IMAGE: ${{ secrets.DOTNET_ASPNET_IMAGE }}
+      MYSQL_IMAGE: ${{ secrets.MYSQL_IMAGE }}
+      REDIS_IMAGE: ${{ secrets.REDIS_IMAGE }}
+      MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
+      MYSQL_DATABASE: ${{ secrets.MYSQL_DATABASE }}
+      MYSQL_USER: ${{ secrets.MYSQL_USER }}
+      MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
+      JWT_KEY: ${{ secrets.JWT_KEY }}
+      HMAC_SECRET: ${{ secrets.HMAC_SECRET }}
+      AURA_ADMIN_USER: ${{ secrets.AURA_ADMIN_USER }}
+      AURA_ADMIN_PASSWORD: ${{ secrets.AURA_ADMIN_PASSWORD }}
+      MILVUS_URI: ${{ secrets.MILVUS_URI }}
+      AURA_MODEL_PATH: ${{ secrets.AURA_MODEL_PATH }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Docker login
+        run: echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login "${{ secrets.REGISTRY_HOST }}" -u "${{ secrets.REGISTRY_USER }}" --password-stdin
+
+      - name: Build images
+        run: sh ./docker/build-images.sh
+
+      - name: Push images
+        run: sh ./docker/push-images.sh

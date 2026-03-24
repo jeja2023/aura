@@ -71,12 +71,31 @@ dotnet run
 默认可直接通过后端同域名访问：`https://localhost:5001/`  
 （后端已挂载项目根目录 `frontend` 为静态资源目录）
 
-## 默认测试账号
+## 开发环境账号说明
 
-- 用户名：`admin`
-- 密码：`admin123`
+- 开发环境启动时，若 `sys_user` 为空，后端会自动创建 `admin` 账号并在后端控制台打印随机强密码。
+- 回归脚本与联调脚本不再内置默认密码，请先设置环境变量：`AURA_ADMIN_PASSWORD`。
 
-> 生产环境请务必禁用或改密默认账号，并替换 `appsettings.Production.json` 中全部占位密钥。
+> 生产环境请务必关闭开发自动建号能力，统一走正式账号流程，并替换 `appsettings.Production.json` 中全部占位密钥。
+
+### 环境变量配置（跨平台）
+
+- Windows PowerShell（当前会话）：
+  - `$env:AURA_ADMIN_USER = "admin"`
+  - `$env:AURA_ADMIN_PASSWORD = "你的密码"`
+- Linux / macOS（当前会话）：
+  - `export AURA_ADMIN_USER=admin`
+  - `export AURA_ADMIN_PASSWORD='你的密码'`
+- 模板文件：仓库已提供 `.env.example`，可复制为本地 `.env` 使用（`.env` 已在 `.gitignore` 中忽略，勿提交真实密码）。
+
+### Docker 化建议（脚本/巡检任务）
+
+- 示例文件：`docker/docker-compose.ops-check.example.yml`
+- 使用方式：
+  1. `cp .env.example .env`（Windows 可手动复制并重命名）
+  2. 在 `.env` 中填入真实 `AURA_ADMIN_PASSWORD`
+  3. `docker compose -f docker/docker-compose.ops-check.example.yml run --rm ops-check`
+- 建议：生产环境优先使用 CI/CD Secret 或容器编排 Secret（如 Kubernetes Secret），避免明文进入镜像和仓库。
 
 ## 关键页面入口
 
@@ -105,3 +124,4 @@ dotnet run
 
 - 参考 `backend/Aura.Api/appsettings.Production.json` 填充生产配置
 - 参考 `部署文档与运维手册.md` 与 `上线检查清单.md` 执行上线流程
+- Docker 化参考：`docker/README.md`（含 `full` 联调、`ops-check` 巡检与生产模板）

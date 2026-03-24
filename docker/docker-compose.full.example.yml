@@ -1,0 +1,89 @@
+services:
+  mysql:
+    image: ${MYSQL_IMAGE}
+    container_name: aura-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    ports:
+      - "3306:3306"
+    volumes:
+      - aura-mysql-data:/var/lib/mysql
+      - ../database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: ${REDIS_IMAGE}
+    container_name: aura-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - aura-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  ai:
+    build:
+      context: ../
+      dockerfile: docker/ai.Dockerfile
+      args:
+        PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE}
+    image: aura-ai:local
+    container_name: aura-ai
+    restart: unless-stopped
+    environment:
+      MILVUS_URI: ${MILVUS_URI}
+      AURA_MODEL_PATH: ${AURA_MODEL_PATH}
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/').read()"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ../
+      dockerfile: docker/backend.Dockerfile
+      args:
+        DOTNET_SDK_IMAGE: ${DOTNET_SDK_IMAGE}
+        DOTNET_ASPNET_IMAGE: ${DOTNET_ASPNET_IMAGE}
+    image: aura-api:local
+    container_name: aura-api
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://0.0.0.0:5000
+      ConnectionStrings__MySql: server=mysql;port=3306;database=${MYSQL_DATABASE};uid=${MYSQL_USER};pwd=${MYSQL_PASSWORD};AllowPublicKeyRetrieval=False
+      ConnectionStrings__Redis: redis:6379
+      Ai__BaseUrl: http://ai:8000
+      Jwt__Key: ${JWT_KEY}
+      Security__HmacSecret: ${HMAC_SECRET}
+      AURA_ADMIN_USER: ${AURA_ADMIN_USER}
+      AURA_ADMIN_PASSWORD: ${AURA_ADMIN_PASSWORD}
+    ports:
+      - "5000:5000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ai:
+        condition: service_healthy
+
+volumes:
+  aura-mysql-data:
+  aura-redis-data:

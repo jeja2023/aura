@@ -36,6 +36,7 @@ TestResults/
 # 构建与缓存
 dist/
 build/
+.verify_build/
 coverage/
 .cache/
 *.tmp
@@ -78,6 +79,9 @@ storage/outputs/
 # 敏感配置与密钥
 .env
 .env.*
+!docker/.env.full.example
+!docker/.env.prod.example
+!docker/.env.registry.example
 *.key
 *.pem
 *.pfx

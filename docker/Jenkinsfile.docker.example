@@ -1,0 +1,58 @@
+pipeline {
+  agent any
+
+  environment {
+    REGISTRY_HOST = credentials('REGISTRY_HOST')
+    REGISTRY_USER = credentials('REGISTRY_USER')
+    REGISTRY_PASSWORD = credentials('REGISTRY_PASSWORD')
+    API_IMAGE_REPO = credentials('API_IMAGE_REPO')
+    AI_IMAGE_REPO = credentials('AI_IMAGE_REPO')
+    IMAGE_TAG = "${env.BUILD_NUMBER}"
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+      }
+    }
+
+    stage('Prepare Env') {
+      steps {
+        powershell '''
+Copy-Item "docker/.env.full.example" ".env" -Force
+'''
+      }
+    }
+
+    stage('Docker Login') {
+      steps {
+        powershell '''
+powershell -ExecutionPolicy Bypass -File ".\\docker\\login-registry.ps1"
+'''
+      }
+    }
+
+    stage('Build Images') {
+      steps {
+        powershell '''
+powershell -ExecutionPolicy Bypass -File ".\\docker\\build-images.ps1"
+'''
+      }
+    }
+
+    stage('Push Images') {
+      steps {
+        powershell '''
+powershell -ExecutionPolicy Bypass -File ".\\docker\\push-images.ps1"
+'''
+      }
+    }
+  }
+
+  post {
+    always {
+      archiveArtifacts artifacts: 'docker/dist/*.tar', allowEmptyArchive: true
+    }
+  }
+}
