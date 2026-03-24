@@ -7,23 +7,23 @@ set -euo pipefail
 ########################################
 # 0) 按需修改以下变量
 ########################################
-GIT_REPO_URL="https://github.com/你的用户名/你的仓库.git"
+GIT_REPO_URL="https://github.com/jeja2023/aura.git"
 DEPLOY_DIR="/opt/aura"
 BRANCH="main"
 
 # 管理员账号
 AURA_ADMIN_USER="admin"
-AURA_ADMIN_PASSWORD="请改成强密码"
+AURA_ADMIN_PASSWORD="admin123"
 
 # MySQL 配置
-MYSQL_ROOT_PASSWORD="请改成强密码"
+MYSQL_ROOT_PASSWORD="root_123456"
 MYSQL_DATABASE="aura"
 MYSQL_USER="dev_user"
-MYSQL_PASSWORD="请改成强密码"
+MYSQL_PASSWORD="aura_123456"
 
 # 安全密钥（建议 32 位以上随机字符串）
-JWT_KEY="请改成至少32位随机字符串"
-HMAC_SECRET="请改成至少32位随机字符串"
+JWT_KEY="Xnewq6I_LyhsnOqbbX-ntVw1duomeBnWcM-xZC1CYPu6ZrJ9EQ0i8rvObqC-g3C8"
+HMAC_SECRET="N7u_gxz_PsdZtnkYXVzzb3AlQ0brgoJWTM99WcuZE3yOWEefaQNl9Y6NUJBv7-rz"
 
 # AI 配置（通常保持默认即可）
 MILVUS_URI="http://127.0.0.1:19530"
@@ -64,10 +64,13 @@ fi
 cd "$DEPLOY_DIR"
 
 ########################################
-# 3) 生成运行环境变量文件 .env
+# 3) 生成运行环境变量文件 .env（存在则跳过）
 ########################################
-echo "==> 生成 .env 文件"
-cat > .env <<EOF
+if [ -f .env ]; then
+  echo "==> 检测到已存在 .env，跳过自动生成并保留原配置"
+else
+  echo "==> 未检测到 .env，自动生成配置文件"
+  cat > .env <<EOF
 AURA_ADMIN_USER=${AURA_ADMIN_USER}
 AURA_ADMIN_PASSWORD=${AURA_ADMIN_PASSWORD}
 
@@ -88,6 +91,7 @@ HMAC_SECRET=${HMAC_SECRET}
 MILVUS_URI=${MILVUS_URI}
 AURA_MODEL_PATH=${AURA_MODEL_PATH}
 EOF
+fi
 
 ########################################
 # 4) 模型文件检查（AI 服务依赖）
