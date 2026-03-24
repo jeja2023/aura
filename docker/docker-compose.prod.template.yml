@@ -1,0 +1,29 @@
+services:
+  api:
+    image: ${API_IMAGE}
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://0.0.0.0:5000
+      ConnectionStrings__MySql: ${CONNECTIONSTRINGS__MYSQL}
+      ConnectionStrings__Redis: ${CONNECTIONSTRINGS__REDIS}
+      Ai__BaseUrl: ${AI__BASEURL}
+      Jwt__Key: ${JWT__KEY}
+      Security__HmacSecret: ${SECURITY__HMACSECRET}
+      Ops__Alert__WebhookUrl: ${OPS__ALERT__WEBHOOKURL}
+      Ops__Alert__FilePath: ${OPS__ALERT__FILEPATH}
+      AURA_ADMIN_USER: ${AURA_ADMIN_USER}
+      AURA_ADMIN_PASSWORD: ${AURA_ADMIN_PASSWORD}
+    ports:
+      - "5000:5000"
+    # 生产建议通过 orchestrator secret/配置中心注入上面的变量，
+    # 不要在本文件中写明文凭据。
+
+  ai:
+    image: ${AI_IMAGE}
+    restart: unless-stopped
+    environment:
+      MILVUS_URI: ${MILVUS_URI}
+      AURA_MODEL_PATH: ${AURA_MODEL_PATH}
+    ports:
+      - "8000:8000"

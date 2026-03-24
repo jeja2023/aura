@@ -1,0 +1,10 @@
+services:
+  ops-check:
+    image: mcr.microsoft.com/powershell:7.4-alpine-3.20
+    environment:
+      - AURA_ADMIN_USER=${AURA_ADMIN_USER}
+      - AURA_ADMIN_PASSWORD=${AURA_ADMIN_PASSWORD}
+    volumes:
+      - ../:/work
+    working_dir: /work
+    command: ["pwsh", "./上线就绪检查脚本.ps1"]
