@@ -4,6 +4,14 @@
 
 set -euo pipefail
 
+# 记录脚本总耗时，便于定位慢点
+SCRIPT_START_TS="$(date +%s)"
+function print_elapsed() {
+  local now
+  now="$(date +%s)"
+  echo "==> 当前累计耗时: $((now - SCRIPT_START_TS)) 秒"
+}
+
 ########################################
 # 0) 按需修改以下变量
 ########################################
@@ -93,6 +101,39 @@ AURA_MODEL_PATH=${AURA_MODEL_PATH}
 EOF
 fi
 
+# 读取 .env 并导出，统一用于后续 compose 与变量校验
+set -a
+source .env
+set +a
+
+# 关键变量校验，避免变量为空导致 compose 异常
+required_vars=(
+  MYSQL_IMAGE
+  REDIS_IMAGE
+  PYTHON_BASE_IMAGE
+  DOTNET_SDK_IMAGE
+  DOTNET_ASPNET_IMAGE
+  MYSQL_ROOT_PASSWORD
+  MYSQL_DATABASE
+  MYSQL_USER
+  MYSQL_PASSWORD
+  JWT_KEY
+  HMAC_SECRET
+  AURA_ADMIN_USER
+  AURA_ADMIN_PASSWORD
+  MILVUS_URI
+  AURA_MODEL_PATH
+)
+for v in "${required_vars[@]}"; do
+  if [ -z "${!v:-}" ]; then
+    echo "ERROR: .env 中缺少必填变量: ${v}"
+    exit 1
+  fi
+done
+
+echo "==> .env 关键变量检查通过"
+print_elapsed
+
 ########################################
 # 4) 模型文件检查（AI 服务依赖）
 ########################################
@@ -106,9 +147,10 @@ fi
 ########################################
 echo "==> 启动容器服务..."
 docker compose --env-file .env -f docker/docker-compose.full.example.yml up -d --build
+print_elapsed
 
 echo "==> 当前容器状态"
-docker compose -f docker/docker-compose.full.example.yml ps
+docker compose --env-file .env -f docker/docker-compose.full.example.yml ps
 
 ########################################
 # 6) 健康检查
@@ -117,12 +159,13 @@ echo "==> 等待服务就绪..."
 sleep 8
 
 echo "==> AI 健康检查"
-curl -fsS http://127.0.0.1:8000/ || true
+curl --max-time 10 -fsS http://127.0.0.1:8000/ || true
 echo
 
 echo "==> API 健康检查"
-curl -fsS http://127.0.0.1:5000/api/health || true
+curl --max-time 10 -fsS http://127.0.0.1:5000/api/health || true
 echo
+print_elapsed
 
 ########################################
 # 7) 可选：放行防火墙端口
@@ -134,6 +177,7 @@ if command -v ufw >/dev/null 2>&1; then
 fi
 
 echo "==> 部署完成。常用命令："
-echo "查看日志: docker compose -f docker/docker-compose.full.example.yml logs -f api ai"
-echo "停止服务: docker compose -f docker/docker-compose.full.example.yml down"
+echo "查看日志: docker compose --env-file .env -f docker/docker-compose.full.example.yml logs -f api ai"
+echo "停止服务: docker compose --env-file .env -f docker/docker-compose.full.example.yml down"
 echo "更新重启: git -C ${DEPLOY_DIR} pull && docker compose --env-file .env -f docker/docker-compose.full.example.yml up -d --build"
+echo "提示: 若构建时间超过 20 分钟，可执行日志命令判断是否网络拉镜像过慢。"
