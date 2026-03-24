@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Aura.Api.Ai;
 using Aura.Api.Cache;
 using Aura.Api.Capture;
@@ -192,6 +193,32 @@ if (app.Environment.IsDevelopment())
     try
     {
         var devResetAdminPasswordOnce = app.Configuration.GetValue("Dev:ResetAdminPasswordOnce", false);
+        bool TryDisableDevResetPasswordOnceFlag()
+        {
+            try
+            {
+                var devConfigPath = Path.Combine(app.Environment.ContentRootPath, "appsettings.Development.json");
+                if (!File.Exists(devConfigPath)) return false;
+
+                var json = File.ReadAllText(devConfigPath);
+                var root = JsonNode.Parse(json) as JsonObject;
+                if (root is null) return false;
+
+                var devNode = root["Dev"] as JsonObject ?? new JsonObject();
+                devNode["ResetAdminPasswordOnce"] = false;
+                root["Dev"] = devNode;
+
+                File.WriteAllText(
+                    devConfigPath,
+                    root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         static string GenerateDevPassword()
         {
             var bytes = RandomNumberGenerator.GetBytes(18);
@@ -230,7 +257,15 @@ if (app.Environment.IsDevelopment())
             {
                 Console.WriteLine($"开发环境管理员密码已一次性重置：用户名=admin, 新密码={devPassword}");
             }
-            Console.WriteLine("提示：Dev:ResetAdminPasswordOnce 仅在本次启动生效；请将其改回 false 或移除。");
+
+            if (TryDisableDevResetPasswordOnceFlag())
+            {
+                Console.WriteLine("开发环境一次性重置开关已自动回写为 false。");
+            }
+            else
+            {
+                Console.WriteLine("提示：自动回写 Dev:ResetAdminPasswordOnce=false 失败，请手动改回 false。");
+            }
         }
     }
     catch
