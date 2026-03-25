@@ -14,40 +14,75 @@ from PIL import Image
 from pydantic import BaseModel
 
 try:
-    from pymilvus import MilvusClient
+    from arango import ArangoClient
 except Exception:
-    MilvusClient = None
+    ArangoClient = None
 
 app = FastAPI(title="寓瞳AI推理服务", version="0.1.0")
 COLLECTION_NAME = "aura_reid"
 VECTOR_DIM = 512
 _local_index = []
-_milvus = None
+_arango_db = None
+_arango_collection = None
 _ort_session = None
 _ort_input_name = ""
 _model_error = ""
+_arango_error = ""
 
 
-def _init_milvus():
-    global _milvus
-    if MilvusClient is None:
+def _init_arango():
+    """初始化 ArangoDB 向量存储；失败则保持在内存降级模式。"""
+    global _arango_db, _arango_collection, _arango_error
+    if ArangoClient is None:
+        _arango_db = None
+        _arango_collection = None
+        _arango_error = "python-arango 未安装或无法导入"
         return
-    uri = os.getenv("MILVUS_URI", "http://127.0.0.1:19530")
+
+    arango_uri = os.getenv("ARANGO_URI", "http://127.0.0.1:8529")
+    arango_db_name = os.getenv("ARANGO_DB", "aura")
+    # 默认不再“悄悄使用测试密码”，要求必须通过环境变量/ .env 明确配置
+    arango_user = os.getenv("ARANGO_USER", "")
+    arango_password = os.getenv("ARANGO_PASSWORD", "")
+    _arango_error = ""
+
+    if not arango_user or not arango_password:
+        _arango_db = None
+        _arango_collection = None
+        _arango_error = "ARANGO_USER/ARANGO_PASSWORD 未配置"
+        return
+    if "PLEASE_" in str(arango_user).upper() or "PLEASE_" in str(arango_password).upper():
+        _arango_db = None
+        _arango_collection = None
+        _arango_error = "ARANGO_USER/ARANGO_PASSWORD 仍为占位值"
+        return
+
     try:
-        _milvus = MilvusClient(uri=uri)
-        if not _milvus.has_collection(COLLECTION_NAME):
-            _milvus.create_collection(
-                collection_name=COLLECTION_NAME,
-                dimension=VECTOR_DIM,
-                primary_field_name="id",
-                id_type="string",
-                metric_type="COSINE",
-            )
-    except Exception:
-        _milvus = None
+        client = ArangoClient(hosts=arango_uri)
+        _arango_db = client.db(
+            name=arango_db_name,
+            username=arango_user,
+            password=arango_password,
+        )
+        if not _arango_db.has_collection(COLLECTION_NAME):
+            _arango_db.create_collection(COLLECTION_NAME)
+        _arango_collection = _arango_db.collection(COLLECTION_NAME)
+    except Exception as ex:
+        _arango_db = None
+        _arango_collection = None
+        _arango_error = str(ex)
 
 
-_init_milvus()
+def _ensure_arango():
+    """惰性重连：避免容器编排先后导致永久降级。"""
+    global _arango_db
+    if _arango_db is not None:
+        return True
+    _init_arango()
+    return _arango_db is not None
+
+
+_init_arango()
 
 
 def _init_model():
@@ -96,7 +131,8 @@ def health():
         "code": 0,
         "msg": "AI服务运行正常",
         "time": datetime.now().isoformat(),
-        "milvus_enabled": _milvus is not None,
+        "arangodb_enabled": _arango_db is not None,
+        "arango_error": _arango_error,
         "model_loaded": _ort_session is not None,
         "model_error": _model_error,
     }
@@ -185,13 +221,23 @@ def extract_file(req: ImageFileReq):
 @app.post("/ai/upsert")
 def upsert(req: UpsertReq):
     feature = _normalize_feature(req.feature)
-    if _milvus is not None:
+    if _ensure_arango():
         try:
-            _milvus.upsert(
-                collection_name=COLLECTION_NAME,
-                data=[{"id": req.vid, "vector": feature}]
+            # 以 _key=vid 作为幂等写入主键
+            _arango_db.aql.execute(
+                """
+                UPSERT { _key: @vid }
+                INSERT { _key: @vid, vid: @vid, feature: @feature }
+                UPDATE { vid: @vid, feature: @feature }
+                IN @@col
+                """,
+                bind_vars={
+                    "@col": COLLECTION_NAME,
+                    "vid": req.vid,
+                    "feature": feature,
+                },
             )
-            return {"code": 0, "msg": "写入成功", "data": {"vid": req.vid, "engine": "milvus"}}
+            return {"code": 0, "msg": "写入成功", "data": {"vid": req.vid, "engine": "arangodb"}}
         except Exception:
             pass
 
@@ -205,17 +251,27 @@ def upsert(req: UpsertReq):
 def search(req: SearchReq):
     feature = _normalize_feature(req.feature)
     top_k = max(1, min(req.top_k, 50))
-    if _milvus is not None:
+    if _ensure_arango():
         try:
-            rows = _milvus.search(
-                collection_name=COLLECTION_NAME,
-                data=[feature],
-                limit=top_k,
-                output_fields=["id"],
+            # 特征向量已归一化：cosine 相似度 = 向量点积
+            cursor = _arango_db.aql.execute(
+                """
+                FOR d IN @@col
+                  LET score = SUM(
+                    FOR i IN 0..511
+                      RETURN d.feature[i] * @feature[i]
+                  )
+                  SORT score DESC
+                  LIMIT @k
+                  RETURN { vid: d.vid, score: score }
+                """,
+                bind_vars={
+                    "@col": COLLECTION_NAME,
+                    "feature": feature,
+                    "k": top_k,
+                },
             )
-            hits = []
-            for item in rows[0]:
-                hits.append({"vid": item["entity"]["id"], "score": float(item["distance"])})
+            hits = [{"vid": x["vid"], "score": float(x["score"])} for x in cursor]
             return {"code": 0, "msg": "检索成功", "data": hits}
         except Exception:
             pass

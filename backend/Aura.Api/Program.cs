@@ -49,7 +49,7 @@ var captureIpWhitelist = builder.Configuration.GetSection("Security:CaptureIpWhi
 const int MaxImageBase64Chars = 5_000_000;
 const int MaxMetadataJsonChars = 200_000;
 const long MaxCaptureRequestBytes = 12L * 1024 * 1024;
-var mysqlConn = builder.Configuration.GetConnectionString("MySql") ?? "";
+var pgsqlConn = builder.Configuration.GetConnectionString("PgSql") ?? "";
 var redisConn = builder.Configuration.GetConnectionString("Redis") ?? "";
 var aiBaseUrl = builder.Configuration["Ai:BaseUrl"] ?? "http://127.0.0.1:8000";
 var alertWebhookUrl = builder.Configuration["Ops:Alert:WebhookUrl"];
@@ -61,15 +61,11 @@ var cspPolicy = builder.Configuration["Security:CspPolicy"]
     ?? "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ws: wss:;";
 if (!isDev)
 {
-    if (string.IsNullOrWhiteSpace(mysqlConn)
-        || mysqlConn.Contains("PLEASE_SET_CONNECTIONSTRING_MYSQL", StringComparison.OrdinalIgnoreCase)
-        || mysqlConn.Contains("PLEASE_REPLACE", StringComparison.OrdinalIgnoreCase))
+    if (string.IsNullOrWhiteSpace(pgsqlConn)
+        || pgsqlConn.Contains("PLEASE_SET_CONNECTIONSTRING_PGSQL", StringComparison.OrdinalIgnoreCase)
+        || pgsqlConn.Contains("PLEASE_REPLACE", StringComparison.OrdinalIgnoreCase))
     {
-        throw new InvalidOperationException("MySQL 连接串未配置或仍为占位值（生产环境必须配置有效连接串）");
-    }
-    if (mysqlConn.Contains("AllowPublicKeyRetrieval=True", StringComparison.OrdinalIgnoreCase))
-    {
-        throw new InvalidOperationException("生产环境禁止 MySQL 连接串使用 AllowPublicKeyRetrieval=True");
+        throw new InvalidOperationException("PostgreSQL 连接串未配置或仍为占位值（生产环境必须配置有效连接串）");
     }
     if (string.IsNullOrWhiteSpace(redisConn)
         || redisConn.Contains("PLEASE_SET_CONNECTIONSTRING_REDIS", StringComparison.OrdinalIgnoreCase)
@@ -86,8 +82,8 @@ builder.Services.ConfigureHttpJsonOptions(o =>
 });
 
 builder.Services.AddOpenApi();
-builder.Services.AddSingleton<MySqlStore>(sp =>
-    new MySqlStore(mysqlConn, sp.GetRequiredService<ILogger<MySqlStore>>()));
+builder.Services.AddSingleton<PgSqlStore>(sp =>
+    new PgSqlStore(pgsqlConn, sp.GetRequiredService<ILogger<PgSqlStore>>()));
 builder.Services.AddSingleton<RedisCacheService>(sp =>
     new RedisCacheService(redisConn, sp.GetRequiredService<ILogger<RedisCacheService>>()));
 builder.Services.AddSingleton<RetryQueueService>(sp =>
@@ -152,7 +148,7 @@ builder.Services.AddAuthorization(options =>
 
 var app = builder.Build();
 var store = new AppStore();
-var db = app.Services.GetRequiredService<MySqlStore>();
+var db = app.Services.GetRequiredService<PgSqlStore>();
 var cache = app.Services.GetRequiredService<RedisCacheService>();
 var retryQueue = app.Services.GetRequiredService<RetryQueueService>();
 var hikAdapter = new HikvisionIsapiAdapter();
@@ -194,8 +190,8 @@ if (!captureRetryAllowInlineFallback)
     Console.WriteLine("已禁用 CaptureRetry:AllowInlineBase64Fallback：AI 失败且图片落盘失败时不再写入内联 Base64 队列，避免大对象放大。");
 }
 
-// 开发环境：防止删除默认账号后“无法登录”的功能性回退。
-// 若 sys_user 为空，则自动创建一个随机强密码的开发管理员账号（仅打印到本机控制台）。
+    // 开发环境：防止删除默认账号后“无法登录”的功能性回退。
+    // 为了开发联调方便，管理员账号 `admin` 默认使用固定密码（仅开发环境生效）。
 if (app.Environment.IsDevelopment())
 {
     try
@@ -227,14 +223,7 @@ if (app.Environment.IsDevelopment())
             }
         }
 
-        static string GenerateDevPassword()
-        {
-            var bytes = RandomNumberGenerator.GetBytes(18);
-            return Convert.ToBase64String(bytes)
-                .Replace('+', '-')
-                .Replace('/', '_')
-                .TrimEnd('=');
-        }
+        static string GenerateDevPassword() => "123456";
 
         var users = await db.GetUsersAsync();
         if (users.Count == 0)
@@ -741,8 +730,8 @@ app.MapGet("/api/ops/readiness", () =>
     var hmacConfigured = !string.IsNullOrWhiteSpace(globalHmacSecret)
                          && !globalHmacSecret.Contains("PLEASE_", StringComparison.OrdinalIgnoreCase)
                          && !globalHmacSecret.Contains("demo-hmac-secret", StringComparison.OrdinalIgnoreCase);
-    var mysqlConfigured = !string.IsNullOrWhiteSpace(mysqlConn)
-                          && !mysqlConn.Contains("PLEASE_", StringComparison.OrdinalIgnoreCase);
+    var pgsqlConfigured = !string.IsNullOrWhiteSpace(pgsqlConn)
+                          && !pgsqlConn.Contains("PLEASE_", StringComparison.OrdinalIgnoreCase);
     var redisConfigured = !string.IsNullOrWhiteSpace(redisConn)
                           && !redisConn.Contains("PLEASE_", StringComparison.OrdinalIgnoreCase);
     var aiConfigured = !string.IsNullOrWhiteSpace(aiBaseUrl);
@@ -757,7 +746,7 @@ app.MapGet("/api/ops/readiness", () =>
     {
         ["jwt"] = jwtConfigured,
         ["hmac"] = hmacConfigured,
-        ["mysql"] = mysqlConfigured,
+        ["pgsql"] = pgsqlConfigured,
         ["redis"] = redisConfigured,
         ["ai"] = aiConfigured,
         ["alertNotify"] = alertNotifyHealthy

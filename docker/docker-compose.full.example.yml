@@ -1,20 +1,19 @@
 services:
-  mysql:
-    image: ${MYSQL_IMAGE}
-    container_name: aura-mysql
+  pgsql:
+    image: ${POSTGRES_IMAGE}
+    container_name: aura-pgsql
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
-      - "3306:3306"
+      - "5432:5432"
     volumes:
-      - aura-mysql-data:/var/lib/mysql
-      - ../database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - aura-pgsql-data:/var/lib/postgresql/data
+      - ../database/schema.pgsql.sql:/docker-entrypoint-initdb.d/01-schema.pgsql.sql:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -34,6 +33,17 @@ services:
       timeout: 5s
       retries: 10
 
+  arangodb:
+    image: ${ARANGO_IMAGE:-arangodb:3.12}
+    container_name: aura-arangodb
+    restart: unless-stopped
+    ports:
+      - "8529:8529"
+    environment:
+      ARANGO_ROOT_PASSWORD: ${ARANGO_ROOT_PASSWORD}
+    volumes:
+      - aura-arango-data:/var/lib/arangodb3
+
   ai:
     build:
       context: ../
@@ -44,10 +54,15 @@ services:
     container_name: aura-ai
     restart: unless-stopped
     environment:
-      MILVUS_URI: ${MILVUS_URI}
+      ARANGO_URI: ${ARANGO_URI}
+      ARANGO_DB: ${ARANGO_DB}
+      ARANGO_USER: ${ARANGO_USER}
+      ARANGO_PASSWORD: ${ARANGO_PASSWORD}
       AURA_MODEL_PATH: ${AURA_MODEL_PATH}
     ports:
       - "8000:8000"
+    depends_on:
+      - arangodb
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/').read()"]
       interval: 15s
@@ -68,7 +83,7 @@ services:
       # 一键部署脚本写入 Production；本地可复制 .env.full.example 为 Development
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: http://0.0.0.0:5000
-      ConnectionStrings__MySql: server=mysql;port=3306;database=${MYSQL_DATABASE};uid=${MYSQL_USER};pwd=${MYSQL_PASSWORD};AllowPublicKeyRetrieval=False
+      ConnectionStrings__PgSql: Host=pgsql;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
       ConnectionStrings__Redis: redis:6379
       Ai__BaseUrl: http://ai:8000
       Jwt__Key: ${JWT_KEY}
@@ -81,7 +96,7 @@ services:
     ports:
       - "5000:5000"
     depends_on:
-      mysql:
+      pgsql:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -89,5 +104,6 @@ services:
         condition: service_healthy
 
 volumes:
-  aura-mysql-data:
+  aura-pgsql-data:
   aura-redis-data:
+  aura-arango-data:

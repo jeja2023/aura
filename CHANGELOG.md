@@ -4,6 +4,41 @@
 
 ---
 
+## [0.1.1] - 2026-03-25
+
+### 本机直跑配置收敛与就绪检查自动化
+
+- `start_services.py`：启动前自动读取根目录 `e:\Aura\.env` 注入环境变量，启动预检优先使用 `.env` 提供的 `ConnectionStrings__PgSql`、`ConnectionStrings__Redis` 与 `Ai__BaseUrl`，避免 appsettings 中的占位配置误用。
+- `start_services.py`：启动前自动清理占用 `8000`（AI）与 `5001`（后端）端口的进程，避免重复启动导致 `address already in use` 与构建文件锁定问题。
+- `start_services.py`：启动后自动使用“超级管理员”账号登录，并调用 `GET /api/ops/readiness` 完成就绪检查；打印 `[readiness] ready=... , checks=...`。支持 `--run-until-ready / --check-only` 模式，便于本机联调与 CI 预检。
+- `.env.example`：补齐 `ConnectionStrings__PgSql`、`ConnectionStrings__Redis`、`ARANGO_*`、`Jwt__Key`、`Security__HmacSecret`、`Ai__BaseUrl` 等模板键，降低多处配置不一致的风险。
+
+### AI 与配置严格化
+
+- `ai/main.py`：Arango 连接不再使用测试默认值，必须通过 `ARANGO_USER / ARANGO_PASSWORD` 明确配置；健康接口返回 `arango_error`，避免静默降级导致“检索未落库”难排查问题。
+- `backend/Aura.Api/appsettings.Development.json`：`ConnectionStrings:PgSql/Redis` 改为占位值，确保本机直跑以 `.env` 为唯一数据源。
+
+### 开发环境账号便利化
+
+- `backend/Aura.Api/Program.cs`：Development 下 `admin` 密码固定为 `123456`，配合 readiness 自动化减少联调摩擦（生产环境仍需关闭开发自动化能力并替换密钥）。
+
+## [0.1.0] - 2026-03-25
+
+### 架构重构：旧关系库迁移至 PostgreSQL，保留 ArangoDB
+
+- `backend/Aura.Api/Aura.Api.csproj`：数据访问驱动已切换为 `Npgsql`。
+- `backend/Aura.Api/Data/PgSqlStore`：核心存储实现类升级为 `PgSqlStore`，SQL 方言同步切换 PostgreSQL（`RETURNING`、`LIMIT/OFFSET`、`JSONB`）。
+- `backend/Aura.Api/Program.cs`：连接配置统一改为 `ConnectionStrings:PgSql`，就绪检查项改为 `pgsql`。
+- `backend/Aura.Api/appsettings*.json`、`start_services.py`：连接串键名全部改为 `PgSql` 并更新占位模板。
+- `database/schema.pgsql.sql`：新增 PostgreSQL 版本基础表结构脚本，作为当前主库初始化基线。
+- `docker/docker-compose.full.example.yml`、`docker/.env*.example`、`docker/deploy-aura-ubuntu.sh`、`.github/workflows/docker-build-push.example.yml`：容器与 CI 变量由旧关系库体系切换为 PostgreSQL 体系。
+- `docs/*`、`README.md`、`开发计划.md`：数据库架构说明统一为 `PostgreSQL + ArangoDB`。
+
+### 未来扩展位
+
+- 当前数据库架构已确认为 `PostgreSQL + ArangoDB`。
+- 后续可在 PostgreSQL 侧按需启用 `pgvector + PostGIS`，用于向量近邻检索与空间几何增强场景。
+
 ## [0.0.9] - 2026-03-25
 
 ### 部署与前端静态资源路径
@@ -42,9 +77,9 @@
 ### 开发环境账号与数据层修复
 - `backend/Aura.Api/Program.cs`：新增开发环境一次性管理员密码重置能力（`Dev:ResetAdminPasswordOnce`），仅在 Development 下生效；可一次性重置并打印新随机密码，随后提示回滚开关。
 - `backend/Aura.Api/Program.cs`：在一次性重置成功后，自动回写 `appsettings.Development.json` 将 `Dev:ResetAdminPasswordOnce` 置为 `false`，避免重复触发；回写失败时输出明确提示。
-- `backend/Aura.Api/Data/MySqlStore.cs`：修复 `GetCapturesAsync`、`GetAlertsAsync` 缺失 `@Limit` 绑定参数导致的查询失败。
-- `backend/Aura.Api/Data/MySqlStore.cs`：修复 `GetUsersAsync` 的 Dapper 映射异常（`status` 类型与 `created_at` 类型对齐），避免管理员自动创建时触发用户列表物化失败。
-- `backend/Aura.Api/Data/MySqlStore.cs`：进一步修复 `DbCapture.CaptureTime`、`DbAlert.CreatedAt`、`DbUserListItem.Status` 的物化类型对齐问题，消除用户/抓拍/告警列表查询异常。
+- `backend/Aura.Api/Data/PgSqlStore.cs`：修复 `GetCapturesAsync`、`GetAlertsAsync` 缺失 `@Limit` 绑定参数导致的查询失败。
+- `backend/Aura.Api/Data/PgSqlStore.cs`：修复 `GetUsersAsync` 的 Dapper 映射异常（`status` 类型与 `created_at` 类型对齐），避免管理员自动创建时触发用户列表物化失败。
+- `backend/Aura.Api/Data/PgSqlStore.cs`：进一步修复 `DbCapture.CaptureTime`、`DbAlert.CreatedAt`、`DbUserListItem.Status` 的物化类型对齐问题，消除用户/抓拍/告警列表查询异常。
 - `backend/Aura.Api/Program.cs`：修复统计与导出接口中的匿名类型推断冲突（`DateTime` 与 `DateTimeOffset` 混用导致 `CS0173`），统一将数据库分支映射为 `DateTimeOffset` 后再参与聚合与导出。
 - `backend/Aura.Api/appsettings.Development.json`：新增 `Dev:ResetAdminPasswordOnce` 配置项，默认 `false`。
 - `README.md`：补充开发环境一次性重置 admin 密码的使用说明。
@@ -59,16 +94,16 @@
 - `README.md`：删除默认测试密码说明，更新为“开发环境随机强密码 + 环境变量驱动脚本”模式。
 
 ### 可观测性
-- `backend/Aura.Api/Program.cs`：`MySqlStore`、`RedisCacheService`、`RetryQueueService` 调整为通过 DI 注入 `ILogger`，统一接入结构化日志能力。
+- `backend/Aura.Api/Program.cs`：`PgSqlStore`、`RedisCacheService`、`RetryQueueService` 调整为通过 DI 注入 `ILogger`，统一接入结构化日志能力。
 - `backend/Aura.Api/Cache/RetryQueueService.cs`：补充初始化/入队/出队/长度查询失败日志，避免 Redis 异常静默。
 - `backend/Aura.Api/Cache/RedisCacheService.cs`：补充初始化、删缓存、释放锁失败日志。
-- `backend/Aura.Api/Data/MySqlStore.cs`：对用户查询、设备写入、抓拍写入、操作日志查询、设备 HMAC 查询、轨迹时间范围查询、抓拍分页查询、虚拟人员写入等关键失败路径补充结构化日志。
+- `backend/Aura.Api/Data/PgSqlStore.cs`：对用户查询、设备写入、抓拍写入、操作日志查询、设备 HMAC 查询、轨迹时间范围查询、抓拍分页查询、虚拟人员写入等关键失败路径补充结构化日志。
 
 ### 配置与会话安全
 - `backend/Aura.Api/Program.cs`：JWT 鉴权新增 `aura_token` Cookie 读取，支持 API 从 HttpOnly Cookie 完成认证（同时兼容 Authorization 头与 SignalR `access_token`）。
 - `backend/Aura.Api/appsettings.json`：移除默认弱密钥与弱连接串，改为显式占位符，避免误用默认配置直接上线。
 - `backend/Aura.Api/appsettings.Development.json`：补齐开发环境专用连接串与存储配置，将本地联调配置与通用基线配置分离。
-- `backend/Aura.Api/appsettings.Production.json`：`MySql` 连接串改为 `AllowPublicKeyRetrieval=False`。
+- `backend/Aura.Api/appsettings.Production.json`：`PgSql` 连接串改为显式生产账号/密码策略。
 
 ### 前端会话收敛
 - `frontend/login/login.js`：移除登录后 token 持久化写入（不再写入 `localStorage`）。
@@ -82,15 +117,15 @@
 - `backend/Aura.Api/appsettings*.json`：新增 `Security:CspPolicy` 配置项；生产默认策略收紧 `connect-src`（不再开放 `ws/wss` 通配）。
 
 ### 可观测性补齐（数据库层）
-- `backend/Aura.Api/Data/MySqlStore.cs`：其余数据库访问分支的异常处理统一补齐 `ILogger` 结构化日志（原先大量 `catch { return ... }` 的静默降级点已覆盖），包含设备/抓拍/告警/资源树/楼层/摄像头/ROI/轨迹/研判/角色/用户/虚拟人员等链路。
+- `backend/Aura.Api/Data/PgSqlStore.cs`：其余数据库访问分支的异常处理统一补齐 `ILogger` 结构化日志（原先大量 `catch { return ... }` 的静默降级点已覆盖），包含设备/抓拍/告警/资源树/楼层/摄像头/ROI/轨迹/研判/角色/用户/虚拟人员等链路。
 
 ### 重试队列大对象防护
 - `backend/Aura.Api/Program.cs`：AI 失败重试新增 `CaptureRetry:AllowInlineBase64Fallback` 策略开关；当图片落盘失败且未允许回退时，不再把内联 Base64 入重试队列，避免 Redis/网络大对象放大。
 - `backend/Aura.Api/appsettings*.json`：新增 `CaptureRetry:AllowInlineBase64Fallback`，默认生产禁用、开发可启用。
 
 ### 生产配置 Fail-Fast 再加固
-- `backend/Aura.Api/Program.cs`：生产环境启动时新增连接串校验：`MySql/Redis` 为空或仍为占位值将直接启动失败。
-- `backend/Aura.Api/Program.cs`：生产环境检测到 MySQL 连接串包含 `AllowPublicKeyRetrieval=True` 时直接拒绝启动。
+- `backend/Aura.Api/Program.cs`：生产环境启动时新增连接串校验：`PgSql/Redis` 为空或仍为占位值将直接启动失败。
+- `backend/Aura.Api/Program.cs`：生产环境检测到 PgSql 连接串包含不允许的连接参数时直接拒绝启动。
 
 ### 后台任务标准化
 - `backend/Aura.Api/Program.cs`：每日研判定时任务由 `Task.Run` 迁移到标准 `BackgroundService`（`DailyJudgeHostedService`），统一使用宿主生命周期管理与取消令牌。
@@ -106,10 +141,10 @@
 - `backend/Aura.Api/Program.cs`：每日研判后台任务增加执行耗时日志（`costMs`），用于后续阈值告警与性能评估。
 
 ### 开发启动预检
-- `start_services.py`：新增开发环境预检（读取 `appsettings.Development.json`），启动前自动校验 `Jwt:Key`、`MySql`、`Redis`、`Ai:BaseUrl` 是否有效，发现占位值时直接失败并提示修复。
+- `start_services.py`：新增开发环境预检（读取 `appsettings.Development.json`），启动前自动校验 `Jwt:Key`、`PgSql`、`Redis`、`Ai:BaseUrl` 是否有效，发现占位值时直接失败并提示修复。
 
 ### 运维可用性补充
-- `backend/Aura.Api/Program.cs`：新增 `GET /api/ops/readiness` 就绪检查接口（需超级管理员），集中返回 JWT/HMAC/MySQL/Redis/AI 配置就绪状态。
+- `backend/Aura.Api/Program.cs`：新增 `GET /api/ops/readiness` 就绪检查接口（需超级管理员），集中返回 JWT/HMAC/PgSql/Redis/AI 配置就绪状态。
 - `frontend/*/*.js`：移除历史遗留 `getToken()` 空函数，统一保持 Cookie 会话实现，降低后续维护误导成本。
 - 新增文档：`readiness运维使用说明.md`，包含接口用法、字段解释、上线前检查步骤与常见失败处理。
 - `上线就绪检查脚本.ps1`：新增参数模式（`-User`、`-Password`），并保持环境变量兼容（参数优先，环境变量兜底）。
@@ -176,12 +211,12 @@
 
 ### 数据
 
-- `database/schema.sql`：库默认使用 `utf8mb4` + `utf8mb4_unicode_ci`（完整 Unicode）；增加 `CREATE DATABASE IF NOT EXISTS` / `USE`（默认库名 `aura`，可按环境调整）
+- `database/schema.pgsql.sql`：PostgreSQL 库默认表结构；用于初始建库建表与字段/约束基线（默认库名 `aura`，可按环境调整）
 - 全部业务表补充**表级注释**与**字段级注释**（`COMMENT`），便于 DBA 与研发对照维护
 
 ### 修复
 
-- `backend/Aura.Api/Data/MySqlStore.cs`：`alert_record.detail_json` 列为 `JSON` 类型时，原先用普通文本直接写入可能导致 MySQL 拒绝插入或静默失败；改为插入时使用 `JSON_QUOTE`，查询时使用 `COALESCE(JSON_UNQUOTE(detail_json), …)`，与库表类型一致
+- `backend/Aura.Api/Data/PgSqlStore.cs`：`alert_record.detail_json` 列为 `JSONB` 类型时，原先用普通文本直接写入可能导致 PostgreSQL 拒绝插入或静默失败；改为插入时使用 `to_jsonb`，查询时使用 `jsonb_typeof`/`cast` 等方式与库表类型一致
 
 ### 说明
 
@@ -267,7 +302,7 @@
 ### 新增
 
 - .NET Core WebAPI 项目脚手架与基础路由
-- MySQL 初始表结构与基础字典
+- PostgreSQL 初始表结构与基础字典
 - JWT 鉴权中间件与 RBAC 权限框架
 - 系统用户与角色管理能力
 - 操作日志基础框架
@@ -279,5 +314,4 @@
 ## 版本规范
 
 - 版本号遵循 `MAJOR.MINOR.PATCH`
-- 当前版本：`0.0.9`
-- 当前版本序列：`0.0.1` -> `0.0.2` -> `0.0.3` -> `0.0.4` -> `0.0.5` -> `0.0.6` -> `0.0.7` -> `0.0.8` -> `0.0.9`
+- 当前版本：`0.1.1`
