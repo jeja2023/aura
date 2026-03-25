@@ -8,7 +8,7 @@
   - 用途：执行上线就绪巡检脚本 `上线就绪检查脚本.ps1`
   - 适用：本地联调、CI 发布前 Gate 检查
 - `docker-compose.full.example.yml`
-  - 用途：本地一键联调（后端 + AI + MySQL + Redis）
+  - 用途：本地一键联调（后端 + AI + PostgreSQL + Redis + ArangoDB）
   - 适用：开发环境容器化验证
 - `docker-compose.prod.template.yml`
   - 用途：生产部署模板（仅占位，不包含明文密钥）
@@ -56,7 +56,7 @@
 
 1. 在项目根目录准备联调环境变量：
    - 复制 `docker/.env.full.example` 为 `.env`
-   - 按需修改 MySQL/JWT/HMAC/管理员密码等变量
+  - 按需修改 PostgreSQL/JWT/HMAC/管理员密码等变量
 2. 在项目根目录执行：
    - `docker compose --env-file .env -f docker/docker-compose.full.example.yml up -d`
    - 或（Windows）：`powershell -ExecutionPolicy Bypass -File .\docker\up-full.ps1`
@@ -74,7 +74,7 @@
 ## 企业网络适配
 
 1. 在 `.env`（基于 `docker/.env.full.example`）中设置基础镜像变量：
-   - `MYSQL_IMAGE`、`REDIS_IMAGE`、`PYTHON_BASE_IMAGE`
+  - `POSTGRES_IMAGE`、`REDIS_IMAGE`、`PYTHON_BASE_IMAGE`
    - `DOTNET_SDK_IMAGE`、`DOTNET_ASPNET_IMAGE`
 2. 若内网有镜像代理/私服，将上述变量改为内网地址（例如 `registry.local/library/python:3.11-slim`）。
 3. 若需要发布到私有仓库，设置：

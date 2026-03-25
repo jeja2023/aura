@@ -1,22 +1,22 @@
-/* 文件：MySQL存储服务（MySqlStore.cs） | File: MySQL Store Service */
+/* 文件：PostgreSQL存储服务（PgSqlStore） | File: PostgreSQL Store Service */
 using Dapper;
 using Microsoft.Extensions.Logging;
-using MySqlConnector;
+using Npgsql;
 
 namespace Aura.Api.Data;
 
-internal sealed class MySqlStore
+internal sealed class PgSqlStore
 {
     private readonly string _connectionString;
-    private readonly ILogger<MySqlStore>? _logger;
+    private readonly ILogger<PgSqlStore>? _logger;
 
-    public MySqlStore(string connectionString, ILogger<MySqlStore>? logger = null)
+    public PgSqlStore(string connectionString, ILogger<PgSqlStore>? logger = null)
     {
         _connectionString = connectionString;
         _logger = logger;
     }
 
-    private MySqlConnection CreateConnection() => new(_connectionString);
+    private NpgsqlConnection CreateConnection() => new(_connectionString);
 
     public async Task<DbUser?> FindUserAsync(string userName)
     {
@@ -48,7 +48,7 @@ internal sealed class MySqlStore
             var rows = await conn.QueryAsync<DbDevice>(
                 """
                 SELECT device_id AS DeviceId, name AS Name, ip AS Ip, port AS Port,
-                       brand AS Brand, protocol AS `Protocol`, status AS Status, created_at AS CreatedAt
+                       brand AS Brand, protocol AS Protocol, status AS Status, created_at AS CreatedAt
                 FROM nvr_device
                 ORDER BY device_id DESC
                 """);
@@ -66,13 +66,13 @@ internal sealed class MySqlStore
         try
         {
             await using var conn = CreateConnection();
-            await conn.ExecuteAsync(
+            var id = await conn.ExecuteScalarAsync<long>(
                 """
                 INSERT INTO nvr_device(name, ip, port, brand, protocol, status, created_at)
                 VALUES(@Name, @Ip, @Port, @Brand, @Protocol, @Status, NOW())
+                RETURNING device_id
                 """,
                 new { Name = name, Ip = ip, Port = port, Brand = brand, Protocol = protocol, Status = status });
-            var id = await conn.ExecuteScalarAsync<long>("SELECT LAST_INSERT_ID()");
             return id;
         }
         catch (Exception ex)
@@ -87,13 +87,13 @@ internal sealed class MySqlStore
         try
         {
             await using var conn = CreateConnection();
-            await conn.ExecuteAsync(
+            return await conn.ExecuteScalarAsync<long>(
                 """
                 INSERT INTO capture_record(device_id, channel_no, capture_time, image_path, metadata_json, created_at)
-                VALUES(@DeviceId, @ChannelNo, @CaptureTime, @ImagePath, @MetadataJson, NOW())
+                VALUES(@DeviceId, @ChannelNo, @CaptureTime, @ImagePath, CAST(@MetadataJson AS jsonb), NOW())
+                RETURNING capture_id
                 """,
                 new { DeviceId = deviceId, ChannelNo = channelNo, CaptureTime = captureTime, ImagePath = imagePath, MetadataJson = metadataJson });
-            return await conn.ExecuteScalarAsync<long>("SELECT LAST_INSERT_ID()");
         }
         catch (Exception ex)
         {
@@ -110,7 +110,7 @@ internal sealed class MySqlStore
             var affected = await conn.ExecuteAsync(
                 """
                 UPDATE capture_record
-                SET metadata_json = CAST(@MetadataJson AS JSON)
+                SET metadata_json = CAST(@MetadataJson AS jsonb)
                 WHERE capture_id=@CaptureId
                 """,
                 new { CaptureId = captureId, MetadataJson = metadataJson });
@@ -131,7 +131,7 @@ internal sealed class MySqlStore
             var rows = await conn.QueryAsync<DbCapture>(
                 """
                 SELECT capture_id AS CaptureId, device_id AS DeviceId, channel_no AS ChannelNo,
-                       capture_time AS CaptureTime, COALESCE(CAST(metadata_json AS CHAR), '') AS MetadataJson
+                       capture_time AS CaptureTime, COALESCE(CAST(metadata_json AS TEXT), '') AS MetadataJson
                 FROM capture_record
                 ORDER BY capture_id DESC
                 LIMIT @Limit
@@ -151,13 +151,13 @@ internal sealed class MySqlStore
         try
         {
             await using var conn = CreateConnection();
-            await conn.ExecuteAsync(
+            return await conn.ExecuteScalarAsync<long>(
                 """
                 INSERT INTO alert_record(alert_type, detail_json, created_at)
-                VALUES(@AlertType, JSON_QUOTE(@Detail), NOW())
+                VALUES(@AlertType, to_jsonb(@Detail::text), NOW())
+                RETURNING alert_id
                 """,
                 new { AlertType = alertType, Detail = detail });
-            return await conn.ExecuteScalarAsync<long>("SELECT LAST_INSERT_ID()");
         }
         catch (Exception ex)
         {
@@ -174,7 +174,13 @@ internal sealed class MySqlStore
             var rows = await conn.QueryAsync<DbAlert>(
                 """
                 SELECT alert_id AS AlertId, alert_type AS AlertType,
-                       COALESCE(JSON_UNQUOTE(detail_json), CAST(detail_json AS CHAR), '') AS Detail,
+                       COALESCE(
+                         CASE
+                           WHEN jsonb_typeof(detail_json) = 'string' THEN trim(both '"' from detail_json::text)
+                           ELSE CAST(detail_json AS TEXT)
+                         END,
+                         ''
+                       ) AS Detail,
                        created_at AS CreatedAt
                 FROM alert_record
                 ORDER BY alert_id DESC
@@ -195,13 +201,13 @@ internal sealed class MySqlStore
         try
         {
             await using var conn = CreateConnection();
-            await conn.ExecuteAsync(
+            return await conn.ExecuteScalarAsync<long>(
                 """
                 INSERT INTO log_operation(operator_name, action_type, action_detail, created_at)
                 VALUES(@OperatorName, @Action, @Detail, NOW())
+                RETURNING op_id
                 """,
                 new { OperatorName = operatorName, Action = action, Detail = detail });
-            return await conn.ExecuteScalarAsync<long>("SELECT LAST_INSERT_ID()");
         }
         catch (Exception ex)
         {
@@ -226,7 +232,7 @@ internal sealed class MySqlStore
                 FROM log_operation
                 {filter}
                 ORDER BY op_id DESC
-                LIMIT @offset, @pageSize
+                LIMIT @pageSize OFFSET @offset
                 """,
                 new { kw = $"%{keyword}%", offset = (page - 1) * pageSize, pageSize });
             return (rows.ToList(), total);
@@ -263,13 +269,13 @@ internal sealed class MySqlStore
         try
         {
             await using var conn = CreateConnection();
-            await conn.ExecuteAsync(
+            return await conn.ExecuteScalarAsync<long>(
                 """
                 INSERT INTO dict_campus(parent_id, level_type, node_name, created_at)
                 VALUES(@ParentId, @LevelType, @NodeName, NOW())
+                RETURNING node_id
                 """,
                 new { ParentId = parentId, LevelType = levelType, NodeName = nodeName });
-            return await conn.ExecuteScalarAsync<long>("SELECT LAST_INSERT_ID()");
         }
         catch (Exception ex)
         {
@@ -337,13 +343,13 @@ internal sealed class MySqlStore
         try
         {
             await using var conn = CreateConnection();
-            await conn.ExecuteAsync(
+            return await conn.ExecuteScalarAsync<long>(
                 """
                 INSERT INTO map_floor(node_id, file_path, scale_ratio, created_at)
                 VALUES(@NodeId, @FilePath, @ScaleRatio, NOW())
+                RETURNING floor_id
                 """,
                 new { NodeId = nodeId, FilePath = filePath, ScaleRatio = scaleRatio });
-            return await conn.ExecuteScalarAsync<long>("SELECT LAST_INSERT_ID()");
         }
         catch (Exception ex)
         {
@@ -378,13 +384,13 @@ internal sealed class MySqlStore
         try
         {
             await using var conn = CreateConnection();
-            await conn.ExecuteAsync(
+            return await conn.ExecuteScalarAsync<long>(
                 """
                 INSERT INTO map_camera(floor_id, device_id, channel_no, pos_x, pos_y, created_at)
                 VALUES(@FloorId, @DeviceId, @ChannelNo, @PosX, @PosY, NOW())
+                RETURNING camera_id
                 """,
                 new { FloorId = floorId, DeviceId = deviceId, ChannelNo = channelNo, PosX = posX, PosY = posY });
-            return await conn.ExecuteScalarAsync<long>("SELECT LAST_INSERT_ID()");
         }
         catch (Exception ex)
         {
@@ -401,7 +407,7 @@ internal sealed class MySqlStore
             var rows = await conn.QueryAsync<DbRoi>(
                 """
                 SELECT roi_id AS RoiId, camera_id AS CameraId, room_node_id AS RoomNodeId,
-                       COALESCE(CAST(vertices_json AS CHAR), '[]') AS VerticesJson, created_at AS CreatedAt
+                       COALESCE(CAST(vertices_json AS TEXT), '[]') AS VerticesJson, created_at AS CreatedAt
                 FROM map_roi
                 ORDER BY roi_id DESC
                 """);
@@ -419,13 +425,13 @@ internal sealed class MySqlStore
         try
         {
             await using var conn = CreateConnection();
-            await conn.ExecuteAsync(
+            return await conn.ExecuteScalarAsync<long>(
                 """
                 INSERT INTO map_roi(camera_id, room_node_id, vertices_json, created_at)
-                VALUES(@CameraId, @RoomNodeId, CAST(@VerticesJson AS JSON), NOW())
+                VALUES(@CameraId, @RoomNodeId, CAST(@VerticesJson AS jsonb), NOW())
+                RETURNING roi_id
                 """,
                 new { CameraId = cameraId, RoomNodeId = roomNodeId, VerticesJson = verticesJson });
-            return await conn.ExecuteScalarAsync<long>("SELECT LAST_INSERT_ID()");
         }
         catch (Exception ex)
         {
@@ -439,13 +445,13 @@ internal sealed class MySqlStore
         try
         {
             await using var conn = CreateConnection();
-            await conn.ExecuteAsync(
+            return await conn.ExecuteScalarAsync<long>(
                 """
                 INSERT INTO track_event(vid, camera_id, roi_id, event_time, created_at)
                 VALUES(@Vid, @CameraId, @RoiId, @EventTime, NOW())
+                RETURNING event_id
                 """,
                 new { Vid = vid, CameraId = cameraId, RoiId = roiId, EventTime = eventTime });
-            return await conn.ExecuteScalarAsync<long>("SELECT LAST_INSERT_ID()");
         }
         catch (Exception ex)
         {
@@ -487,13 +493,13 @@ internal sealed class MySqlStore
         try
         {
             await using var conn = CreateConnection();
-            await conn.ExecuteAsync(
+            return await conn.ExecuteScalarAsync<long>(
                 """
                 INSERT INTO judge_result(vid, room_id, judge_type, judge_date, detail_json, created_at)
-                VALUES(@Vid, @RoomId, @JudgeType, @JudgeDate, CAST(@DetailJson AS JSON), NOW())
+                VALUES(@Vid, @RoomId, @JudgeType, @JudgeDate, CAST(@DetailJson AS jsonb), NOW())
+                RETURNING judge_id
                 """,
                 new { Vid = vid, RoomId = roomId, JudgeType = judgeType, JudgeDate = judgeDate.ToDateTime(TimeOnly.MinValue), DetailJson = detailJson });
-            return await conn.ExecuteScalarAsync<long>("SELECT LAST_INSERT_ID()");
         }
         catch (Exception ex)
         {
@@ -530,7 +536,7 @@ internal sealed class MySqlStore
             if (!string.IsNullOrWhiteSpace(judgeType)) where += " AND judge_type=@JudgeType ";
             var sql = """
                 SELECT judge_id AS JudgeId, vid AS Vid, room_id AS RoomId, judge_type AS JudgeType,
-                       judge_date AS JudgeDate, COALESCE(CAST(detail_json AS CHAR), '') AS DetailJson, created_at AS CreatedAt
+                       judge_date AS JudgeDate, COALESCE(CAST(detail_json AS TEXT), '') AS DetailJson, created_at AS CreatedAt
                 FROM judge_result
                 """
                 + where +
@@ -562,7 +568,7 @@ internal sealed class MySqlStore
             await using var conn = CreateConnection();
             var rows = await conn.QueryAsync<DbRole>(
                 """
-                SELECT role_id AS RoleId, role_name AS RoleName, COALESCE(CAST(permission_json AS CHAR), '[]') AS PermissionJson
+                SELECT role_id AS RoleId, role_name AS RoleName, COALESCE(CAST(permission_json AS TEXT), '[]') AS PermissionJson
                 FROM sys_role
                 ORDER BY role_id DESC
                 """);
@@ -580,13 +586,13 @@ internal sealed class MySqlStore
         try
         {
             await using var conn = CreateConnection();
-            await conn.ExecuteAsync(
+            return await conn.ExecuteScalarAsync<long>(
                 """
                 INSERT INTO sys_role(role_name, permission_json, created_at)
-                VALUES(@RoleName, @PermissionJson, NOW())
+                VALUES(@RoleName, CAST(@PermissionJson AS jsonb), NOW())
+                RETURNING role_id
                 """,
                 new { RoleName = roleName, PermissionJson = permissionJson });
-            return await conn.ExecuteScalarAsync<long>("SELECT LAST_INSERT_ID()");
         }
         catch (Exception ex)
         {
@@ -602,7 +608,7 @@ internal sealed class MySqlStore
             await using var conn = CreateConnection();
             var rows = await conn.QueryAsync<DbUserListItem>(
                 """
-                SELECT u.user_id AS UserId, u.user_name AS UserName, CAST(u.status AS SIGNED) AS `Status`,
+                SELECT u.user_id AS UserId, u.user_name AS UserName, CAST(u.status AS BIGINT) AS Status,
                        r.role_name AS RoleName, u.created_at AS CreatedAt
                 FROM sys_user u
                 LEFT JOIN sys_role r ON u.role_id = r.role_id
@@ -622,13 +628,13 @@ internal sealed class MySqlStore
         try
         {
             await using var conn = CreateConnection();
-            await conn.ExecuteAsync(
+            return await conn.ExecuteScalarAsync<long>(
                 """
                 INSERT INTO sys_user(user_name, password_hash, role_id, status, created_at)
                 VALUES(@UserName, @PasswordHash, @RoleId, 1, NOW())
+                RETURNING user_id
                 """,
                 new { UserName = userName, PasswordHash = passwordHash, RoleId = roleId });
-            return await conn.ExecuteScalarAsync<long>("SELECT LAST_INSERT_ID()");
         }
         catch (Exception ex)
         {
@@ -647,7 +653,6 @@ internal sealed class MySqlStore
                 UPDATE sys_user
                 SET password_hash=@PasswordHash
                 WHERE user_name=@UserName
-                LIMIT 1
                 """,
                 new { UserName = userName, PasswordHash = passwordHash });
             return affected > 0;
@@ -794,11 +799,11 @@ internal sealed class MySqlStore
             var rows = await conn.QueryAsync<DbCapture>(
                 $"""
                 SELECT capture_id AS CaptureId, device_id AS DeviceId, channel_no AS ChannelNo,
-                       capture_time AS CaptureTime, COALESCE(CAST(metadata_json AS CHAR), '') AS MetadataJson
+                       capture_time AS CaptureTime, COALESCE(CAST(metadata_json AS TEXT), '') AS MetadataJson
                 FROM capture_record
                 {where}
                 ORDER BY capture_time DESC, capture_id DESC
-                LIMIT @Offset, @PageSize
+                LIMIT @PageSize OFFSET @Offset
                 """,
                 new { From = from, To = to, Offset = offset, PageSize = pageSize });
 

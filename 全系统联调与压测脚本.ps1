@@ -83,12 +83,12 @@ try {
     }
     $checks = $ready.data.checks
     Write-Host ("   ready: " + $ready.data.ready)
-    Write-Host ("   checks: jwt=" + $checks.jwt + " hmac=" + $checks.hmac + " mysql=" + $checks.mysql + " redis=" + $checks.redis + " ai=" + $checks.ai + " alertNotify=" + $checks.alertNotify)
+    Write-Host ("   checks: jwt=" + $checks.jwt + " hmac=" + $checks.hmac + " pgsql=" + $checks.pgsql + " redis=" + $checks.redis + " ai=" + $checks.ai + " alertNotify=" + $checks.alertNotify)
     if (-not [bool]$ready.data.ready) {
         $failed = @()
         if (-not [bool]$checks.jwt) { $failed += "jwt" }
         if (-not [bool]$checks.hmac) { $failed += "hmac" }
-        if (-not [bool]$checks.mysql) { $failed += "mysql" }
+        if (-not [bool]$checks.pgsql) { $failed += "pgsql" }
         if (-not [bool]$checks.redis) { $failed += "redis" }
         if (-not [bool]$checks.ai) { $failed += "ai" }
         if ($null -ne $checks.alertNotify -and -not [bool]$checks.alertNotify) { $failed += "alertNotify" }

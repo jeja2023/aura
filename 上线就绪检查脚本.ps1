@@ -73,7 +73,7 @@ try {
 
     Write-Host "   Environment: $envName"
     Write-Host "   Ready: $isReady"
-    Write-Host "   Checks: jwt=$($checks.jwt) hmac=$($checks.hmac) mysql=$($checks.mysql) redis=$($checks.redis) ai=$($checks.ai) alertNotify=$($checks.alertNotify)"
+    Write-Host "   Checks: jwt=$($checks.jwt) hmac=$($checks.hmac) pgsql=$($checks.pgsql) redis=$($checks.redis) ai=$($checks.ai) alertNotify=$($checks.alertNotify)"
     if ($null -ne $alertNotify) {
         Write-Host "   AlertNotify window(min): $($alertNotify.healthFailIfRecentFailureMinutes)"
         Write-Host "   AlertNotify hasRecentFailure: $($alertNotify.hasRecentFailure)"
@@ -86,7 +86,7 @@ try {
         $failed = @()
         if (-not [bool]$checks.jwt) { $failed += "jwt" }
         if (-not [bool]$checks.hmac) { $failed += "hmac" }
-        if (-not [bool]$checks.mysql) { $failed += "mysql" }
+        if (-not [bool]$checks.pgsql) { $failed += "pgsql" }
         if (-not [bool]$checks.redis) { $failed += "redis" }
         if (-not [bool]$checks.ai) { $failed += "ai" }
         if ($null -ne $checks.alertNotify -and -not [bool]$checks.alertNotify) { $failed += "alertNotify" }

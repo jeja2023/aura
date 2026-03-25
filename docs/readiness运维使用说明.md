@@ -22,7 +22,7 @@
     "checks": {
       "jwt": true,
       "hmac": true,
-      "mysql": true,
+      "pgsql": true,
       "redis": true,
       "ai": true,
       "alertNotify": true
@@ -55,7 +55,7 @@
 - `data.ready`：总就绪状态（所有检查项均为 `true` 时为 `true`）
 - `data.checks.jwt`：JWT 配置是否有效（非空、非占位、非开发弱值）
 - `data.checks.hmac`：HMAC 配置是否有效（非空、非占位、非开发弱值）
-- `data.checks.mysql`：MySQL 连接串是否有效（非空、非占位）
+- `data.checks.pgsql`：PostgreSQL 连接串是否有效（非空、非占位）
 - `data.checks.redis`：Redis 连接串是否有效（非空、非占位）
 - `data.checks.ai`：AI 服务地址是否已配置
 - `data.checks.alertNotify`：告警通知通道健康检查结果（按最近失败窗口判定）
@@ -85,9 +85,9 @@
   - 检查 `Jwt:Key` 是否仍为占位值或开发弱值。
 - `hmac=false`
   - 检查 `Security:HmacSecret` 是否仍为占位值或开发弱值。
-- `mysql=false`
-  - 检查 `ConnectionStrings:MySql` 是否为空/占位；
-  - 生产环境确认未使用 `AllowPublicKeyRetrieval=True`。
+- `pgsql=false`
+  - 检查 `ConnectionStrings:PgSql` 是否为空/占位；
+  - 检查连接串中的主机、端口、库名和账号密码是否正确。
 - `redis=false`
   - 检查 `ConnectionStrings:Redis` 是否为空/占位；
   - 确认网络策略与认证参数正确。
@@ -108,6 +108,7 @@
 - 将 `ready=false` 作为发布阻断条件。
 - 将 `POST /api/ops/alert-notify-test` 纳入流水线，触发后再检查 `readiness` 的 `alertNotify` 项。
 - 与 `api/health` 组合使用：`health` 判断进程存活，`readiness` 判断配置可用。
+- 本机联调可使用根目录一键脚本 `start_services.py`：启动成功后会自动登录“超级管理员”，并调用 `GET /api/ops/readiness` 输出 `[readiness] ready=...`。如用于 CI 预检，可执行 `python start_services.py --run-until-ready`。
 
 ---
 

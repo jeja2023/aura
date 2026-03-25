@@ -4,8 +4,7 @@
 
 ## 项目状态
 
-- 当前版本：`0.0.9`
-- 当前版本序列：`0.0.1` -> `0.0.2` -> `0.0.3` -> `0.0.4` -> `0.0.5` -> `0.0.6` -> `0.0.7` -> `0.0.8` -> `0.0.9`
+- 当前版本：`0.1.1`
 - 阶段状态：第一至第五阶段均已验收通过
 - 交付结论：计划项已全部完成并在 `开发计划.md` 归档勾选
 - 工程状态：后端可构建、前端页面可访问、核心链路可联调
@@ -15,7 +14,7 @@
 
 - `backend/Aura.Api`：.NET 10 WebAPI 中枢服务
 - `ai`：Python FastAPI AI 服务（特征提取/检索）
-- `database/schema.sql`：MySQL 表结构
+- `database/schema.pgsql.sql`：PostgreSQL 表结构
 - `frontend`：Vanilla JS 前端页面
 - `抓拍链路端到端测试清单.md`：抓拍链路测试清单
 - `抓拍链路回归脚本.ps1`：抓拍链路回归脚本
@@ -39,7 +38,7 @@
 
 ### 1) 初始化数据库
 
-导入 `database/schema.sql` 到 MySQL 8.0+。
+导入 `database/schema.pgsql.sql` 到 PostgreSQL 16+。
 
 ### 2) 启动 AI 服务
 
@@ -73,8 +72,8 @@ dotnet run
 
 ## 开发环境账号说明
 
-- 开发环境启动时，若 `sys_user` 为空，后端会自动创建 `admin` 账号并在后端控制台打印随机强密码。
-- 仅开发环境可用：将 `appsettings.Development.json` 中 `Dev:ResetAdminPasswordOnce` 设为 `true`，重启后端可一次性重置 `admin` 密码并在控制台打印；随后请改回 `false`。
+- 开发环境启动时，后端会自动创建 `admin` 账号（若不存在），并将 `admin` 密码固定为 `123456`（便于本地联调）。
+- 若你需要再次触发开发环境的“重置开关”，可将 `appsettings.Development.json` 中 `Dev:ResetAdminPasswordOnce` 设为 `true`；随后请改回 `false`（仅为一次性重置）。
 - 回归脚本与联调脚本不再内置默认密码，请先设置环境变量：`AURA_ADMIN_PASSWORD`。
 
 > 生产环境请务必关闭开发自动建号能力，统一走正式账号流程，并替换 `appsettings.Production.json` 中全部占位密钥。
@@ -88,6 +87,20 @@ dotnet run
   - `export AURA_ADMIN_USER=admin`
   - `export AURA_ADMIN_PASSWORD='你的密码'`
 - 模板文件：仓库已提供 `.env.example`，可复制为本地 `.env` 使用（`.env` 已在 `.gitignore` 中忽略，勿提交真实密码）。
+
+### 本机一键启动与就绪检查
+
+建议使用根目录一键脚本完成本机联调与就绪检查：
+
+```powershell
+cd e:\Aura
+python start_services.py
+```
+
+说明：
+- 脚本会优先读取根目录 `e:\Aura\.env`，并自动在启动后调用 `GET /api/ops/readiness`（需要超级管理员权限）。
+- 若 `readiness` 输出中 `jwt=false / hmac=false`，请检查 `.env` 中 `Jwt__Key` 与 `Security__HmacSecret` 是否仍为占位值。
+- 若用于 CI 预检，可使用 `python start_services.py --run-until-ready` 让脚本在就绪检查通过后直接退出。
 
 ### Docker 化建议（脚本/巡检任务）
 

@@ -20,17 +20,20 @@ jobs:
       PYTHON_BASE_IMAGE: ${{ secrets.PYTHON_BASE_IMAGE }}
       DOTNET_SDK_IMAGE: ${{ secrets.DOTNET_SDK_IMAGE }}
       DOTNET_ASPNET_IMAGE: ${{ secrets.DOTNET_ASPNET_IMAGE }}
-      MYSQL_IMAGE: ${{ secrets.MYSQL_IMAGE }}
+      POSTGRES_IMAGE: ${{ secrets.POSTGRES_IMAGE }}
       REDIS_IMAGE: ${{ secrets.REDIS_IMAGE }}
-      MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
-      MYSQL_DATABASE: ${{ secrets.MYSQL_DATABASE }}
-      MYSQL_USER: ${{ secrets.MYSQL_USER }}
-      MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
+      POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+      POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
       JWT_KEY: ${{ secrets.JWT_KEY }}
       HMAC_SECRET: ${{ secrets.HMAC_SECRET }}
       AURA_ADMIN_USER: ${{ secrets.AURA_ADMIN_USER }}
       AURA_ADMIN_PASSWORD: ${{ secrets.AURA_ADMIN_PASSWORD }}
-      MILVUS_URI: ${{ secrets.MILVUS_URI }}
+      ARANGO_URI: http://arangodb:8529
+      ARANGO_DB: aura
+      ARANGO_USER: _system
+      ARANGO_ROOT_PASSWORD: ${{ secrets.ARANGO_ROOT_PASSWORD }}
+      ARANGO_PASSWORD: ${{ secrets.ARANGO_ROOT_PASSWORD }}
       AURA_MODEL_PATH: ${{ secrets.AURA_MODEL_PATH }}
     steps:
       - name: Checkout
