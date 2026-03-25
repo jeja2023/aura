@@ -164,7 +164,14 @@ var hubContext = app.Services.GetRequiredService<IHubContext<EventHub>>();
 var dailyJudgeState = app.Services.GetRequiredService<DailyJudgeScheduleState>();
 var projectRoot = Directory.GetParent(app.Environment.ContentRootPath)?.Parent?.FullName ?? app.Environment.ContentRootPath;
 var storageRoot = Path.Combine(projectRoot, "storage");
-var frontendRoot = Path.Combine(projectRoot, "frontend");
+var frontendRootCfg = app.Configuration["Paths:FrontendRoot"]?.Trim();
+var frontendRoot = string.IsNullOrWhiteSpace(frontendRootCfg)
+    ? Path.Combine(projectRoot, "frontend")
+    : Path.GetFullPath(frontendRootCfg);
+if (!string.IsNullOrWhiteSpace(frontendRootCfg))
+{
+    Console.WriteLine($"已使用配置 Paths:FrontendRoot，前端静态目录：{frontendRoot}");
+}
 var captureRetryRootCfg = app.Configuration["Storage:CaptureRetryRoot"]?.Trim();
 var captureRetryPreferInlineBase64 = app.Configuration.GetValue("CaptureRetry:PreferInlineBase64", false);
 var captureRetryAllowInlineFallback = app.Configuration.GetValue<bool?>("CaptureRetry:AllowInlineBase64Fallback")

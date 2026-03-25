@@ -4,6 +4,26 @@
 
 ---
 
+## [0.0.9] - 2026-03-25
+
+### 部署与前端静态资源路径
+
+- **`backend/Aura.Api/Program.cs`**：新增配置项 **`Paths:FrontendRoot`**。若配置非空，则使用该绝对路径作为前端静态根目录（解决仅通过 `ContentRoot` 上溯两级推算 `projectRoot` 时，在「发布目录为单层」或 Docker 镜像内路径与仓库不一致导致的 **`/index/` 404**）。未配置时行为与旧版一致（仍为 `projectRoot/frontend`）。启用显式路径时控制台输出一行中文说明。
+- **`backend/Aura.Api/appsettings.json`**：新增 **`Paths:FrontendRoot`** 空字符串占位，便于按环境覆盖。
+- **`backend/Aura.Api/appsettings.Production.json`**：将 **`Paths:FrontendRoot`** 设为 **`/opt/aura/frontend`**，与裸机部署到 `/opt/aura` 且前端与 `backend` 同级的目录约定一致。
+
+### Docker 一键联调与 Compose
+
+- **`docker/docker-compose.full.example.yml`**：API 服务增加 **`Paths__FrontendRoot=/app/frontend`** 与 **`../frontend:/app/frontend`** 只读挂载，使镜像内无需内置前端目录即可提供首页；**`ASPNETCORE_ENVIRONMENT`** 改为 **`${ASPNETCORE_ENVIRONMENT:-Development}`**，便于部署脚本写入 **Production** 而本地未配置时仍为 **Development**。
+
+### Ubuntu 一键部署脚本
+
+- **`docker/deploy-aura-ubuntu.sh`**：新增变量 **`ASPNETCORE_ENVIRONMENT_VALUE=Production`**；首次生成 **`.env`** 时写入 **`ASPNETCORE_ENVIRONMENT=Production`**；若沿用旧 **`.env`** 且缺少该键则自动追加，避免升级后仍用默认 **Development**。健康检查增加 **`GET /index/`** HTTP 状态码输出，非 200 时给出 **WARN** 与挂载说明。部署结束打印当前 **`.env`** 中 **`ASPNETCORE_ENVIRONMENT`** 行。
+
+### 环境变量模板
+
+- **`docker/.env.full.example`**：注释说明 **ASPNETCORE_ENVIRONMENT** 在本地联调与 **`deploy-aura-ubuntu.sh`** 中的典型取值差异。
+
 ## [0.0.8] - 2026-03-24
 
 ### Docker 化交付
@@ -254,5 +274,5 @@
 ## 版本规范
 
 - 版本号遵循 `MAJOR.MINOR.PATCH`
-- 当前版本：`0.0.8`
-- 当前版本序列：`0.0.1` -> `0.0.2` -> `0.0.3` -> `0.0.4` -> `0.0.5` -> `0.0.6` -> `0.0.7` -> `0.0.8`
+- 当前版本：`0.0.9`
+- 当前版本序列：`0.0.1` -> `0.0.2` -> `0.0.3` -> `0.0.4` -> `0.0.5` -> `0.0.6` -> `0.0.7` -> `0.0.8` -> `0.0.9`

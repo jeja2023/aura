@@ -37,6 +37,9 @@ HMAC_SECRET="N7u_gxz_PsdZtnkYXVzzb3AlQ0brgoJWTM99WcuZE3yOWEefaQNl9Y6NUJBv7-rz"
 MILVUS_URI="http://127.0.0.1:19530"
 AURA_MODEL_PATH="/app/models/osnet_ibn_x1_0.onnx"
 
+# API 运行环境（与 appsettings.Production.json、前端静态路径一致；写入 .env 供 compose 使用）
+ASPNETCORE_ENVIRONMENT_VALUE="Production"
+
 ########################################
 # 1) 安装基础依赖与 Docker
 ########################################
@@ -98,7 +101,15 @@ HMAC_SECRET=${HMAC_SECRET}
 
 MILVUS_URI=${MILVUS_URI}
 AURA_MODEL_PATH=${AURA_MODEL_PATH}
+
+ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT_VALUE}
 EOF
+fi
+
+# 升级后若沿用旧 .env，补全 ASPNETCORE_ENVIRONMENT（与 appsettings.Production.json、/app/frontend 挂载一致）
+if ! grep -q '^ASPNETCORE_ENVIRONMENT=' .env 2>/dev/null; then
+  echo "ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT_VALUE}" >> .env
+  echo "==> 已向 .env 追加 ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT_VALUE}（旧部署补全）"
 fi
 
 # 读取 .env 并导出，统一用于后续 compose 与变量校验
@@ -165,6 +176,13 @@ echo
 echo "==> API 健康检查"
 curl --max-time 10 -fsS http://127.0.0.1:5000/api/health || true
 echo
+
+echo "==> API 首页（frontend 静态挂载）检查"
+HTTP_INDEX="$(curl -sS --max-time 10 -o /dev/null -w "%{http_code}" http://127.0.0.1:5000/index/ || echo "000")"
+echo "HTTP ${HTTP_INDEX}"
+if [ "${HTTP_INDEX}" != "200" ]; then
+  echo "WARN: 首页未返回 200，请确认仓库含 frontend 目录且 compose 已挂载 ../frontend -> /app/frontend"
+fi
 print_elapsed
 
 ########################################
@@ -180,4 +198,9 @@ echo "==> 部署完成。常用命令："
 echo "查看日志: docker compose --env-file .env -f docker/docker-compose.full.example.yml logs -f api ai"
 echo "停止服务: docker compose --env-file .env -f docker/docker-compose.full.example.yml down"
 echo "更新重启: git -C ${DEPLOY_DIR} pull && docker compose --env-file .env -f docker/docker-compose.full.example.yml up -d --build"
+if grep -q '^ASPNETCORE_ENVIRONMENT=' .env 2>/dev/null; then
+  echo "提示: 当前 .env 中 $(grep '^ASPNETCORE_ENVIRONMENT=' .env | head -1)"
+else
+  echo "WARN: .env 未找到 ASPNETCORE_ENVIRONMENT，请手动设为 Production"
+fi
 echo "提示: 若构建时间超过 20 分钟，可执行日志命令判断是否网络拉镜像过慢。"

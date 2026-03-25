@@ -65,7 +65,8 @@ services:
     container_name: aura-api
     restart: unless-stopped
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
+      # 一键部署脚本写入 Production；本地可复制 .env.full.example 为 Development
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: http://0.0.0.0:5000
       ConnectionStrings__MySql: server=mysql;port=3306;database=${MYSQL_DATABASE};uid=${MYSQL_USER};pwd=${MYSQL_PASSWORD};AllowPublicKeyRetrieval=False
       ConnectionStrings__Redis: redis:6379
@@ -74,6 +75,9 @@ services:
       Security__HmacSecret: ${HMAC_SECRET}
       AURA_ADMIN_USER: ${AURA_ADMIN_USER}
       AURA_ADMIN_PASSWORD: ${AURA_ADMIN_PASSWORD}
+      Paths__FrontendRoot: /app/frontend
+    volumes:
+      - ../frontend:/app/frontend:ro
     ports:
       - "5000:5000"
     depends_on:
