@@ -1,5 +1,5 @@
 /* 文件：角色页脚本（role.js） | File: Role Script */
-const apiBase = "https://localhost:5001";
+const apiBase = "";
 const resultEl = document.getElementById("result");
 const permissionDropdownEl = document.getElementById("permissionDropdown");
 const permissionToggleEl = document.getElementById("permissionToggle");

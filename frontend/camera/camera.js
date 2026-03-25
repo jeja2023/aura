@@ -1,5 +1,5 @@
 /* 文件：摄像头页脚本（camera.js） | File: Camera Script */
-const apiBase = "https://localhost:5001";
+const apiBase = "";
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 const resultEl = document.getElementById("result");

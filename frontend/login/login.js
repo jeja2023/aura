@@ -1,5 +1,5 @@
 /* 文件：登录页脚本（login.js） | File: Login Script */
-const apiBase = "https://localhost:5001";
+const apiBase = "";
 
 function getReturnUrl() {
   const params = new URLSearchParams(window.location.search);

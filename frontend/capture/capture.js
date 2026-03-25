@@ -1,5 +1,5 @@
 /* 文件：抓拍页脚本（capture.js） | File: Capture Script */
-const apiBase = "https://localhost:5001";
+const apiBase = "";
 const resultEl = document.getElementById("result");
 
 /** 成功提示自动消失定时器 */

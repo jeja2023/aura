@@ -1,5 +1,5 @@
 /* 文件：日志页脚本（log.js） | File: Log Script */
-const apiBase = "https://localhost:5001";
+const apiBase = "";
 const resultEl = document.getElementById("result");
 
 /** 成功提示自动消失定时器 */

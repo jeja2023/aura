@@ -1,5 +1,5 @@
 /* 文件：用户页脚本（user.js） | File: User Script */
-const apiBase = "https://localhost:5001";
+const apiBase = "";
 const createResultEl = document.getElementById("createResult");
 const queryResultEl = document.getElementById("queryResult");
 const updateResultEl = document.getElementById("updateResult");

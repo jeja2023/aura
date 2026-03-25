@@ -1,5 +1,5 @@
 /* 文件：首页脚本（index.js） | File: Home Script */
-const apiBase = "https://localhost:5001";
+const apiBase = "";
 const eventListEl = document.getElementById("events");
 const statusEl = document.getElementById("status");
 const overviewEl = document.getElementById("overview");

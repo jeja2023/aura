@@ -1,5 +1,5 @@
 /* 文件：防区页脚本（roi.js） | File: ROI Script */
-const apiBase = "https://localhost:5001";
+const apiBase = "";
 const resultEl = document.getElementById("result");
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
