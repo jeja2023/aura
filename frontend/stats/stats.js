@@ -1,5 +1,5 @@
 /* 文件：统计页脚本（stats.js） | File: Stats Script */
-const apiBase = "https://localhost:5001";
+const apiBase = "";
 const statusEl = document.getElementById("statsStatus");
 let dailyChart;
 let deviceChart;

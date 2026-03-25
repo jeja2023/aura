@@ -1,5 +1,5 @@
 /* 文件：楼层页脚本（floor.js） | File: Floor Script */
-const apiBase = "https://localhost:5001";
+const apiBase = "";
 const resultEl = document.getElementById("result");
 const previewEl = document.getElementById("preview");
 

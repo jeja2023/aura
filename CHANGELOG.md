@@ -24,6 +24,11 @@
 
 - **`docker/.env.full.example`**：注释说明 **ASPNETCORE_ENVIRONMENT** 在本地联调与 **`deploy-aura-ubuntu.sh`** 中的典型取值差异。
 
+### 前端接口同源化（CSP 兼容）
+
+- **`frontend/*/*.js`**：将页面脚本中的 `const apiBase = "https://localhost:5001";` 统一调整为同源 `const apiBase = "";`，避免生产环境在 `http://<server>:5000` 下被 `Content-Security-Policy` 的 `connect-src 'self'` 拦截。
+- 覆盖页面：`login`、`index`、`alert`、`campus`、`capture`、`camera`、`device`、`export`、`floor`、`judge`、`log`、`roi`、`role`、`scene`、`search`、`stats`、`track`、`user`。
+
 ## [0.0.8] - 2026-03-24
 
 ### Docker 化交付

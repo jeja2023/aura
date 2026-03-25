@@ -1,5 +1,5 @@
 /* 文件：导出页脚本（export.js） | File: Export Script */
-const apiBase = "https://localhost:5001";
+const apiBase = "";
 const statusEl = document.getElementById("exportStatus");
 const downloadEl = document.getElementById("download");
 

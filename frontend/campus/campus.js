@@ -1,5 +1,5 @@
 /* 文件：资源页脚本（campus.js） | File: Campus Script */
-const apiBase = "https://localhost:5001";
+const apiBase = "";
 const resultEl = document.getElementById("result");
 
 /** 成功提示自动消失定时器 */

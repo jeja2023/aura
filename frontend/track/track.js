@@ -1,5 +1,5 @@
 /* 文件：轨迹页脚本（track.js） | File: Track Script */
-const apiBase = "https://localhost:5001";
+const apiBase = "";
 const resultEl = document.getElementById("result");
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");

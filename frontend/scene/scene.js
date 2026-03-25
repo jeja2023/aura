@@ -1,5 +1,5 @@
 /* 文件：三维态势页脚本（scene.js） | File: Scene Script */
-const apiBase = "https://localhost:5001";
+const apiBase = "";
 const resultEl = document.getElementById("result");
 const stage = document.getElementById("stage3d");
 const slice2d = document.getElementById("slice2d");
