@@ -4,15 +4,19 @@
 
 ## 项目状态
 
-- 当前版本：`0.1.1`
+- 当前版本：`0.1.2`
 - 阶段状态：第一至第五阶段均已验收通过
 - 交付结论：计划项已全部完成并在 `开发计划.md` 归档勾选
-- 工程状态：后端可构建、前端页面可访问、核心链路可联调
+- 工程状态：后端可构建（推荐打开根目录 **`Aura.sln`** 或 `dotnet build backend/Aura.Api/Aura.Api.csproj`）、前端页面可访问、核心链路可联调
 - 运维状态：已提供回归脚本、联调压测脚本、部署与上线检查文档
+- 变更记录：见根目录 **`CHANGELOG.md`**（`0.1.2` 起补充后端模块化、DI 与编码修复等说明）
 
 ## 目录结构
 
-- `backend/Aura.Api`：.NET 10 WebAPI 中枢服务
+- `Aura.sln`：Visual Studio / Rider 解决方案入口
+- `Directory.Build.props`：统一 MSBuild 中间输出路径（`.verify_build\obj`）并排除误编译 `obj` 生成物，便于本机工具链
+- `backend/Aura.Api`：.NET 10 WebAPI 中枢服务；启动入口为 **`Program.cs`**，服务注册在 **`Extensions/ServiceExtensions.cs`**，路由在 **`Extensions/EndpointExtensions.cs`**，安全头与前端路由中间件在 **`Middleware/`**
+- `backend/Aura.Api.Tests`：轻量自检工程（聚类/导出等），可选执行
 - `ai`：Python FastAPI AI 服务（特征提取/检索）
 - `database/schema.pgsql.sql`：PostgreSQL 表结构
 - `frontend`：Vanilla JS 前端页面
@@ -64,6 +68,8 @@ deactivate
 cd backend/Aura.Api
 dotnet run
 ```
+
+说明：`AddAuraServices` 会根据 **`IHostEnvironment.ContentRootPath`** 自动解析仓库根下的 **`storage`** 目录（与 `Program.cs` 中静态文件挂载逻辑一致），用于抓拍归档、导出输出、资源上传等；向量接口图片/元数据长度上限可通过 **`Limits:MaxImageBase64Chars`**、**`Limits:MaxMetadataJsonChars`**（可选）覆盖默认值。
 
 ### 4) 打开前端
 

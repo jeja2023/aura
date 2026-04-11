@@ -69,17 +69,19 @@ try {
     $envName = $ready.data.environment
     $isReady = [bool]$ready.data.ready
     $checks = $ready.data.checks
-    $alertNotify = $ready.data.alertNotify
 
     Write-Host "   Environment: $envName"
     Write-Host "   Ready: $isReady"
-    Write-Host "   Checks: jwt=$($checks.jwt) hmac=$($checks.hmac) pgsql=$($checks.pgsql) redis=$($checks.redis) ai=$($checks.ai) alertNotify=$($checks.alertNotify)"
-    if ($null -ne $alertNotify) {
-        Write-Host "   AlertNotify window(min): $($alertNotify.healthFailIfRecentFailureMinutes)"
-        Write-Host "   AlertNotify hasRecentFailure: $($alertNotify.hasRecentFailure)"
-        if ($null -ne $alertNotify.stats) {
-            Write-Host "   AlertNotify stats: total=$($alertNotify.stats.totalNotify) webhook=$($alertNotify.stats.webhookSuccess)/$($alertNotify.stats.webhookFailure) file=$($alertNotify.stats.fileSuccess)/$($alertNotify.stats.fileFailure)"
+    Write-Host "   Checks: jwt=$($checks.jwt) hmac=$($checks.hmac) pgsql=$($checks.pgsql) redis=$($checks.redis) ai_svc=$($checks.ai_service) ai_model=$($checks.ai_model)"
+    
+    Write-Host "4) Docker Resource Sampling..."
+    try {
+        $stats = docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.NetIO}}"
+        foreach ($s in $stats) {
+            Write-Host "   $s"
         }
+    } catch {
+        Write-Host "   Skip Docker stats: docker commanded failed or not found." -ForegroundColor Yellow
     }
 
     if (-not $isReady) {
@@ -88,12 +90,9 @@ try {
         if (-not [bool]$checks.hmac) { $failed += "hmac" }
         if (-not [bool]$checks.pgsql) { $failed += "pgsql" }
         if (-not [bool]$checks.redis) { $failed += "redis" }
-        if (-not [bool]$checks.ai) { $failed += "ai" }
-        if ($null -ne $checks.alertNotify -and -not [bool]$checks.alertNotify) { $failed += "alertNotify" }
+        if (-not [bool]$checks.ai_service) { $failed += "ai_service" }
+        if (-not [bool]$checks.ai_model) { $failed += "ai_model" }
         Write-Host ""
-        if ($null -ne $alertNotify -and [bool]$alertNotify.hasRecentFailure -and $null -ne $alertNotify.stats) {
-            Write-Host "   AlertNotify latest failure: channel=$($alertNotify.stats.lastFailureChannel), reason=$($alertNotify.stats.lastFailureReason), at=$($alertNotify.stats.lastFailureAt)"
-        }
         Write-Host "[RESULT] NOT READY. exit_code=2. failed_checks=$($failed -join ', ')" -ForegroundColor Red
         exit 2
     }

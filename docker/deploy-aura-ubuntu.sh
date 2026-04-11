@@ -91,8 +91,8 @@ AURA_ADMIN_PASSWORD=${AURA_ADMIN_PASSWORD}
 POSTGRES_IMAGE=postgres:16-alpine
 REDIS_IMAGE=redis:7-alpine
 PYTHON_BASE_IMAGE=python:3.11-slim
-DOTNET_SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:10.0-preview
-DOTNET_ASPNET_IMAGE=mcr.microsoft.com/dotnet/aspnet:10.0-preview
+DOTNET_SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:10.0.201
+DOTNET_ASPNET_IMAGE=mcr.microsoft.com/dotnet/aspnet:10.0.201
 
 POSTGRES_DB=${POSTGRES_DB}
 POSTGRES_USER=${POSTGRES_USER}
@@ -204,6 +204,7 @@ if command -v ufw >/dev/null 2>&1; then
 fi
 
 echo "==> 部署完成。常用命令："
+echo "数据卷: PostgreSQL/Redis/Arango/aura-api-storage 等为命名卷，down 默认不删；清空须 docker compose ... down -v（会丢库，慎用）。"
 echo "查看日志: docker compose --env-file .env -f docker/docker-compose.full.example.yml logs -f api ai"
 echo "停止服务: docker compose --env-file .env -f docker/docker-compose.full.example.yml down"
 echo "更新重启: git -C ${DEPLOY_DIR} pull && docker compose --env-file .env -f docker/docker-compose.full.example.yml up -d --build"

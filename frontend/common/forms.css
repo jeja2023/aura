@@ -46,7 +46,7 @@
 
 :is(.app-content, .box, .app-topbar)
   :is(
-    input:not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]),
+    input:not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]),
     select,
     textarea
   )::placeholder {
@@ -57,32 +57,32 @@
 /* 文件选择：虚线边框；宽度由下方「卡片内横排」规则约束，避免占满整行 */
 .app-content input[type="file"],
 .box input[type="file"] {
-  padding: 10px 12px;
+  padding: 8px 12px;
   cursor: pointer;
   border-style: dashed;
   width: auto;
   max-width: 100%;
+  height: auto;
+  min-height: 40px;
 }
 
-/* 文件选择按钮统一为全局次要按钮风格，避免浏览器默认样式割裂 */
+/* 文件选择按钮统一为全局次要按钮风格，并添加视觉反馈 */
 .app-content input[type="file"]::file-selector-button,
 .box input[type="file"]::file-selector-button,
 .app-content input[type="file"]::-webkit-file-upload-button,
 .box input[type="file"]::-webkit-file-upload-button {
-  min-height: 32px;
-  padding: 7px 12px;
-  margin-right: 10px;
+  min-height: 28px;
+  padding: 4px 12px;
+  margin-right: 12px;
   font-size: 13px;
   font-weight: 600;
   font-family: inherit;
   color: var(--btn-secondary-text);
   background: var(--btn-secondary-bg);
   border: 1px solid var(--btn-secondary-border);
-  border-radius: calc(var(--form-radius) - 2px);
+  border-radius: calc(var(--form-radius) - 3px);
   cursor: pointer;
-  transition:
-    border-color 0.15s ease,
-    background 0.15s ease;
+  transition: var(--transition-fast);
 }
 .app-content input[type="file"]::file-selector-button:hover,
 .box input[type="file"]::file-selector-button:hover,
@@ -90,6 +90,54 @@
 .box input[type="file"]::-webkit-file-upload-button:hover {
   border-color: var(--primary);
   background: var(--btn-secondary-hover-bg);
+  transform: scale(1.02);
+}
+
+/* —— 按钮统一规范（强制复用） —— */
+:is(.app-content, .box, .app-topbar, .panel, .actions, .bar, .toolbar)
+  :is(.btn-primary, .btn-secondary, button:not([class]), button[type="submit"]) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 9px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  border-radius: var(--form-radius);
+  cursor: pointer;
+  transition: var(--transition-normal);
+  white-space: nowrap;
+  gap: 8px;
+  border: 1px solid transparent;
+}
+
+/* 主要按钮风格 */
+:is(.btn-primary, button:not([class]), button[type="submit"]) {
+  color: var(--primary-text);
+  background: var(--primary);
+  box-shadow: 0 2px 8px rgba(var(--primary-rgb), 0.25);
+}
+:is(.btn-primary, button:not([class]), button[type="submit"]):hover {
+  background: var(--primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(var(--primary-rgb), 0.35);
+}
+:is(.btn-primary, button:not([class]), button[type="submit"]):active {
+  transform: translateY(0);
+  box-shadow: 0 1px 4px rgba(var(--primary-rgb), 0.2);
+}
+
+/* 次要按钮风格 */
+.btn-secondary {
+  color: var(--btn-secondary-text);
+  background: var(--btn-secondary-bg);
+  border-color: var(--btn-secondary-border);
+}
+.btn-secondary:hover {
+  border-color: var(--primary);
+  background: var(--btn-secondary-hover-bg);
+  color: var(--primary);
 }
 
 /* 数字/日期等窄控件在横向 label 内不必全宽撑开 */
@@ -187,64 +235,15 @@
   width: auto;
 }
 
-/* 楼层图纸等参数行：与按钮、数字框同一水平线（优先级高于上一段 .card） */
+/* 楼层图纸等参数行：与按钮、数字框同一水平线 */
 .app-content .page .card.floor-toolbar {
   align-items: flex-end;
 }
 
-/* —— 次要按钮（主按钮 .btn-primary 仍由 shell 负责） —— */
-.app-content .page button:not(.btn-primary),
-.app-content .panel button:not(.btn-primary),
-.app-content .actions button:not(.btn-primary),
-.app-content .bar button:not(.btn-primary),
-.app-content .toolbar button:not(.btn-primary) {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 38px;
-  padding: 9px 16px;
-  font-size: 14px;
-  font-weight: 600;
-  font-family: inherit;
-  color: var(--primary-text);
-  background: var(--primary);
-  border: none;
-  border-radius: var(--form-radius);
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-.app-content .page button:not(.btn-primary):hover,
-.app-content .panel button:not(.btn-primary):hover,
-.app-content .actions button:not(.btn-primary):hover,
-.app-content .bar button:not(.btn-primary):hover,
-.app-content .toolbar button:not(.btn-primary):hover {
-  background: var(--primary-hover);
-}
-
-/* 显式次要按钮类：用于“查询/取消”等弱强调动作 */
-.app-content .btn-secondary,
-.box .btn-secondary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 38px;
-  padding: 9px 16px;
-  font-size: 14px;
-  font-weight: 600;
-  font-family: inherit;
-  color: var(--btn-secondary-text);
-  background: var(--btn-secondary-bg);
-  border: 1px solid var(--btn-secondary-border);
-  border-radius: var(--form-radius);
-  cursor: pointer;
-  transition:
-    border-color 0.15s ease,
-    background 0.15s ease;
-}
-.app-content .btn-secondary:hover,
-.box .btn-secondary:hover {
-  border-color: var(--primary);
-  background: var(--btn-secondary-hover-bg);
+/* 显式按钮类已在上方全局定义，此处微调交互体感 */
+.app-content .btn-secondary:active,
+.box .btn-secondary:active {
+  transform: scale(0.97);
 }
 
 /* —— 登录页主按钮 —— */

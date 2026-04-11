@@ -14,6 +14,11 @@ services:
       Ops__Alert__FilePath: ${OPS__ALERT__FILEPATH}
       AURA_ADMIN_USER: ${AURA_ADMIN_USER}
       AURA_ADMIN_PASSWORD: ${AURA_ADMIN_PASSWORD}
+      # 可选：与 PATHS__FRONTENDROOT 配合；静态页由网关/对象存储提供时可不设置（默认探测 /app/frontend）
+      Paths__FrontendRoot: ${PATHS__FRONTENDROOT:-}
+    volumes:
+      # 抓拍、导出、告警日志等落盘目录；与 Ops__Alert__FilePath 等路径同处 /app/storage 树下时需保持一致
+      - aura-api-storage:/app/storage
     ports:
       - "5000:5000"
     # 生产建议通过 orchestrator secret/配置中心注入上面的变量，
@@ -45,3 +50,4 @@ services:
 
 volumes:
   aura-arango-data:
+  aura-api-storage:

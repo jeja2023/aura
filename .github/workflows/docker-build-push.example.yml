@@ -18,6 +18,7 @@ jobs:
       AI_IMAGE_REPO: ${{ secrets.AI_IMAGE_REPO }}
       IMAGE_TAG: ${{ github.sha }}
       PYTHON_BASE_IMAGE: ${{ secrets.PYTHON_BASE_IMAGE }}
+      # 建议与仓库 global.json 中 sdk.version 对齐，例如 mcr.microsoft.com/dotnet/sdk:10.0.201
       DOTNET_SDK_IMAGE: ${{ secrets.DOTNET_SDK_IMAGE }}
       DOTNET_ASPNET_IMAGE: ${{ secrets.DOTNET_ASPNET_IMAGE }}
       POSTGRES_IMAGE: ${{ secrets.POSTGRES_IMAGE }}

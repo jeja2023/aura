@@ -4,6 +4,97 @@
 
 ---
 
+## [0.1.3] - 2026-04-11
+
+### 后端：依赖注入架构加固与启动稳定性修复
+
+- **依赖注入（DI）修正**：完全解决了因在根服务容器（Root Provider）中解析 Scoped 服务（如 `JudgeService`、`EventDispatchService`）导致的启动崩溃。所有 Scoped 服务均改为在 Minimal API 路由处理程序中直接注入，或在后台任务回调中使用 `app.Services.CreateScope()` 手动创建作用域解析。
+- **端点映射稳定性**：修复了 `EndpointExtensions.cs` 中的语法错误和变量引用冲突（如 `captureGroup` 变量丢失、异步 lambda 返回值类型不明确、`request` 变量名误用等）。
+- **Dapper 映射修复**：修正了 `PgSqlStore` 中 `DbCapture` 的物化失败问题。通过在 SQL 查询中显式投影 `image_path` 字段，使其与 record 构造函数签名完全对齐。
+- **数据库一致性**：将 API 调用中的 `GetTrackEventsByVidAsync` 统一回退为 `PgSqlStore` 实际定义的 `GetTrackEventsAsync`。
+
+### 运维与日志：全中文纯净日志体系
+
+- **日志汉化与去噪**：
+  - **自定义格式化器**：实现 `PureConsoleFormatter`，彻底移除了控制台日志中的 `info: Program[0]` 等技术性类名前缀，仅显示纯净业务消息。
+  - **屏蔽框架英文日志**：通过 `appsettings.json` 屏蔽了 Microsoft 托管生命周期（`Hosting.Lifetime`）和 `HttpClient` 的默认英文追踪日志。
+  - **全局文化区域**：在 `Program.cs` 中强制设置 `zh-CN` 文化区域，并在 `EndpointExtensions.cs` 中将环境标识汉化。
+  - **生命周期汉化**：通过 `app.Lifetime` 钩子手动实现了全中文的启动状态、监听地址及运行环境提示。
+  - **推理服务汉化**：同步汉化了 AI 推理服务（Python/ONNX）的初始化日志与特征提取错误提示。
+  - **脚本输出人性化**：优化了 `start_services.py` 的就绪检查输出，将原始 JSON 字典转换为友好的中文清单（如“JWT 密钥: 已就绪”）。
+- **环境信任**：自动信任 ASP.NET Core 开发证书，消除了 Kestrel 启动警告。
+
+---
+
+## [0.1.2] - 2026-04-11
+
+### 后端：`Program.cs` 模块化与扩展点收敛
+
+- **`backend/Aura.Api/Program.cs`**：由「单文件承载绝大部分路由与 DI」改为精简启动入口；服务注册迁至 **`Extensions/ServiceExtensions.cs`**（`AddAuraServices`），路由映射迁至 **`Extensions/EndpointExtensions.cs`**（`MapAuraEndpoints`）。
+- **中间件**：安全响应头 **`Middleware/SecurityHeadersMiddleware.cs`**；**`Program.cs`** 使用 **`Middleware/FrontendRoutingMiddleware.cs`** 处理无扩展名路径与登录重定向；另提供 **`Middleware/FrontendMiddleware.cs`** 的 **`UseAuraFrontend`** 扩展（当前启动链未调用，可按需接入以集中 CSP 与静态根配置）。
+- **开发初始化**：**`Internal/DevInitializer.cs`** 承担 Development 下管理员种子/密码重置逻辑；日志通过 **`ILoggerFactory.CreateLogger`** 创建，避免非法泛型 `ILogger<typeof(...)>`。
+- **通用辅助**：**`Internal/AuraHelpers.cs`** 承载抓拍校验、限流、HMAC、操作日志等横切逻辑；抓拍校验入参统一为 **`CapturePayload`**；限流维度使用 **`ClaimsPrincipal.FindFirst`**，消除对 **`FindFirstValue`** 扩展方法的依赖。
+
+### 业务服务文件化（原内联逻辑落地为独立类型）
+
+- 新增/收敛：`IdentityAdminService`、`DeviceManagementService`、`JudgeService`、`ResourceManagementService`、`MonitoringQueryService`、`CaptureProcessingService`、`CaptureOpsService`、`RetryProcessingService`、`OutputApplicationService`、`StatsApplicationService`、`SpaceCollisionService`、`VectorApplicationService` 等（位于 `backend/Aura.Api` 各目录）。
+- **聚类**：**`Clustering/ClusterApplicationService.cs`**、**`Clustering/FeatureClusteringService.cs`**。
+- **导出**：**`Export/ExportApplicationService.cs`**、**`Export/TabularExportService.cs`**（CSV/XLSX）。
+- **SignalR**：**`Hubs/EventHub.cs`** 统一为角色组订阅入口（连接/断开时维护 `role:*` 分组）；**`Ops/EventDispatchService.cs`** 通过 **`IHubContext<EventHub>`** 推送；移除重复的 **`Ops/EventHub.cs`**，避免 Hub 类型冲突。
+
+### 模型与内存存储去重
+
+- 删除与 **`Requests.cs` / `Entities.cs` / `ViewModels.cs`** 重复的 **`Models/AuraModels.cs`**（保留 **`Services/DailyJudgeHostedService.cs`** 内的 **`DailyJudgeScheduleState`** 为唯一定义）。
+- 删除重复的 **`Models/AppStore.cs`**，统一使用 **`Data/AppStore.cs`**（`List<>` 语义）；**`IdentityAdminService` / `DeviceManagementService`** 的内存兜底路径由 **`ConcurrentDictionary`** 风格改为 **`List` + `FindIndex`** 等，与 **`ResourceManagementService`** 等资源类一致。
+
+### 依赖注入（DI）与配置路径
+
+- **`AddAuraServices`** 增加 **`IHostEnvironment`** 参数，与 **`Program`** 一致解析 **`storage` 根目录**（`ContentRoot` 上溯一级 + `storage`），用于 **`ExportApplicationService`**、**`ResourceManagementService`**、**`CaptureProcessingService`** 等需磁盘路径的服务。
+- 注册 **`FeatureClusteringService`**、**`TabularExportService`**（Singleton）；**`VectorApplicationService`** 的 **`int`** 上限来自配置 **`Limits:MaxImageBase64Chars` / `Limits:MaxMetadataJsonChars`**（缺省与接口侧大页一致：5_000_000 / 200_000）。
+- **`CaptureProcessingService`**：重试图片目录由 **`Storage:CaptureRetryRoot`** 解析（空则 **`{storage}/captures/retry`**），布尔项读取 **`CaptureRetry:*`**、**`Storage:SaveCaptureImageOnSuccess`**。
+- **`Program.cs`**：调用 **`AddAuraServices(builder.Configuration, builder.Environment, isDev)`**。
+
+### 路由与数据访问对齐
+
+- **`EndpointExtensions`**：**`/api/campus/update`** 调用 **`PgSqlStore.UpdateCampusNodeAsync`**（替代不存在的 **`UpdateCampusNodeNameAsync`**）；轨迹/研判列表分别使用 **`GetTrackEventsAsync`**、**`GetJudgeResultsAsync`**；**`/api/cluster/list`** 注入 **`MonitoringQueryService`**；就绪检查 **`alertNotify`** 分支消除 **CS8629**（显式抽取 **`LastFailureAt`** 与时间窗口变量）。
+- **`PgSqlStore`**：**`DbCapture`** 增加可选 **`ImagePath`** 字段，与聚类/抓拍查询中对 **`ImagePath`** 的投影一致。
+
+### 编码与文案修复
+
+- **`Export/ExportApplicationService.cs`**：修复因编码损坏导致的字符串字面量断裂；导出表头、错误提示、操作日志与 **`ExportDatasetTitleCn`** 恢复为可读简体中文。
+- **`Middleware/FrontendMiddleware.cs`**：文件头注释乱码修正为「前端路由与安全响应头中间件」说明。
+- **`Clustering/ClusterApplicationService.cs`**：操作日志操作者/动作由乱码改为 **「系统任务」/「聚类执行」**。
+
+### 认证与代码质量
+
+- **`IdentityAdminService`**：角色归一化复用 **`AuraHelpers.ConvertRole`**，删除未穷尽的私有 **`ConvertRole`**，消除 **CS0161**。
+
+### 工程与解决方案
+
+- 新增 **`Aura.sln`**、根级 **`Directory.Build.props`**（将部分工程的中间输出引导至 **`.verify_build\obj`**，并排除误编译 **`obj`** 下生成文件）、**`global.json`**（SDK 版本约束）。
+- 新增轻量 **`backend/Aura.Api.Tests`** 工程（聚类/导出等纯逻辑自检入口，可按需扩展）。
+
+### 后端：定时任务与 Scoped 生命周期
+
+- **`backend/Aura.Api/Program.cs`**：归寝定时研判委托（**`DailyJudgeScheduleState.RunDailyAsync`**）内通过 **`IServiceScope`**（**`app.Services.CreateScope()`**）解析 **`JudgeService`**，避免从根 **`IServiceProvider`** 解析 Scoped 服务触发 **`InvalidOperationException`**。
+
+### Docker：镜像与 `global.json` 对齐、持久化与脚本
+
+- **`docker/backend.Dockerfile`**：默认 **`DOTNET_SDK_IMAGE` / `DOTNET_ASPNET_IMAGE`** 由 **`10.0-preview`** 调整为 **`10.0.201`**，与根目录 **`global.json`** 中 **`sdk.version`** 一致；注释说明升级 SDK 时需同步维护。
+- **`docker/.env.full.example`**、**`docker/.env.prod.example`**、**`docker/deploy-aura-ubuntu.sh`**：同上对齐 **`10.0.201`**；**`.env.full.example`** 补充命名卷 **`aura-api-storage`** 与 **`docker compose down`** 默认保留卷的说明。
+- **`docker/docker-compose.full.example.yml`**：为 **`api`** 增加命名卷 **`aura-api-storage` → `/app/storage`**，持久化抓拍、导出、告警落盘等数据。
+- **`docker/docker-compose.prod.template.yml`**：为 **`api`** 增加 **`aura-api-storage:/app/storage`**；可选环境变量 **`Paths__FrontendRoot: ${PATHS__FRONTENDROOT:-}`**；**`docker/.env.prod.example`** 补充 **`PATHS__FRONTENDROOT`** 可选配置说明注释。
+- **`.github/workflows/docker-build-push.example.yml`**：为 **`DOTNET_*`** Secret 增加与 **`global.json`** 对齐的注释提示。
+- **`docker/README.md`**：新增「镜像版本与仓库 SDK 对齐」「持久化策略（storage）」；**`down`/`down-full` 默认保留命名卷**及 **`down-full -Volumes` / `down-full.sh --volumes`** 删卷说明；开篇明确仓库根目录 **`.env.example`** 与 **`docker/.env.full.example`** 分工；「上线就绪巡检」步骤与根目录 **`.env.example`** 说明一致；合并精简「生产模板说明」；**`deploy-aura-ubuntu.sh`** 列入目录索引。
+- **`docker/up-full.ps1`**、**`docker/up-full.sh`**：启动成功后提示命名卷在普通 **`down`** 时默认保留。
+- **`docker/down-full.ps1`**：支持 **`-Volumes`**，等价 **`docker compose down -v`**（慎用，会删除数据库等卷）。
+- **`docker/down-full.sh`**：支持 **`-v` / `--volumes`**，行为同上。
+- **`docker/deploy-aura-ubuntu.sh`**：部署结束输出中增加命名卷与 **`down -v`** 风险说明。
+
+### `.dockerignore` 与构建上下文
+
+- **`.dockerignore`**：增加 **`.verify_build`**、**`backend/Aura.Api.Tests`**、**`docs`**，缩小镜像构建上下文并排除无关目录。
+
 ## [0.1.1] - 2026-03-25
 
 ### 本机直跑配置收敛与就绪检查自动化
@@ -314,4 +405,4 @@
 ## 版本规范
 
 - 版本号遵循 `MAJOR.MINOR.PATCH`
-- 当前版本：`0.1.1`
+- 当前版本：`0.1.2`
