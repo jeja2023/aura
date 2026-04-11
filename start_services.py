@@ -239,42 +239,50 @@ def main() -> int:
     api_cmd = ["dotnet", "run"]
 
     ai_proc = _start_process(ai_cmd, AI_DIR, "AI 服务")
-    api_proc = subprocess.Popen(
-        api_cmd,
-        cwd=str(API_DIR),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        bufsize=1,
-    )
-
-    # 异步读取 .NET 控制台输出：尝试提取开发环境管理员随机密码
-    dev_admin_password_from_log: Optional[str] = None
-
-    def _read_api_stdout() -> None:
-        nonlocal dev_admin_password_from_log
-        assert api_proc.stdout is not None
-        for line in api_proc.stdout:
-            # 保持可观测性：把输出回显到控制台
-            print(line, end="")
-            if dev_admin_password_from_log is None:
-                pwd = _extract_dev_admin_password_from_log_line(line)
-                if pwd:
-                    dev_admin_password_from_log = pwd
-
-    t = threading.Thread(target=_read_api_stdout, daemon=True)
-    t.start()
+    api_proc: Optional[subprocess.Popen] = None
+    return_code = 0
 
     try:
-        print("[检查] 等待 AI 服务就绪...")
-        if not _wait_http_ok(AI_HEALTH_URL, timeout_sec=60):
-            raise RuntimeError("AI 服务 60 秒内未就绪。")
+        # 先等 AI 监听端口：避免与 dotnet 首次编译争抢 CPU，导致 ONNX 导入阶段长时间无法响应健康检查
+        print("[检查] 等待 AI 服务就绪（根路径 /，含 model_loaded 等字段）...")
+        if not _wait_http_ok(AI_HEALTH_URL, timeout_sec=120):
+            raise RuntimeError(
+                "AI 服务 120 秒内未就绪。请检查：1) 8000 端口是否被占用；2) ai/.venv 与依赖；3) uvicorn 控制台是否有报错。"
+            )
+
+        api_proc = subprocess.Popen(
+            api_cmd,
+            cwd=str(API_DIR),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            bufsize=1,
+        )
+
+        # 异步读取 .NET 控制台输出：尝试提取开发环境管理员随机密码
+        dev_admin_password_from_log: Optional[str] = None
+
+        def _read_api_stdout() -> None:
+            nonlocal dev_admin_password_from_log
+            assert api_proc.stdout is not None
+            for line in api_proc.stdout:
+                # 保持可观测性：把输出回显到控制台
+                print(line, end="")
+                if dev_admin_password_from_log is None:
+                    pwd = _extract_dev_admin_password_from_log_line(line)
+                    if pwd:
+                        dev_admin_password_from_log = pwd
+
+        t = threading.Thread(target=_read_api_stdout, daemon=True)
+        t.start()
 
         print("[检查] 等待 .NET 服务就绪...")
-        if not _wait_http_ok(API_HEALTH_URL, timeout_sec=90, ignore_tls=True):
-            raise RuntimeError(".NET 服务 90 秒内未就绪。")
+        if not _wait_http_ok(API_HEALTH_URL, timeout_sec=180, ignore_tls=True):
+            raise RuntimeError(
+                ".NET 服务 180 秒内未就绪（首次 dotnet run 含编译可能较慢）。请检查 PostgreSQL/Redis 是否可达及控制台日志。"
+            )
 
         # 自动登录并调用 readiness（需要“超级管理员”权限）
         admin_user = str((os.environ.get("AURA_ADMIN_USER") or "admin")).strip()
@@ -298,9 +306,24 @@ def main() -> int:
         data = readiness_payload.get("data") or {}
         ready = bool(data.get("ready"))
         checks = data.get("checks") or {}
-        print(f"[readiness] ready={ready}, checks={checks}")
+        print(f"[就绪检查] 整体状态: {'全部就绪' if ready else '存在异常'}")
+        
+        desc_map = {
+            'jwt': 'JWT 密钥',
+            'hmac': '抓拍校验密钥',
+            'pgsql': 'PostgreSQL 数据库',
+            'redis': 'Redis 缓存',
+            'ai_service': 'AI 推理服务',
+            'ai_model': 'AI 模型加载',
+            'alertNotify': '告警通知通道'
+        }
+        for k, v in checks.items():
+            desc = desc_map.get(k, k)
+            status = "已就绪" if v else "异常"
+            print(f"  - {desc}: {status}")
+            
         if not ready:
-            raise RuntimeError(f"readiness 检查未通过：{readiness_payload}")
+            raise RuntimeError(f"就绪检查未通过：{readiness_payload}")
 
         if run_until_ready:
             print("[readiness] 运行完成（run-until-ready 模式），即将退出并停止子进程。")
@@ -318,13 +341,14 @@ def main() -> int:
             time.sleep(1)
     except KeyboardInterrupt:
         print("\n[停止] 收到 Ctrl+C，正在停止服务...")
+        return_code = 0
     except Exception as ex:
         print(f"[错误] {ex}")
         return_code = 1
-    else:
-        return_code = 0
     finally:
         for proc, name in ((ai_proc, "AI 服务"), (api_proc, ".NET 服务")):
+            if proc is None:
+                continue
             if proc.poll() is None:
                 print(f"[停止] {name}")
                 if os.name == "nt":

@@ -131,7 +131,8 @@ internal sealed class PgSqlStore
             var rows = await conn.QueryAsync<DbCapture>(
                 """
                 SELECT capture_id AS CaptureId, device_id AS DeviceId, channel_no AS ChannelNo,
-                       capture_time AS CaptureTime, COALESCE(CAST(metadata_json AS TEXT), '') AS MetadataJson
+                       capture_time AS CaptureTime, COALESCE(CAST(metadata_json AS TEXT), '') AS MetadataJson,
+                       image_path AS ImagePath
                 FROM capture_record
                 ORDER BY capture_id DESC
                 LIMIT @Limit
@@ -799,7 +800,8 @@ internal sealed class PgSqlStore
             var rows = await conn.QueryAsync<DbCapture>(
                 $"""
                 SELECT capture_id AS CaptureId, device_id AS DeviceId, channel_no AS ChannelNo,
-                       capture_time AS CaptureTime, COALESCE(CAST(metadata_json AS TEXT), '') AS MetadataJson
+                       capture_time AS CaptureTime, COALESCE(CAST(metadata_json AS TEXT), '') AS MetadataJson,
+                       image_path AS ImagePath
                 FROM capture_record
                 {where}
                 ORDER BY capture_time DESC, capture_id DESC
@@ -819,7 +821,7 @@ internal sealed class PgSqlStore
 
 internal sealed record DbUser(string UserName, string PasswordHash, string? RoleName);
 internal sealed record DbDevice(long DeviceId, string Name, string Ip, int Port, string Brand, string Protocol, string Status, DateTime CreatedAt);
-internal sealed record DbCapture(long CaptureId, long DeviceId, int ChannelNo, DateTime CaptureTime, string MetadataJson);
+internal sealed record DbCapture(long CaptureId, long DeviceId, int ChannelNo, DateTime CaptureTime, string MetadataJson, string? ImagePath = null);
 internal sealed record DbAlert(long AlertId, string AlertType, string Detail, DateTime CreatedAt);
 internal sealed record DbOperation(long OperationId, string OperatorName, string Action, string Detail, DateTimeOffset CreatedAt);
 internal sealed record DbRole(long RoleId, string RoleName, string PermissionJson);

@@ -92,7 +92,9 @@ services:
       AURA_ADMIN_PASSWORD: ${AURA_ADMIN_PASSWORD}
       Paths__FrontendRoot: /app/frontend
     volumes:
+      # 开发联调：前端源码只读挂载；业务数据（抓拍、导出、告警落盘等）使用命名卷持久化
       - ../frontend:/app/frontend:ro
+      - aura-api-storage:/app/storage
     ports:
       - "5000:5000"
     depends_on:
@@ -107,3 +109,4 @@ volumes:
   aura-pgsql-data:
   aura-redis-data:
   aura-arango-data:
+  aura-api-storage:

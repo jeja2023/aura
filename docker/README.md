@@ -2,6 +2,8 @@
 
 本目录用于集中管理项目 Docker 化相关文件，避免与业务代码混放。
 
+与仓库根目录的 `.env.example`（通用环境变量模板）配合使用；Full 联调另有 `docker/.env.full.example`（含容器内 `Host=pgsql` 等编排专用项）。
+
 ## 当前示例
 
 - `docker-compose.ops-check.example.yml`
@@ -43,14 +45,15 @@
   - 用途：GitHub Actions 镜像构建与推送模板
 - `Jenkinsfile.docker.example`
   - 用途：Jenkins 镜像构建与推送模板
+- `deploy-aura-ubuntu.sh`
+  - 用途：Ubuntu 服务器上拉取代码、生成 `.env`、启动 `docker-compose.full.example.yml` 的一键脚本
 
-## 快速使用
+## 快速使用（上线就绪巡检）
 
-1. 在项目根目录准备环境变量文件：
-   - 复制 `.env.example` 为 `.env`
-   - 填写 `AURA_ADMIN_USER`、`AURA_ADMIN_PASSWORD`
-2. 在项目根目录执行：
-   - `docker compose -f docker/docker-compose.ops-check.example.yml run --rm ops-check`
+1. 在项目根目录准备 `.env`：可复制仓库根目录的 **`.env.example`**（与根目录 `README.md` 说明一致），或复制 `docker/.env.full.example`。至少填写：
+   - `AURA_ADMIN_USER`、`AURA_ADMIN_PASSWORD`（与待巡检环境一致）
+2. 执行：
+   - `docker compose --env-file .env -f docker/docker-compose.ops-check.example.yml run --rm ops-check`
 
 ## Full 示例使用
 
@@ -64,12 +67,23 @@
 3. 查看运行状态：
    - `docker compose -f docker/docker-compose.full.example.yml ps`
 4. 停止并清理：
-   - `docker compose -f docker/docker-compose.full.example.yml down`
+   - `docker compose -f docker/docker-compose.full.example.yml down`（默认**保留**命名卷，数据库与 `aura-api-storage` 不丢）
    - 或（Windows）：`powershell -ExecutionPolicy Bypass -File .\docker\down-full.ps1`
    - 或（Linux/macOS）：`sh ./docker/down-full.sh`
+   - 需要连同卷一起删除（**会清空 PostgreSQL 等数据，慎用**）：`.\docker\down-full.ps1 -Volumes` 或 `sh ./docker/down-full.sh --volumes`
 5. 健康检查：
    - Windows：`powershell -ExecutionPolicy Bypass -File .\docker\check-full.ps1`
    - Linux/macOS：`sh ./docker/check-full.sh`
+
+## 镜像版本与仓库 SDK 对齐
+
+- 后端构建使用的 `DOTNET_SDK_IMAGE` / `DOTNET_ASPNET_IMAGE` 默认与仓库根目录 `global.json` 中的 `sdk.version`（当前 `10.0.201`）一致。
+- 升级 .NET SDK 时：先改 `global.json`，再同步修改 `docker/backend.Dockerfile` 的 ARG 默认值及 `docker/.env.full.example`、`docker/.env.prod.example`、`deploy-aura-ubuntu.sh` 中的同名变量；CI 中同步更新 GitHub Actions / Jenkins 里注入的 `DOTNET_SDK_IMAGE`、`DOTNET_ASPNET_IMAGE`（若使用 Secret 覆盖默认值）。
+
+## 持久化策略（storage）
+
+- **联调**（`docker-compose.full.example.yml`）：`api` 服务将命名卷 `aura-api-storage` 挂载到 `/app/storage`，避免容器重建丢失抓拍、导出与告警落盘等数据；前端仍为 `../frontend` 只读绑定挂载。
+- **生产模板**（`docker-compose.prod.template.yml`）：同样挂载 `aura-api-storage` → `/app/storage`；静态资源若不由 API 容器提供，可不设置 `PATHS__FRONTENDROOT`，由网关或 CDN 托管前端；若由 API 托管，在编排中增加前端目录挂载并设置 `Paths__FrontendRoot`（见 `docker/.env.prod.example` 注释）。
 
 ## 企业网络适配
 
@@ -131,8 +145,6 @@
 
 ## 生产模板说明
 
-- `docker-compose.prod.template.yml` 是占位模板，不可直接用于生产。
-- 生产环境应通过 CI/CD Secret、Kubernetes Secret 或云密钥管理服务注入变量。
-- 建议将 `backend.Dockerfile`、`ai.Dockerfile` 产物推送到私有镜像仓库，再由生产编排引用固定版本镜像。
-- 可先复制 `docker/.env.prod.example` 为本地变量文件进行校验，再按实际环境改为 Secret 注入。
-- `docker-compose.prod.template.yml` 已支持 `API_IMAGE`、`AI_IMAGE` 变量，可直接对接私有仓库镜像。
+- `docker-compose.prod.template.yml` 为占位模板，变量需由 Secret/配置中心注入；`API_IMAGE`、`AI_IMAGE` 对接私有仓库构建产物。
+- 静态资源若不由 API 容器托管，可不设 `PATHS__FRONTENDROOT`；由 API 托管时需挂载前端目录并配置该变量（见 `docker/.env.prod.example`）。
+- `api` 已挂载 `aura-api-storage` → `/app/storage`：告警路径、导出与抓拍落盘应与该卷或外部持久化一致，避免只写在容器可写层。

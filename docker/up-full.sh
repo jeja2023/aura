@@ -17,5 +17,6 @@ echo "使用环境文件: $ENV_FILE"
 echo "启动编排文件: $COMPOSE_FILE"
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --build
 echo ""
-echo "启动完成，可执行以下命令查看状态："
+echo "启动完成。业务数据持久化：compose 命名卷（含 aura-api-storage → /app/storage）在 down 时默认保留。"
+echo "可执行以下命令查看状态："
 echo "docker compose -f \"$COMPOSE_FILE\" ps"

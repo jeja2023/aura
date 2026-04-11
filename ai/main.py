@@ -1,5 +1,6 @@
-# 文件：AI推理服务入口（main.py） | File: AI Inference Service Entry
-# pyright: reportMissingImports=false
+import asyncio
+import threading
+from contextlib import asynccontextmanager
 from datetime import datetime
 import base64
 import io
@@ -18,10 +19,35 @@ try:
 except Exception:
     ArangoClient = None
 
-app = FastAPI(title="寓瞳AI推理服务", version="0.1.0")
+_batch_task: asyncio.Task | None = None
+
+
+async def _background_init_and_batch():
+    """在后台加载 Arango/ONNX，避免阻塞 Uvicorn 绑定端口；完成后启动批处理循环。"""
+    global _model_error, _batch_task
+    loop = asyncio.get_running_loop()
+    try:
+        await loop.run_in_executor(None, _init_arango)
+        await loop.run_in_executor(None, _init_model)
+    except Exception as ex:
+        _model_error = f"后台初始化异常: {ex}"
+        print(f"[启动] 后台初始化失败: {ex}")
+        return
+    if _ort_session is not None:
+        _batch_task = asyncio.create_task(_batch_loop())
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    asyncio.create_task(_background_init_and_batch())
+    yield
+
+
+app = FastAPI(title="寓瞳AI推理服务", version="0.1.0", lifespan=_lifespan)
 COLLECTION_NAME = "aura_reid"
 VECTOR_DIM = 512
 _local_index = []
+_index_lock = threading.Lock()
 _arango_db = None
 _arango_collection = None
 _ort_session = None
@@ -29,6 +55,10 @@ _ort_input_name = ""
 _model_error = ""
 _arango_error = ""
 
+# Batching relevant
+_batch_queue = asyncio.Queue()
+_BATCH_SIZE = 16
+_MAX_WAIT_SECONDS = 0.05
 
 def _init_arango():
     """初始化 ArangoDB 向量存储；失败则保持在内存降级模式。"""
@@ -41,7 +71,6 @@ def _init_arango():
 
     arango_uri = os.getenv("ARANGO_URI", "http://127.0.0.1:8529")
     arango_db_name = os.getenv("ARANGO_DB", "aura")
-    # 默认不再“悄悄使用测试密码”，要求必须通过环境变量/ .env 明确配置
     arango_user = os.getenv("ARANGO_USER", "")
     arango_password = os.getenv("ARANGO_PASSWORD", "")
     _arango_error = ""
@@ -82,27 +111,29 @@ def _ensure_arango():
     return _arango_db is not None
 
 
-_init_arango()
-
-
 def _init_model():
     global _ort_session, _ort_input_name, _model_error
     root = Path(__file__).resolve().parents[1]
     model_path = Path(os.getenv("AURA_MODEL_PATH", str(root / "models" / "osnet_ibn_x1_0.onnx")))
     try:
         if not model_path.exists():
-            _model_error = f"model not found: {model_path}"
+            _model_error = f"未找到模型文件: {model_path}"
             return
-        providers = ["CPUExecutionProvider"]
+        
+        # 探测可用提供者，优先 CUDA
+        available = ort.get_available_providers()
+        providers = []
+        if "CUDAExecutionProvider" in available:
+            providers.append("CUDAExecutionProvider")
+        providers.append("CPUExecutionProvider")
+        
         _ort_session = ort.InferenceSession(str(model_path), providers=providers)
         _ort_input_name = _ort_session.get_inputs()[0].name
         _model_error = ""
+        print(f"ONNX 推理会话已初始化，使用提供者：{providers}")
     except Exception as ex:
         _ort_session = None
-        _model_error = f"model load failed: {ex}"
-
-
-_init_model()
+        _model_error = f"模型加载失败: {ex}"
 
 
 class ImageReq(BaseModel):
@@ -113,6 +144,52 @@ class ImageReq(BaseModel):
 class ImageFileReq(BaseModel):
     image_path: str
     metadata_json: str = "{}"
+
+
+async def _batch_loop():
+    """推理批处理后台循环：搜集请求并统一调用 ONNX 运行。"""
+    while True:
+        # 等待至少一个任务进入队列
+        item = await _batch_queue.get()
+        batch = [item]
+        
+        # 尝试在短时间内搜集更多任务（最多 _BATCH_SIZE）
+        start_time = asyncio.get_event_loop().time()
+        while len(batch) < _BATCH_SIZE:
+            time_left = _MAX_WAIT_SECONDS - (asyncio.get_event_loop().time() - start_time)
+            if time_left <= 0:
+                break
+            try:
+                # 尝试非阻塞获取
+                item = await asyncio.wait_for(_batch_queue.get(), timeout=time_left)
+                batch.append(item)
+            except (asyncio.TimeoutError, asyncio.QueueEmpty):
+                break
+        
+        if not batch:
+            continue
+
+        try:
+            # 准备批处理张量
+            tensors = [x[0] for x in batch]
+            if len(tensors) == 1:
+                input_data = tensors[0]
+            else:
+                input_data = np.concatenate(tensors, axis=0)
+            
+            # 执行推理 (同步调用，考虑在线程池执行以避免阻塞 Loop)
+            loop = asyncio.get_event_loop()
+            outputs = await loop.run_in_executor(None, lambda: _ort_session.run(None, {_ort_input_name: input_data}))
+            
+            # 分发结果
+            feat_batch = np.asarray(outputs[0]).astype(np.float32)
+            for i, (tensor, future) in enumerate(batch):
+                feat = feat_batch[i].reshape(-1).tolist()
+                future.set_result(_normalize_feature(feat))
+        except Exception as ex:
+            for _, future in batch:
+                if not future.done():
+                    future.set_exception(ex)
 
 
 class SearchReq(BaseModel):
@@ -168,58 +245,50 @@ def _preprocess(img: Image.Image) -> np.ndarray:
     return arr
 
 
-def _extract_feature_by_onnx(image_base64: str) -> list[float]:
+async def _extract_feature_batched(tensor: np.ndarray) -> list[float]:
+    """将推理请求发送到批处理队列。"""
     if _ort_session is None:
         raise RuntimeError(_model_error or "onnx session not initialized")
-    img = _decode_image(image_base64)
-    tensor = _preprocess(img)
-    outputs = _ort_session.run(None, {_ort_input_name: tensor})
-    if not outputs:
-        raise RuntimeError("onnx returned empty outputs")
-    feat = np.asarray(outputs[0]).reshape(-1).astype(np.float32).tolist()
-    return _normalize_feature(feat)
-
-
-def _extract_feature_by_file_path(image_path: str) -> list[float]:
-    if _ort_session is None:
-        raise RuntimeError(_model_error or "onnx session not initialized")
-    p = Path(image_path)
-    if not p.exists():
-        raise RuntimeError(f"image path not found: {image_path}")
-    with Image.open(str(p)) as img:
-        rgb = img.convert("RGB")
-        tensor = _preprocess(rgb)
-    outputs = _ort_session.run(None, {_ort_input_name: tensor})
-    if not outputs:
-        raise RuntimeError("onnx returned empty outputs")
-    feat = np.asarray(outputs[0]).reshape(-1).astype(np.float32).tolist()
-    return _normalize_feature(feat)
-
-
-def _cosine(a: list[float], b: list[float]) -> float:
-    return sum(x * y for x, y in zip(a, b))
+    
+    future = asyncio.get_event_loop().create_future()
+    await _batch_queue.put((tensor, future))
+    return await future
 
 
 @app.post("/ai/extract")
-def extract(req: ImageReq):
+async def extract(req: ImageReq):
     try:
-        feature = _extract_feature_by_onnx(req.image_base64)
+        img = _decode_image(req.image_base64)
+        tensor = _preprocess(img)
+        feature = await _extract_feature_batched(tensor)
         return {"code": 0, "msg": "特征提取成功", "data": {"feature": feature, "dim": len(feature)}}
     except Exception as ex:
         return {"code": 50001, "msg": f"特征提取失败: {ex}", "data": {"feature": [], "dim": 0}}
 
 
 @app.post("/ai/extract-file")
-def extract_file(req: ImageFileReq):
+async def extract_file(req: ImageFileReq):
     try:
-        feature = _extract_feature_by_file_path(req.image_path)
+        p = Path(req.image_path)
+        if not p.exists():
+            return {"code": 40401, "msg": f"文件不存在: {req.image_path}"}
+        
+        with Image.open(str(p)) as img:
+            rgb = img.convert("RGB")
+            tensor = _preprocess(rgb)
+        
+        feature = await _extract_feature_batched(tensor)
         return {"code": 0, "msg": "特征提取成功", "data": {"feature": feature, "dim": len(feature)}}
     except Exception as ex:
         return {"code": 50001, "msg": f"特征提取失败: {ex}", "data": {"feature": [], "dim": 0}}
 
 
+def _cosine(a: list[float], b: list[float]) -> float:
+    return sum(x * y for x, y in zip(a, b))
+
+
 @app.post("/ai/upsert")
-def upsert(req: UpsertReq):
+async def upsert(req: UpsertReq):
     feature = _normalize_feature(req.feature)
     if _ensure_arango():
         try:
@@ -241,14 +310,16 @@ def upsert(req: UpsertReq):
         except Exception:
             pass
 
-    global _local_index
-    _local_index = [item for item in _local_index if item["vid"] != req.vid]
-    _local_index.append({"vid": req.vid, "feature": feature})
+    with _index_lock:
+        global _local_index
+        _local_index = [item for item in _local_index if item["vid"] != req.vid]
+        _local_index.append({"vid": req.vid, "feature": feature})
+    
     return {"code": 0, "msg": "写入成功", "data": {"vid": req.vid, "engine": "memory"}}
 
 
 @app.post("/ai/search")
-def search(req: SearchReq):
+async def search(req: SearchReq):
     feature = _normalize_feature(req.feature)
     top_k = max(1, min(req.top_k, 50))
     if _ensure_arango():
@@ -276,7 +347,9 @@ def search(req: SearchReq):
         except Exception:
             pass
 
-    scores = [{"vid": x["vid"], "score": _cosine(feature, x["feature"])} for x in _local_index]
+    with _index_lock:
+        scores = [{"vid": x["vid"], "score": _cosine(feature, x["feature"])} for x in _local_index]
+    
     scores.sort(key=lambda x: x["score"], reverse=True)
     return {
         "code": 0,

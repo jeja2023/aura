@@ -167,7 +167,48 @@
     mountThemeControl();
     mountLogout();
     mountSidebarToggle();
+    initAnimateNumbers();
   }
+
+  /** 数字跳动动效：从 0 渐变到目标值 */
+  function initAnimateNumbers() {
+    const els = document.querySelectorAll("[data-aura-number]");
+    els.forEach((el) => {
+      const target = parseFloat(el.getAttribute("data-aura-number")) || 0;
+      const duration = 1200;
+      const start = 0;
+      let startTime = null;
+
+      function step(timestamp) {
+        if (!startTime) startTime = timestamp;
+        const progress = Math.min((timestamp - startTime) / duration, 1);
+        const current = progress * (target - start) + start;
+        el.textContent = Math.floor(current).toLocaleString();
+        if (progress < 1) {
+          window.requestAnimationFrame(step);
+        } else {
+          el.textContent = target.toLocaleString();
+        }
+      }
+      window.requestAnimationFrame(step);
+    });
+  }
+
+  // 暴露工具
+  window.aura = {
+    animateNumber: (el, target, duration = 1000) => {
+      let start = 0;
+      let startTime = null;
+      function step(timestamp) {
+        if (!startTime) startTime = timestamp;
+        const progress = Math.min((timestamp - startTime) / duration, 1);
+        el.textContent = Math.floor(progress * target).toLocaleString();
+        if (progress < 1) window.requestAnimationFrame(step);
+        else el.textContent = target.toLocaleString();
+      }
+      window.requestAnimationFrame(step);
+    }
+  };
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", bootstrap);

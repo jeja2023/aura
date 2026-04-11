@@ -19,5 +19,6 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host ""
-Write-Host "启动完成，可执行以下命令查看状态："
+Write-Host "启动完成。业务数据持久化：compose 命名卷（含 aura-api-storage → /app/storage）在 down 时默认保留。"
+Write-Host "可执行以下命令查看状态："
 Write-Host "docker compose -f `"$composeFile`" ps"

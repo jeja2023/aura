@@ -1,5 +1,5 @@
-/* 文件：AI客户端（AiClient.cs） | File: AI Client */
 using System.Net.Http.Json;
+using System.Text.Json;
 
 namespace Aura.Api.Ai;
 
@@ -7,11 +7,35 @@ internal sealed class AiClient
 {
     private readonly HttpClient _httpClient;
     private readonly string _baseUrl;
+    private readonly ILogger<AiClient> _logger;
 
-    public AiClient(HttpClient httpClient, string baseUrl)
+    public AiClient(HttpClient httpClient, string baseUrl, ILogger<AiClient> logger)
     {
         _httpClient = httpClient;
         _baseUrl = baseUrl.TrimEnd('/');
+        _logger = logger;
+    }
+
+    public async Task<JsonElement?> GetHealthAsync()
+    {
+        try
+        {
+            _logger.LogInformation("正在检查 AI 服务健康状态: {Url}", _baseUrl);
+            var res = await _httpClient.GetAsync($"{_baseUrl}/");
+            if (res.IsSuccessStatusCode)
+            {
+                var json = await res.Content.ReadFromJsonAsync<JsonElement>();
+                _logger.LogInformation("AI 服务健康检查通过。");
+                return json;
+            }
+            _logger.LogWarning("AI 服务响应异常：{StatusCode}", res.StatusCode);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "连接 AI 服务失败。");
+            return null;
+        }
     }
 
     public async Task<AiExtractResult> ExtractAsync(string imageBase64, string metadataJson)

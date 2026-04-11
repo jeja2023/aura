@@ -26,12 +26,62 @@
             <button id="resetBtn" type="button">重置视角</button>
             <button id="back3dBtn" type="button">返回3D总览</button>
           </div>
-          <div id="stage3d"></div>
+          <div class="stage-wrap">
+            <div id="stage3d"></div>
+            <div class="scene-overlay">
+              <div class="scene-overlay-card">
+                <div class="scene-overlay-title">场景提示</div>
+                <p>点击楼层可下钻到 2D 切片，实时事件会联动楼层闪烁与右侧事件流。</p>
+              </div>
+              <div class="floor-chip-list" id="floorChips"></div>
+            </div>
+          </div>
         </section>
         <section class="right">
-          <h2>2D 楼层切片</h2>
-          <canvas id="slice2d" width="520" height="360"></canvas>
-          <pre id="result">提示：点击3D楼层可下钻到2D切片。</pre>
+          <div class="stats-grid">
+            <article class="stat-card">
+              <span class="stat-label">楼层总数</span>
+              <strong id="metricFloors">0</strong>
+            </article>
+            <article class="stat-card">
+              <span class="stat-label">摄像头</span>
+              <strong id="metricCameras">0</strong>
+            </article>
+            <article class="stat-card">
+              <span class="stat-label">告警总量</span>
+              <strong id="metricAlerts">0</strong>
+            </article>
+            <article class="stat-card">
+              <span class="stat-label">当前模式</span>
+              <strong id="metricMode">3D总览</strong>
+            </article>
+          </div>
+
+          <section class="panel">
+            <div class="panel-title-row">
+              <h2>楼层态势</h2>
+              <span class="panel-hint">选中楼层后同步显示切片与计数</span>
+            </div>
+            <div id="floorSummary" class="floor-summary">当前未选中楼层，展示全局态势。</div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-title-row">
+              <h2>2D 楼层切片</h2>
+              <span class="panel-hint">摄像头位与热点会随事件变化</span>
+            </div>
+            <canvas id="slice2d" width="520" height="360"></canvas>
+          </section>
+
+          <section class="panel">
+            <div class="panel-title-row">
+              <h2>实时事件流</h2>
+              <span class="panel-hint">保留最近 12 条</span>
+            </div>
+            <ul id="eventFeed" class="event-feed"></ul>
+          </section>
+
+          <pre id="result">提示：点击 3D 楼层或右上楼层标签可下钻到 2D 切片。</pre>
         </section>
       </div>
     </main>

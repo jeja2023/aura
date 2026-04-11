@@ -1,5 +1,6 @@
 .git
 .gitignore
+.verify_build
 .cursor
 .codex
 .vscode
@@ -10,6 +11,8 @@
 **/*.pyc
 **/.venv
 **/node_modules
+backend/Aura.Api.Tests
+docs
 storage/uploads
 storage/outputs
 frontend/common/vendor
