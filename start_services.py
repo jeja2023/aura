@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 # 文件：一键启动脚本（start_services.py） | File: Service Launcher
+#
+# 适用范围：本机全栈联调（AI + .NET + PostgreSQL + Redis）。要求 appsettings.Development.json
+# 与 .env 中连接串已配置；与「仅跑集成测试」的 ASPNETCORE_ENVIRONMENT=Testing（可无 Redis/PG）不是同一套场景。
 
 import os
 import signal
@@ -12,7 +15,7 @@ import urllib.error
 import ssl
 import webbrowser
 from pathlib import Path
-from typing import Optional
+from typing import Any, Callable, Optional
 import threading
 import re
 from http.cookiejar import CookieJar
@@ -36,17 +39,32 @@ def _pick_ai_python() -> str:
     return sys.executable
 
 
-def _wait_http_ok(url: str, timeout_sec: int, ignore_tls: bool = False) -> bool:
+def _wait_http_json_probe(
+    url: str,
+    timeout_sec: int,
+    *,
+    ignore_tls: bool = False,
+    predicate: Callable[[dict[str, Any]], bool],
+) -> bool:
+    """轮询 URL，要求 HTTP 状态码为 2xx，且响应体为 JSON 且满足 predicate(data)。"""
     deadline = time.time() + timeout_sec
-    context = None
-    if ignore_tls:
-        context = ssl._create_unverified_context()
+    context = ssl._create_unverified_context() if ignore_tls else None
     while time.time() < deadline:
         try:
             with urllib.request.urlopen(url, timeout=2, context=context) as resp:
-                if 200 <= resp.status < 500:
+                status = resp.status
+                if not (200 <= status <= 299):
+                    time.sleep(1)
+                    continue
+                raw = resp.read()
+                try:
+                    data = json.loads(raw.decode("utf-8", errors="replace"))
+                except json.JSONDecodeError:
+                    time.sleep(1)
+                    continue
+                if isinstance(data, dict) and predicate(data):
                     return True
-        except (urllib.error.URLError, TimeoutError, ConnectionError, ValueError):
+        except (urllib.error.URLError, TimeoutError, ConnectionError, ValueError, OSError):
             time.sleep(1)
     return False
 
@@ -118,7 +136,8 @@ def _preflight_check() -> None:
     redis_conn_from_cfg = str(((cfg.get("ConnectionStrings") or {}).get("Redis") or "")).strip()
     ai_base_url_from_cfg = str(((cfg.get("Ai") or {}).get("BaseUrl") or "")).strip()
 
-    # 优先读取根目录 .env（用于本机直跑统一配置）
+    # 优先读取根目录 .env（用于本机直跑统一配置；键名须与 .env.example 一致）
+    jwt_key = (_get_or_default_env("Jwt__Key", jwt_key) or "").strip()
     pgsql_conn = _get_or_default_env(_env_key_pgsql(), pgsql_conn_from_cfg) or ""
     redis_conn = _get_or_default_env(_env_key_redis(), redis_conn_from_cfg) or ""
     ai_base_url = _get_or_default_env(_env_key_ai_base_url(), ai_base_url_from_cfg) or ""
@@ -134,10 +153,12 @@ def _preflight_check() -> None:
 
 
 def _extract_dev_admin_password_from_log_line(line: str) -> Optional[str]:
-    # 开发环境启动时 Program.cs 会打印随机密码：
-    # - 开发环境管理员已自动创建：用户名=admin, 密码={devPassword}
-    # - 开发环境管理员不存在，已自动重建：用户名=admin, 密码={devPassword}
-    # - 开发环境管理员密码已一次性重置：用户名=admin, 新密码={devPassword}
+    """从 .NET 控制台行解析开发环境 admin 口令（与 DevInitializer 日志格式一致）。
+
+    当前 DevInitializer 在首次建号或 ResetAdminPasswordOnce 后，固定将 admin 密码设为 123456，
+    日志形如：开发环境管理员已配置：用户名=admin, 密码=123456
+    若将来日志格式变更，请同步调整正则。
+    """
     m = re.search(r"新密码=([A-Za-z0-9\-_]+)", line)
     if m:
         return m.group(1)
@@ -244,10 +265,14 @@ def main() -> int:
 
     try:
         # 先等 AI 监听端口：避免与 dotnet 首次编译争抢 CPU，导致 ONNX 导入阶段长时间无法响应健康检查
-        print("[检查] 等待 AI 服务就绪（根路径 /，含 model_loaded 等字段）...")
-        if not _wait_http_ok(AI_HEALTH_URL, timeout_sec=120):
+        print("[检查] 等待 AI 服务就绪（HTTP 2xx + JSON：code=0 且 model_loaded=true）...")
+        if not _wait_http_json_probe(
+            AI_HEALTH_URL,
+            timeout_sec=120,
+            predicate=lambda d: d.get("code") == 0 and d.get("model_loaded") is True,
+        ):
             raise RuntimeError(
-                "AI 服务 120 秒内未就绪。请检查：1) 8000 端口是否被占用；2) ai/.venv 与依赖；3) uvicorn 控制台是否有报错。"
+                "AI 服务 120 秒内未就绪（需 ONNX 加载完成）。请检查：1) 8000 端口；2) ai/.venv 与依赖；3) 模型路径 AURA_MODEL_PATH；4) uvicorn 控制台报错。"
             )
 
         api_proc = subprocess.Popen(
@@ -278,10 +303,15 @@ def main() -> int:
         t = threading.Thread(target=_read_api_stdout, daemon=True)
         t.start()
 
-        print("[检查] 等待 .NET 服务就绪...")
-        if not _wait_http_ok(API_HEALTH_URL, timeout_sec=180, ignore_tls=True):
+        print("[检查] 等待 .NET 服务就绪（HTTP 2xx + /api/health 返回 code=0）...")
+        if not _wait_http_json_probe(
+            API_HEALTH_URL,
+            timeout_sec=180,
+            ignore_tls=True,
+            predicate=lambda d: d.get("code") == 0 and "寓瞳" in str(d.get("msg", "")),
+        ):
             raise RuntimeError(
-                ".NET 服务 180 秒内未就绪（首次 dotnet run 含编译可能较慢）。请检查 PostgreSQL/Redis 是否可达及控制台日志。"
+                ".NET 服务 180 秒内未就绪（首次 dotnet run 含编译可能较慢）。请检查 PostgreSQL/Redis 是否可达、AllowedHosts、HTTPS 开发证书及控制台日志。"
             )
 
         # 自动登录并调用 readiness（需要“超级管理员”权限）

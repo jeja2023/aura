@@ -20,7 +20,9 @@ public sealed class FrontendRoutingMiddleware
             var path = context.Request.Path.Value ?? "/";
             var isReserved = path.StartsWith("/api", StringComparison.OrdinalIgnoreCase)
                              || path.StartsWith("/hubs", StringComparison.OrdinalIgnoreCase)
-                             || path.StartsWith("/storage", StringComparison.OrdinalIgnoreCase);
+                             || path.StartsWith("/storage", StringComparison.OrdinalIgnoreCase)
+                             || path.Equals("/metrics", StringComparison.OrdinalIgnoreCase)
+                             || path.StartsWith("/metrics/", StringComparison.OrdinalIgnoreCase);
 
             if (!isReserved && !Path.HasExtension(path))
             {

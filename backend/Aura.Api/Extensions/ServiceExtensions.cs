@@ -10,8 +10,10 @@ using Aura.Api.Data;
 using Aura.Api.Export;
 using Aura.Api.Ops;
 using Aura.Api.Services;
+using Aura.Api.Internal;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Http.Resilience;
 
 namespace Aura.Api.Extensions;
 
@@ -57,6 +59,13 @@ public static class ServiceExtensions
         var alertWebhookUrl = configuration["Ops:Alert:WebhookUrl"];
         var alertNotifyFilePath = configuration["Ops:Alert:FilePath"];
 
+        var aiTotalTimeout = configuration.GetValue("HttpClients:Ai:TotalRequestTimeoutSeconds", 120);
+        var aiAttemptTimeout = configuration.GetValue("HttpClients:Ai:AttemptTimeoutSeconds", 90);
+        var aiMaxRetries = configuration.GetValue("HttpClients:Ai:MaxRetryAttempts", 2);
+        var alertTotalTimeout = configuration.GetValue("HttpClients:AlertNotifier:TotalRequestTimeoutSeconds", 30);
+        var alertAttemptTimeout = configuration.GetValue("HttpClients:AlertNotifier:AttemptTimeoutSeconds", 15);
+        var alertMaxRetries = configuration.GetValue("HttpClients:AlertNotifier:MaxRetryAttempts", 2);
+
         services.AddSingleton<PgSqlStore>(sp =>
             new PgSqlStore(pgsqlConn, sp.GetRequiredService<ILogger<PgSqlStore>>()));
         
@@ -66,19 +75,52 @@ public static class ServiceExtensions
         services.AddSingleton<RetryQueueService>(sp =>
             new RetryQueueService(redisConn, sp.GetRequiredService<ILogger<RetryQueueService>>()));
         
+        services.AddHttpClient(AuraHttpClientNames.AlertNotifier)
+            .ConfigureHttpClient(c => c.Timeout = Timeout.InfiniteTimeSpan)
+            .AddStandardResilienceHandler(options =>
+            {
+                options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(alertTotalTimeout);
+                options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(alertAttemptTimeout);
+                options.Retry.MaxRetryAttempts = alertMaxRetries;
+                options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(Math.Max(60, alertAttemptTimeout * 2 + 10));
+            });
         services.AddSingleton<IAlertNotifier>(sp =>
-            new AlertNotifier(
-                new HttpClient(),
+        {
+            var factory = sp.GetRequiredService<IHttpClientFactory>();
+            var client = factory.CreateClient(AuraHttpClientNames.AlertNotifier);
+            return new AlertNotifier(
+                client,
                 sp.GetRequiredService<ILogger<AlertNotifier>>(),
                 alertWebhookUrl,
-                alertNotifyFilePath));
+                alertNotifyFilePath);
+        });
 
         services.AddSingleton<DailyJudgeScheduleState>();
         services.AddHostedService<DailyJudgeHostedService>();
         services.AddSingleton<AppStore>();
-        services.AddHttpClient();
-        services.AddSingleton<AiClient>(sp => 
-            new AiClient(sp.GetRequiredService<HttpClient>(), configuration["Ai:BaseUrl"] ?? "http://127.0.0.1:8000", sp.GetRequiredService<ILogger<AiClient>>()));
+        services.AddHttpClient(AuraHttpClientNames.AiService)
+            .ConfigureHttpClient((sp, c) =>
+            {
+                c.Timeout = Timeout.InfiniteTimeSpan;
+                var aiKey = sp.GetRequiredService<IConfiguration>()["Ai:ApiKey"]?.Trim();
+                if (!string.IsNullOrEmpty(aiKey))
+                {
+                    c.DefaultRequestHeaders.TryAddWithoutValidation("X-Aura-Ai-Key", aiKey);
+                }
+            })
+            .AddStandardResilienceHandler(options =>
+            {
+                options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(aiTotalTimeout);
+                options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(aiAttemptTimeout);
+                options.Retry.MaxRetryAttempts = aiMaxRetries;
+                options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(Math.Max(120, aiAttemptTimeout * 2 + 30));
+            });
+        services.AddSingleton<AiClient>(sp =>
+        {
+            var factory = sp.GetRequiredService<IHttpClientFactory>();
+            var client = factory.CreateClient(AuraHttpClientNames.AiService);
+            return new AiClient(client, configuration["Ai:BaseUrl"] ?? "http://127.0.0.1:8000", sp.GetRequiredService<ILogger<AiClient>>());
+        });
 
         services.AddSingleton<FeatureClusteringService>();
         services.AddSingleton<TabularExportService>();
@@ -131,6 +173,7 @@ public static class ServiceExtensions
         services.AddScoped<OperationQueryService>();
         services.AddScoped<CaptureOpsService>();
         
+        // 多实例水平扩展时需配置 Redis Backplane，否则 SignalR 连接仅落在单节点。
         services.AddSignalR();
         
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

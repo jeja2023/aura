@@ -59,6 +59,8 @@ services:
       ARANGO_USER: ${ARANGO_USER}
       ARANGO_PASSWORD: ${ARANGO_PASSWORD}
       AURA_MODEL_PATH: ${AURA_MODEL_PATH}
+      # 与 API 的 Ai__ApiKey 一致；留空则不校验（本地开发常用）
+      AURA_API_KEY: ${AURA_API_KEY:-}
     ports:
       - "8000:8000"
     depends_on:
@@ -86,6 +88,7 @@ services:
       ConnectionStrings__PgSql: Host=pgsql;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
       ConnectionStrings__Redis: redis:6379
       Ai__BaseUrl: http://ai:8000
+      Ai__ApiKey: ${AURA_API_KEY:-}
       Jwt__Key: ${JWT_KEY}
       Security__HmacSecret: ${HMAC_SECRET}
       AURA_ADMIN_USER: ${AURA_ADMIN_USER}

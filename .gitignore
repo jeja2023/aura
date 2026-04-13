@@ -79,6 +79,7 @@ storage/outputs/
 # 敏感配置与密钥
 .env
 .env.*
+!.env.example
 !docker/.env.full.example
 !docker/.env.prod.example
 !docker/.env.registry.example

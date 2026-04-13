@@ -12,6 +12,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Aura.Api.Tests", "backend\A
 		{84EB96A0-D71A-18F7-7BFB-234050CB5E1C} = {84EB96A0-D71A-18F7-7BFB-234050CB5E1C}
 	EndProjectSection
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Aura.Api.Integration.Tests", "backend\Aura.Api.Integration.Tests\Aura.Api.Integration.Tests.csproj", "{B340D0CC-C43E-4584-9761-548C068B4EBC}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -46,6 +48,18 @@ Global
 		{8F030508-7433-4732-B299-0CB6D83F035A}.Release|x64.Build.0 = Release|Any CPU
 		{8F030508-7433-4732-B299-0CB6D83F035A}.Release|x86.ActiveCfg = Release|Any CPU
 		{8F030508-7433-4732-B299-0CB6D83F035A}.Release|x86.Build.0 = Release|Any CPU
+		{B340D0CC-C43E-4584-9761-548C068B4EBC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B340D0CC-C43E-4584-9761-548C068B4EBC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B340D0CC-C43E-4584-9761-548C068B4EBC}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{B340D0CC-C43E-4584-9761-548C068B4EBC}.Debug|x64.Build.0 = Debug|Any CPU
+		{B340D0CC-C43E-4584-9761-548C068B4EBC}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{B340D0CC-C43E-4584-9761-548C068B4EBC}.Debug|x86.Build.0 = Debug|Any CPU
+		{B340D0CC-C43E-4584-9761-548C068B4EBC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B340D0CC-C43E-4584-9761-548C068B4EBC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B340D0CC-C43E-4584-9761-548C068B4EBC}.Release|x64.ActiveCfg = Release|Any CPU
+		{B340D0CC-C43E-4584-9761-548C068B4EBC}.Release|x64.Build.0 = Release|Any CPU
+		{B340D0CC-C43E-4584-9761-548C068B4EBC}.Release|x86.ActiveCfg = Release|Any CPU
+		{B340D0CC-C43E-4584-9761-548C068B4EBC}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -53,6 +67,7 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{84EB96A0-D71A-18F7-7BFB-234050CB5E1C} = {1AE8ACA6-933B-BF2A-3671-3E2EAC007D16}
 		{8F030508-7433-4732-B299-0CB6D83F035A} = {1AE8ACA6-933B-BF2A-3671-3E2EAC007D16}
+		{B340D0CC-C43E-4584-9761-548C068B4EBC} = {1AE8ACA6-933B-BF2A-3671-3E2EAC007D16}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {15CD388A-0081-4597-8AAB-EDF085274A37}

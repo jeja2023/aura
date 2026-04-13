@@ -1,0 +1,30 @@
+# 示例：对外 Ingress 上禁止通过公网域名抓取 Prometheus 指标路径。
+# 使用前请替换：命名空间、IngressClass、tls secret、主机名、backend Service 名称与端口。
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: aura-api-public
+  namespace: aura-prod
+  annotations:
+    # ingress-nginx：在 server 块内拦截 /metrics（Prometheus 请改走集群内 Service 抓取）
+    nginx.ingress.kubernetes.io/server-snippet: |
+      location = /metrics {
+        return 403;
+      }
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - aura.example.com
+      secretName: aura-api-tls
+  rules:
+    - host: aura.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: aura-api
+                port:
+                  number: 5000

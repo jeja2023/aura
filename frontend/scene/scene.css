@@ -22,14 +22,16 @@
   display: flex;
   flex-direction: column;
   background:
-    radial-gradient(circle at top right, rgba(37, 99, 235, 0.16), transparent 40%),
-    linear-gradient(180deg, rgba(15, 23, 42, 0.03), rgba(15, 23, 42, 0.07));
+    radial-gradient(circle at top right, rgba(var(--primary-rgb), 0.16), transparent 40%),
+    linear-gradient(180deg, rgba(var(--ink-rgb), 0.03), rgba(var(--ink-rgb), 0.07));
 }
 
 .right {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .right h2 {
@@ -60,8 +62,8 @@
   border-radius: 18px;
   overflow: hidden;
   background:
-    radial-gradient(circle at top, rgba(96, 165, 250, 0.18), transparent 40%),
-    linear-gradient(180deg, #091222 0%, #111f38 100%);
+    radial-gradient(circle at top, rgba(var(--primary-rgb), 0.18), transparent 40%),
+    linear-gradient(180deg, var(--scene-stage-from) 0%, var(--scene-stage-to) 100%);
 }
 
 .scene-overlay {
@@ -76,26 +78,26 @@
 .scene-overlay-card {
   max-width: 280px;
   padding: 12px 14px;
-  border: 1px solid rgba(148, 163, 184, 0.22);
+  border: 1px solid rgba(var(--slate-400-rgb), 0.22);
   border-radius: 14px;
-  background: rgba(9, 18, 34, 0.68);
-  color: #dbeafe;
+  background: rgba(var(--scene-panel-rgb), 0.68);
+  color: var(--scene-overlay-heading);
   backdrop-filter: blur(10px);
-  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.24);
+  box-shadow: 0 16px 40px rgba(var(--ink-rgb), 0.24);
 }
 
 .scene-overlay-card p {
   margin: 6px 0 0;
   line-height: 1.5;
   font-size: 12px;
-  color: rgba(219, 234, 254, 0.86);
+  color: var(--scene-overlay-body);
 }
 
 .scene-overlay-title {
   font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(191, 219, 254, 0.92);
+  color: var(--scene-overlay-title);
 }
 
 .floor-chip-list {
@@ -108,10 +110,10 @@
 }
 
 .floor-chip {
-  border: 1px solid rgba(148, 163, 184, 0.28);
+  border: 1px solid rgba(var(--slate-400-rgb), 0.28);
   border-radius: 999px;
-  background: rgba(9, 18, 34, 0.74);
-  color: #dbeafe;
+  background: rgba(var(--scene-panel-rgb), 0.74);
+  color: var(--scene-overlay-heading);
   padding: 8px 12px;
   font-size: 12px;
   cursor: pointer;
@@ -120,57 +122,74 @@
 
 .floor-chip:hover {
   transform: translateY(-1px);
-  border-color: rgba(96, 165, 250, 0.7);
+  border-color: rgba(var(--primary-rgb), 0.7);
 }
 
 .floor-chip.is-active {
-  background: linear-gradient(135deg, rgba(37, 99, 235, 0.9), rgba(14, 165, 233, 0.92));
-  border-color: rgba(147, 197, 253, 0.95);
-  color: #fff;
+  background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.9), rgba(var(--cyan-accent-rgb), 0.92));
+  border-color: rgba(var(--sky-300-rgb), 0.95);
+  color: var(--primary-text);
 }
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .stat-card,
 .panel {
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(248, 250, 252, 0.94));
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-card) 92%, transparent),
+    color-mix(in srgb, var(--bg-elevated) 94%, transparent)
+  );
+  box-shadow: 0 10px 30px rgba(var(--ink-rgb), 0.05);
 }
 
 .stat-card {
-  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 6px 8px;
+  min-width: 0;
 }
 
 .stat-label {
-  display: block;
-  font-size: 12px;
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.25;
   color: var(--text-subtle);
 }
 
 .stat-card strong {
-  display: block;
-  margin-top: 8px;
-  font-size: 28px;
-  line-height: 1;
+  flex-shrink: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: right;
   color: var(--text-main);
+  white-space: normal;
+  word-break: break-word;
 }
 
 .panel {
-  padding: 12px;
+  padding: 8px 10px;
 }
 
 .panel-title-row {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  gap: 12px;
-  margin-bottom: 10px;
+  gap: 8px;
+  margin-bottom: 6px;
 }
 
 .panel-hint {
@@ -179,19 +198,41 @@
 }
 
 .floor-summary {
-  min-height: 72px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, rgba(226, 232, 240, 0.55), rgba(219, 234, 254, 0.68));
-  padding: 12px;
+  min-height: 44px;
+  border-radius: 10px;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--border-subtle) 55%, transparent),
+    rgba(var(--primary-rgb), 0.14)
+  );
+  padding: 8px 10px;
   color: var(--text-main);
-  line-height: 1.65;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 #slice2d {
+  display: block;
   width: 100%;
+  max-height: min(220px, 28vh);
+  height: auto;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: var(--canvas-bg);
+}
+
+/* 实时事件流区域吃掉剩余高度，滚动条仅出现在列表内，避免整页滚动 */
+.right > section.panel:nth-child(4) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.right > section.panel:nth-child(4) .event-feed {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
 }
 
 .event-feed {
@@ -209,7 +250,7 @@
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 10px 12px;
-  background: rgba(248, 250, 252, 0.9);
+  background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
   line-height: 1.45;
   color: var(--text-main);
 }
@@ -219,9 +260,30 @@
   margin-bottom: 2px;
 }
 
-.right pre {
-  font-size: 13px;
+/* 底部状态行：保留可读行高与内边距，避免为省高度导致裁切或字形观感压扁 */
+#result {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  /* 单行时在 min-height 内垂直居中；支持 safe 的浏览器在易溢出时改为顶对齐 */
+  justify-content: center;
+  justify-content: safe center;
+  box-sizing: border-box;
   margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-subtle);
+  white-space: pre-wrap;
+  word-break: break-word;
+  min-height: 2.75rem;
+  max-height: 6rem;
+  overflow-y: auto;
 }
 
 @media (max-width: 1100px) {
@@ -244,6 +306,12 @@
   .floor-chip-list {
     max-width: none;
     justify-content: flex-start;
+  }
+}
+
+@media (max-width: 900px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

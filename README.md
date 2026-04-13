@@ -4,7 +4,7 @@
 
 ## 项目状态
 
-- 当前版本：`0.1.2`
+- 当前版本：`0.1.8`
 - 阶段状态：第一至第五阶段均已验收通过
 - 交付结论：计划项已全部完成并在 `开发计划.md` 归档勾选
 - 工程状态：后端可构建（推荐打开根目录 **`Aura.sln`** 或 `dotnet build backend/Aura.Api/Aura.Api.csproj`）、前端页面可访问、核心链路可联调
@@ -17,15 +17,17 @@
 - `Directory.Build.props`：统一 MSBuild 中间输出路径（`.verify_build\obj`）并排除误编译 `obj` 生成物，便于本机工具链
 - `backend/Aura.Api`：.NET 10 WebAPI 中枢服务；启动入口为 **`Program.cs`**，服务注册在 **`Extensions/ServiceExtensions.cs`**，路由在 **`Extensions/EndpointExtensions.cs`**，安全头与前端路由中间件在 **`Middleware/`**
 - `backend/Aura.Api.Tests`：轻量自检工程（聚类/导出等），可选执行
+- `backend/Aura.Api.Integration.Tests`：xUnit 集成测试（`WebApplicationFactory`，环境为 `Testing`）。**维护提示**：若修改 `backend/Aura.Api/appsettings.Testing.json` 中的 **`Jwt:Key` / `Jwt:Issuer` / `Jwt:Audience`**，必须同步修改 **`backend/Aura.Api.Integration.Tests/TestingJwt.cs`** 内同名常量，否则 `dotnet test` 会失败。
 - `ai`：Python FastAPI AI 服务（特征提取/检索）
 - `database/schema.pgsql.sql`：PostgreSQL 表结构
-- `frontend`：Vanilla JS 前端页面
+- `frontend`：Vanilla JS 前端页面（根目录含 **`package.json`**，维护者可执行 **`npm ci`** 与 **`npm run lint`** 做 ESLint 检查）
+- `deploy/k8s`：Kubernetes 示例（Ingress 拒绝公网 **`/metrics`**、NetworkPolicy 入站基线）与说明文档
 - `抓拍链路端到端测试清单.md`：抓拍链路测试清单
 - `抓拍链路回归脚本.ps1`：抓拍链路回归脚本
 - `全系统联调与压测脚本.ps1`：全系统联调与压测脚本
-- `部署文档与运维手册.md`：部署与运维手册
+- `docs/部署文档与运维手册.md`：部署与运维手册
 - `最终交付清单.md`：最终交付范围清单
-- `上线检查清单.md`：上线前检查清单
+- `docs/上线检查清单.md`：上线前检查清单
 
 ## 已落地核心能力
 
@@ -92,7 +94,7 @@ dotnet run
 - Linux / macOS（当前会话）：
   - `export AURA_ADMIN_USER=admin`
   - `export AURA_ADMIN_PASSWORD='你的密码'`
-- 模板文件：仓库已提供 `.env.example`，可复制为本地 `.env` 使用（`.env` 已在 `.gitignore` 中忽略，勿提交真实密码）。
+- 模板文件：仓库已提供 **`.env.example`**，与根目录 **`.env` 结构完全一致**（同一批注释与键、同一顺序），仅将口令与密钥等替换为 **`REPLACE_*`** 占位符；复制为 `.env` 后填写真实值。`.env` 已在 `.gitignore` 中忽略，勿提交真实密码。维护仓库时若调整 `.env`，请同步更新 **`.env.example`**。Docker 编排专用变量仍以 **`docker/.env*.example`** 为准。
 
 ### 本机一键启动与就绪检查
 
@@ -104,9 +106,19 @@ python start_services.py
 ```
 
 说明：
-- 脚本会优先读取根目录 `e:\Aura\.env`，并自动在启动后调用 `GET /api/ops/readiness`（需要超级管理员权限）。
+- **适用范围**：本机 **AI + .NET + PostgreSQL + Redis** 全栈联调；与仅跑 `dotnet test` 的 **`Testing` 环境**（可无 Redis/PG）不同。
+- 脚本会优先读取根目录 `e:\Aura\.env`，在启动过程中轮询：**AI 根路径**须 **HTTP 2xx** 且 JSON **`code=0` 且 `model_loaded=true`**；**.NET** 须 **`GET /api/health`** 为 **2xx** 且 **`code=0`** 且 `msg` 含「寓瞳」（避免误将 404 等响应当作就绪）。
+- 就绪后会用 **`AURA_ADMIN_PASSWORD`**（或 `.env`）登录并调用 **`GET /api/ops/readiness`**（超级管理员）。开发环境默认 **`admin` / `123456`** 与上文「开发环境账号说明」一致；若控制台出现 `密码=…` 日志行，脚本也可解析为兜底（与 `DevInitializer` 当前日志格式对齐）。
 - 若 `readiness` 输出中 `jwt=false / hmac=false`，请检查 `.env` 中 `Jwt__Key` 与 `Security__HmacSecret` 是否仍为占位值。
 - 若用于 CI 预检，可使用 `python start_services.py --run-until-ready` 让脚本在就绪检查通过后直接退出。
+
+### 集成测试（维护者）
+
+- 命令：`dotnet test backend/Aura.Api.Integration.Tests/Aura.Api.Integration.Tests.csproj`
+- 测试主机使用 `Testing` 环境，加载 `appsettings.Testing.json`，默认不连接本机 PostgreSQL 与 Redis。
+- **请务必注意**：改动 `appsettings.Testing.json` 的 JWT 段时，同步更新 `TestingJwt.cs` 中的密钥与签发方/受众，避免集成测试与真实配置脱节。
+- **运维探针**：存活检查建议使用 **`GET /api/health/live`**（无鉴权、无外部依赖）；业务向完整自检仍用 **`GET /api/ops/readiness`**（需超级管理员）。响应头 **`X-Correlation-Id`** 与请求同名校验或自动生成，便于排障。
+- **生产主机头**：`appsettings.Production.json` 中 **`AllowedHosts`** 已改为占位域名，上线前请改为实际对外主机名（分号分隔多个）；开发环境可继续为 `*`。
 
 ### Docker 化建议（脚本/巡检任务）
 
@@ -127,6 +139,11 @@ python start_services.py
 
 ## 关键接口（示例）
 
+- 存活探针（负载均衡/K8s）：`GET /api/health/live`
+- 业务健康（中文提示）：`GET /api/health`
+- Prometheus 抓取（可选）：`GET /metrics`，由配置 **`Ops:Metrics:ExposePrometheus`** 控制（默认 `true`；集成测试所用 **`Testing`** 环境为 `false`）。生产环境建议仅允许监控网络或反向代理访问该路径；按路径在公网 Ingress 上拒绝的示例见 **`deploy/k8s/ingress-nginx-deny-public-metrics.example.yaml`**。
+- OpenTelemetry 链路追踪（可选）：配置 **`Ops:Telemetry:EnableTracing`** 为 **`true`** 且设置 **`Ops:Telemetry:OtlpEndpoint`**（或环境变量 **`OTEL_EXPORTER_OTLP_ENDPOINT`**）；默认关闭。协议 **`Ops:Telemetry:OtlpProtocol`** 支持 **`Grpc`**（默认）与 **`HttpProtobuf`**。
+- AI 服务访问控制（可选）：AI 进程读取 **`AURA_API_KEY`** 时，除根路径健康检查与 OpenAPI 文档外须在请求头携带 **`X-Aura-Ai-Key`**；.NET 侧配置 **`Ai:ApiKey`** 后由命名 **`HttpClient` 自动附加同名请求头。
 - 登录：`POST /api/auth/login`
 - 抓拍接入：`POST /api/capture/push|sdk|onvif`
 - 空间碰撞：`POST /api/space/collision/check`
@@ -135,6 +152,57 @@ python start_services.py
 - 导出：`GET /api/export/{type}?dataset=capture|alert|judge`
 - 外联输出：`GET /api/output/events`、`GET /api/output/persons`
 
+## 本机可观测性最小示例（可选）
+
+以下为「能跑起来」的最小步骤；**不配置也不影响**日常开发。开发环境默认仅监听 **`https://localhost:5001`**（见 `backend/Aura.Api/Properties/launchSettings.json`）。
+
+### Prometheus 抓取 `/metrics`
+
+1. 确认 **`Ops:Metrics:ExposePrometheus`** 为 **`true`**（默认即可），或在本机 `.env` 中设置 **`Ops__Metrics__ExposePrometheus=true`**。
+2. 准备 `prometheus.yml`（在容器内访问宿主机 API 时，Windows/macOS Docker 常用 **`host.docker.internal`**）：
+
+```yaml
+scrape_configs:
+  - job_name: aura-api
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["host.docker.internal:5001"]
+```
+
+3. 启动 Prometheus（示例）：
+
+```bash
+docker run --rm -p 9090:9090 -v /path/to/prometheus.yml:/etc/prometheus/prometheus.yml prom/prometheus
+```
+
+浏览器打开 `http://localhost:9090`，查询如 `http_request_duration_seconds`（具体指标名以 **prometheus-net** 导出为准）。
+
+### OpenTelemetry 链路追踪（OTLP → Jaeger）
+
+1. 启动 Jaeger（内置 OTLP，gRPC **4317**）：
+
+```bash
+docker run -d --name jaeger -p 16686:16686 -p 4317:4317 -p 4318:4318 jaegertracing/all-in-one:latest
+```
+
+2. 在本机 **`.env`** 中追加（或写入 `appsettings.Development.json` 的 **`Ops:Telemetry`** 段）：
+
+```env
+Ops__Telemetry__EnableTracing=true
+Ops__Telemetry__OtlpEndpoint=http://127.0.0.1:4317
+Ops__Telemetry__OtlpProtocol=Grpc
+Ops__Telemetry__ServiceName=Aura.Api
+```
+
+等价可用标准变量：**`OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4317`**、**`OTEL_SERVICE_NAME=Aura.Api`**（与上一段可同时存在，以采集端文档为准）。
+
+3. 重启 API 后，访问 **`http://localhost:16686`**，在 Jaeger UI 中选择服务 **`Aura.Api`** 查看 trace。
+
+**说明**：若在 **`.env`** 中增加上述键，请同步把占位写法补进 **`.env.example`**（勿提交真实采集端内网地址若涉密）。
+
 ## 回归与压测
 
 - 抓拍链路回归：`powershell -ExecutionPolicy Bypass -File "e:\Aura\抓拍链路回归脚本.ps1"`
@@ -142,6 +210,7 @@ python start_services.py
 
 ## 部署建议
 
-- 参考 `backend/Aura.Api/appsettings.Production.json` 填充生产配置
-- 参考 `部署文档与运维手册.md` 与 `上线检查清单.md` 执行上线流程
+- 参考 `backend/Aura.Api/appsettings.Production.json` 填充生产配置，并务必设置 **`AllowedHosts`** 为实际域名
+- 参考 `docs/部署文档与运维手册.md` 与 `docs/上线检查清单.md` 执行上线流程
 - Docker 化参考：`docker/README.md`（含 `full` 联调、`ops-check` 巡检与生产模板）
+- Kubernetes：`deploy/k8s/README.md` 说明 NetworkPolicy 与按路径限制 **`/metrics`** 的关系，并提供 ingress-nginx 与 NetworkPolicy 示例清单

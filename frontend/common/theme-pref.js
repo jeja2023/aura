@@ -16,7 +16,7 @@
       var raw = localStorage.getItem(storageKey);
       if (raw === "dark" || raw === "light") return raw;
       return "light";
-    } catch (e) {
+    } catch {
       return "light";
     }
   }
@@ -24,7 +24,7 @@
   function persist(mode) {
     try {
       localStorage.setItem(storageKey, normalize(mode));
-    } catch (e) {
+    } catch {
       /* 忽略存储不可用 */
     }
   }

@@ -142,6 +142,8 @@
 - `.env` 仅用于本地开发，不要提交到仓库。
 - 生产环境优先使用 CI/CD Secret 或容器编排 Secret（例如 Kubernetes Secret）。
 - 禁止把真实密码写入镜像、代码仓库和公开日志。
+- **`backend.Dockerfile`** 与 **`ai.Dockerfile`** 以非 **`root`** 用户 **`aura`** 运行进程；若挂载持久卷到可写路径（如 **`/app/storage`**），请保证卷内权限与该用户一致，或在编排侧使用初始化容器/入口脚本调整属主（按平台策略选择）。
+- Full 联调若设置 **`AURA_API_KEY`**，须同时在 **`ai`** 与 **`api`** 服务中通过 Compose 注入（示例见 **`docker-compose.full.example.yml`**），且与 **`Ai__ApiKey`** 一致，否则中枢调用 AI 将返回 **401**。
 
 ## 生产模板说明
 
