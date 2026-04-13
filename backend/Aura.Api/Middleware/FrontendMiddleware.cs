@@ -1,4 +1,5 @@
 /* 文件：前端路由与安全响应头中间件（FrontendMiddleware.cs） | File: Frontend routing and security headers middleware */
+using Aura.Api.Internal;
 using Microsoft.Extensions.FileProviders;
 
 namespace Aura.Api.Middleware;
@@ -10,8 +11,8 @@ public static class FrontendMiddleware
         var cspPolicy = configuration["Security:CspPolicy"]
             ?? "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ws: wss:;";
 
-        var projectRoot = Directory.GetParent(environment.ContentRootPath)?.Parent?.FullName ?? environment.ContentRootPath;
-        var storageRoot = Path.Combine(projectRoot, "storage");
+        var projectRoot = ProjectPaths.ResolveProjectRoot(environment);
+        var storageRoot = ProjectPaths.ResolveStorageRoot(environment);
         var frontendRootCfg = configuration["Paths:FrontendRoot"]?.Trim();
         var frontendRoot = string.IsNullOrWhiteSpace(frontendRootCfg)
             ? Path.Combine(projectRoot, "frontend")

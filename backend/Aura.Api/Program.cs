@@ -14,7 +14,6 @@ using Aura.Api.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Prometheus;
 using Microsoft.Extensions.FileProviders;
-using Microsoft.Extensions.Hosting;
 
 var builder = WebApplication.CreateBuilder(args);
 var isDev = builder.Environment.IsDevelopment();
@@ -58,9 +57,9 @@ else
 app.UseRouting();
 app.UseHttpMetrics();
 
-// 计算路径
-var projectRoot = Directory.GetParent(app.Environment.ContentRootPath)?.Parent?.FullName ?? app.Environment.ContentRootPath;
-var storageRoot = Path.Combine(projectRoot, "storage");
+// 计算路径（统一仓库根 storage，见 Internal/ProjectPaths）
+var projectRoot = ProjectPaths.ResolveProjectRoot(app.Environment);
+var storageRoot = ProjectPaths.ResolveStorageRoot(app.Environment);
 var frontendRootCfg = app.Configuration["Paths:FrontendRoot"]?.Trim();
 var frontendRoot = string.IsNullOrWhiteSpace(frontendRootCfg)
     ? Path.Combine(projectRoot, "frontend")
