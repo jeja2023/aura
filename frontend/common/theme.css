@@ -19,6 +19,21 @@
   --sidebar-border: #e2e8f0;
   --canvas-bg: #0f1724;
   --overlay-scrim: rgba(15, 23, 42, 0.45);
+  /* 三维态势等页面复用（避免页面散落硬编码色值） */
+  --ink-rgb: 15, 23, 42;
+  --slate-50-rgb: 248, 250, 252;
+  --slate-200-rgb: 226, 232, 240;
+  --slate-400-rgb: 148, 163, 184;
+  --sky-100-rgb: 219, 234, 254;
+  --sky-200-rgb: 191, 219, 254;
+  --sky-300-rgb: 147, 197, 253;
+  --cyan-accent-rgb: 14, 165, 233;
+  --scene-panel-rgb: 9, 18, 34;
+  --scene-stage-from: #091222;
+  --scene-stage-to: #111f38;
+  --scene-overlay-title: rgba(var(--sky-200-rgb), 0.92);
+  --scene-overlay-body: rgba(var(--sky-100-rgb), 0.86);
+  --scene-overlay-heading: rgb(var(--sky-100-rgb));
   /* 表单控件（forms.css） */
   --form-radius: 9px;
   --form-control-bg: var(--bg-elevated);
@@ -64,6 +79,20 @@
   --sidebar-border: #1e293b;
   --canvas-bg: #0f1724;
   --overlay-scrim: rgba(0, 0, 0, 0.55);
+  --ink-rgb: 15, 23, 42;
+  --slate-50-rgb: 248, 250, 252;
+  --slate-200-rgb: 226, 232, 240;
+  --slate-400-rgb: 148, 163, 184;
+  --sky-100-rgb: 219, 234, 254;
+  --sky-200-rgb: 191, 219, 254;
+  --sky-300-rgb: 147, 197, 253;
+  --cyan-accent-rgb: 34, 211, 238;
+  --scene-panel-rgb: 9, 18, 34;
+  --scene-stage-from: #070b12;
+  --scene-stage-to: #0f1a30;
+  --scene-overlay-title: rgba(var(--sky-200-rgb), 0.92);
+  --scene-overlay-body: rgba(var(--sky-100-rgb), 0.86);
+  --scene-overlay-heading: rgb(var(--sky-100-rgb));
   --form-control-bg: var(--bg-elevated);
   --form-control-border: var(--border-subtle);
   --btn-secondary-bg: var(--bg-elevated);

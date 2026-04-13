@@ -15,9 +15,13 @@ RUN dotnet publish -c Release -o /app/publish --no-restore
 FROM ${DOTNET_ASPNET_IMAGE} AS runtime
 WORKDIR /app
 
+RUN groupadd --system aura && useradd --system --gid aura --no-create-home --shell /usr/sbin/nologin aura
+
 ENV ASPNETCORE_URLS=http://0.0.0.0:5000
 EXPOSE 5000
 
-COPY --from=build /app/publish ./
+COPY --from=build --chown=aura:aura /app/publish ./
+
+USER aura
 
 ENTRYPOINT ["dotnet", "Aura.Api.dll"]

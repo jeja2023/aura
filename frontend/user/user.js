@@ -243,7 +243,7 @@ function setupTabs() {
     { tabEl: tabUpdate, panelEl: panelUpdate, selected: false }
   ];
 
-  function setActive(targetTabEl, targetPanelEl) {
+  function setActive(targetTabEl, _targetPanelEl) {
     tabs.forEach((t) => {
       const isActive = t.tabEl === targetTabEl;
       t.tabEl.classList.toggle("is-active", isActive);

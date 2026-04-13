@@ -1,0 +1,37 @@
+# Dependabot：依赖与安全更新 PR（可按组织策略调整频率与审查人）
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: /backend/Aura.Api
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: nuget
+    directory: /backend/Aura.Api.Tests
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: nuget
+    directory: /backend/Aura.Api.Integration.Tests
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: pip
+    directory: /ai
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

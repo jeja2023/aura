@@ -1,0 +1,75 @@
+name: dotnet-ci
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "backend/**"
+      - "ai/**"
+      - "frontend/**"
+      - "start_services.py"
+      - "Aura.sln"
+      - ".github/workflows/**"
+      - ".editorconfig"
+      - ".env.example"
+      - "Directory.Build.props"
+      - "global.json"
+      - "deploy/**"
+  pull_request:
+    branches: [main, master]
+    paths:
+      - "backend/**"
+      - "ai/**"
+      - "frontend/**"
+      - "start_services.py"
+      - "Aura.sln"
+      - ".github/workflows/**"
+      - ".editorconfig"
+      - ".env.example"
+      - "Directory.Build.props"
+      - "global.json"
+      - "deploy/**"
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 校验 start_services.py 语法
+        run: python -m py_compile start_services.py
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 前端 ESLint
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run lint
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore and build
+        run: dotnet build "${{ github.workspace }}/Aura.sln" -c Release
+
+      - name: NuGet 依赖漏洞检查（含传递依赖）
+        run: dotnet list "${{ github.workspace }}/Aura.sln" package --vulnerable --include-transitive
+
+      - name: 运行算法与导出自检（Aura.Api.Tests）
+        run: dotnet run --project "${{ github.workspace }}/backend/Aura.Api.Tests/Aura.Api.Tests.csproj" -c Release --no-build
+
+      - name: 运行集成测试（WebApplicationFactory）
+        run: dotnet test "${{ github.workspace }}/backend/Aura.Api.Integration.Tests/Aura.Api.Integration.Tests.csproj" -c Release --no-build --verbosity normal

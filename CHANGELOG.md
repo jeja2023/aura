@@ -4,6 +4,121 @@
 
 ---
 
+## [0.1.9] - 2026-04-13
+
+### 前端 · 三维空间态势页
+
+- **`frontend/scene/scene.css`**：右侧栏收紧纵向间距，并为 **`.right`** 设置 **`min-height: 0`** 与 **`overflow: hidden`**，与主区域 flex 布局配合，减轻整栏内容外溢。
+- **统计区**：桌面端由 **2×2** 调整为 **一行四列**（窄屏 **≤900px** 回退两列、**≤720px** 单列）；卡片内 **标签与数值横向排列**，减小内边距与字号，降低统计区高度。
+- **「实时事件流」**：对应右栏第 4 块面板使用 **`flex: 1`** 占据剩余高度，**`.event-feed`** 取消固定 **`max-height: 240px`**，仅在列表区域内部滚动，尽量避免 **浏览器整页纵向滚动条**。
+- **2D 楼层切片**：**`#slice2d`** 增加 **`max-height: min(220px, 28vh)`** 与 **`display: block`**，控制画布占高。
+- **楼层态势**：**`.floor-summary`** 降低 **`min-height`**、收紧内边距与字号；**`.panel`** / **`.panel-title-row`** 间距略减。
+- **底部状态 `#result`**：改为独立状态条样式（边框、主题变量背景、**`pre-wrap`**、合理 **`min-height` / `max-height`** 与 **`overflow-y: auto`**），避免过小的 **`max-height` + `overflow: hidden`** 导致文案 **裁切或观感压扁**；使用列方向 **`flex`** 与 **`justify-content: safe center`**（并保留 **`center`** 回退），使 **「操作完成」** 等 **单行提示在框内垂直居中**，内容过高时仍以顶部为安全对齐并可在区域内滚动。
+
+---
+
+## [0.1.8] - 2026-04-13
+
+### 可观测性
+
+- **OpenTelemetry**：引入 **`OpenTelemetry.Extensions.Hosting`**、**`Instrumentation.AspNetCore`**、**`Instrumentation.Http`**、**`Exporter.OpenTelemetryProtocol`**；通过 **`Ops:Telemetry:EnableTracing`** 与 **`Ops:Telemetry:OtlpEndpoint`**（或 **`OTEL_EXPORTER_OTLP_ENDPOINT`**）按需启用 OTLP 导出；ASP.NET 采集过滤 **`/metrics`** 以降低噪声。
+
+### AI 与网关
+
+- **AI API Key**：FastAPI 在设置环境变量 **`AURA_API_KEY`** 时校验请求头 **`X-Aura-Ai-Key`**（根路径 **`/`** 与 OpenAPI 文档路径除外）；.NET 配置 **`Ai:ApiKey`** 后由 **`HttpClient`** 默认附加同名请求头。
+- **Compose / 模板**：**`docker-compose.full.example.yml`** 与 **`docker/.env.full.example`** 增加可选 **`AURA_API_KEY`** / **`Ai__ApiKey`**；根目录 **`.env.example`** 与真实 **`.env`** 键名对齐（本机联调：脚本登录、**.NET**、**AI**、可观测性、Arango 等），并注明与 **`docker/.env*.example`** 分工。
+- **`start_services.py`**：开发预检中 **`Jwt__Key`** 支持从环境变量（根目录 **`.env`**）覆盖，与 **`.env.example`** 约定一致。
+
+### 前端与 CI
+
+- **ESLint**：**`frontend/package.json`**、**`eslint.config.cjs`**（忽略 **`common/vendor/**`**），修正少量 **`no-unused-vars`** 与全局 **`THREE` / `echarts`** 声明；**`dotnet-ci.yml`** 增加 Node 20、**`npm ci`** 与 **`npm run lint`**。
+- **Dependabot**：增加 **`npm`** 生态 **`/frontend`**。
+
+### Kubernetes
+
+- **`deploy/k8s/`**：**`README.md`**（策略说明）、**`ingress-nginx-deny-public-metrics.example.yaml`**（公网 Ingress 拒绝 **`/metrics`**）、**`network-policy-api.example.yaml`**（入站基线示例）。
+
+---
+
+## [0.1.7] - 2026-04-13
+
+### 可观测性与安全基线
+
+- **Prometheus**：接入 **`prometheus-net.AspNetCore`**，在管道中启用 **`UseHttpMetrics`**，并按配置 **`Ops:Metrics:ExposePrometheus`** 映射 **`GET /metrics`**（默认开启；**`appsettings.Testing.json`** 中为 **`false`** 以免测试环境暴露抓取端点）。
+- **前端路由中间件**：将 **`/metrics`** 视为保留路径，避免未登录访问被重定向到登录页而无法抓取指标。
+- **容器镜像**：**`docker/backend.Dockerfile`**、**`docker/ai.Dockerfile`** 增加非 **`root`** 运行用户 **`aura`**，发布产物与 **`/app`** 目录按属主调整；**`docker/README.md`**「安全建议」补充卷权限与非 root 说明。
+
+### 仓库与配置
+
+- **`.env.example`**：根目录环境变量模板（双下划线配置键、脚本账号变量），与 **`docker/.env*.example`** 分工说明写在文件头注释中。
+- **`.gitignore`**：增加 **`!.env.example`**，确保该模板可被提交与克隆后可见。
+- **生产配置模板**：**`appsettings.Production.json`** 补充 **`Ops:Metrics`** 段，与基线 **`appsettings.json`** 对齐。
+
+### 文档
+
+- **`README.md`**：版本 **`0.1.7`**，补充 **`/metrics`** 与 **`Ops:Metrics:ExposePrometheus`** 说明。
+
+---
+
+## [0.1.6] - 2026-04-13
+
+### 运维脚本与文档
+
+- **`start_services.py`**：就绪探测改为 **`_wait_http_json_probe`**，仅接受 **HTTP 2xx**，并对 **AI**（`code=0` 且 **`model_loaded=true`**）与 **.NET**（`/api/health` 的 `code=0` 且 `msg` 含「寓瞳」）做 JSON 校验，避免 404 等被误判为已就绪；文件头补充与 **Testing** 环境的适用边界说明。
+- **`start_services.py`**：更正 **`_extract_dev_admin_password_from_log_line`** 文档字符串，与 **`DevInitializer`** 当前固定 **`123456`** 及日志格式一致。
+- **`README.md`**：在「本机一键启动与就绪检查」中补充探针语义、全栈前置条件及与 **`readiness`** 的衔接说明。
+
+---
+
+## [0.1.5] - 2026-04-13
+
+### 后端：企业级韧性、可观测与错误边界
+
+- **出站 HTTP 弹性**：引入 `Microsoft.Extensions.Http.Resilience`，为 **AI 服务**（`AiService`）与 **告警 Webhook**（`AlertNotifier`）命名 `HttpClient` 配置标准重试/超时/熔断；`HttpClient.Timeout` 设为无限，由管道控制总时长。超时与重试次数可通过 **`HttpClients:Ai`**、**`HttpClients:AlertNotifier`** 配置（见 `appsettings.json`）；熔断采样窗口按尝试超时自动放大以满足框架校验。
+- **全局异常处理**：非 `Development` 环境使用统一 JSON 响应（`code: 50000`、中文 `msg`、**`traceId`**），不向客户端返回堆栈；开发环境启用 **`UseDeveloperExceptionPage`**。
+- **请求关联 ID**：新增 **`CorrelationIdMiddleware`**，支持请求头 **`X-Correlation-Id`** 透传或自动生成，写入响应头与日志作用域；**`PureConsoleFormatter`** 在日志行前输出 `[关联Id]`。
+- **存活探针**：新增 **`GET /api/health/live`**（无鉴权、无外部依赖，返回 `{ "status": "alive" }`），供负载均衡/K8s liveness；原 **`GET /api/health`** 保留业务向提示。
+- **生产主机头**：**`appsettings.Production.json`** 中 **`AllowedHosts`** 由 `*` 改为占位域名，上线前需替换为真实主机名；根 `appsettings.json` 保留注释说明。
+- **启动日志**：生命周期日志中的环境名称改为输出 **`EnvironmentName`**（如 `Testing`、`Production`），避免非 Development 被误标为「生产环境」。
+
+### CI 与测试
+
+- **漏洞扫描**：`dotnet-ci.yml` 增加 **`dotnet list package --vulnerable --include-transitive`**。
+- **集成测试**：补充 **`/api/health/live`**、响应头 **`X-Correlation-Id`** 及透传一致性用例。
+
+### 文档
+
+- **`README.md`**：版本 `0.1.5`，关键接口与集成测试小节补充探针与关联 ID、`AllowedHosts` 说明。
+
+---
+
+## [0.1.4] - 2026-04-13
+
+### 后端：路由拆分、就绪探测、限流与 HttpClient
+
+- **路由模块化**：将 `MapAuraEndpoints` 拆为 `AuraEndpointsCore` / `Auth` / `CampusFloor` / `DeviceCapture` / `Domain` 多文件，入口仍集中在 `Extensions/EndpointExtensions.cs`。
+- **PostgreSQL 就绪检查**：`/api/ops/readiness` 的 `pgsql` 项改为执行 `SELECT 1` 真实探测，不再恒为 `true`。
+- **登录限流**：`/api/auth/login` 在 Redis 可用时按「客户端 IP + 用户名」维度限流（每分钟 20 次），降低暴力尝试风险；未启用 Redis 时与其它限流一致不拦截。
+- **告警 HttpClient**：`AlertNotifier` 改为通过 `IHttpClientFactory` 命名客户端 `AlertNotifier` 创建，避免裸 `new HttpClient()` 的长连接问题。
+- **内存回退开关**：新增配置 `Aura:AllowInMemoryDataFallback`（默认 `false`；开发环境 `appsettings.Development.json` 为 `true`）。为 `false` 时，列表类接口在数据库无行时返回空集合，写入失败返回 503，不再静默写入内存 `AppStore`。
+- **SignalR 提示**：在 `AddSignalR` 处增加中文注释，提醒多实例需 Redis Backplane。
+- **集成测试**：新增 `backend/Aura.Api.Integration.Tests`（xUnit + `WebApplicationFactory`），覆盖 `GET /api/health`；根目录增加 `Program.Public.cs` 中的 `public partial class Program` 供工厂引用。
+- **测试环境**：`appsettings.Testing.json` + `AuraApiFactory`（`ASPNETCORE_ENVIRONMENT=Testing`）避免连接本机 Redis/PG、跳过开发库初始化，并补充未登录根路径重定向用例。
+- **集成测试补充**：`TestingJwt` 与 Testing 配置对齐签发 Cookie 用 JWT，覆盖「已登录访问 `/` → `/index/`」前端路由中间件行为（无需真实数据库登录）。
+- **文档提示**：`README.md` 目录说明与「集成测试（维护者）」小节、`appsettings.Testing.json` 与 `TestingJwt.cs` 文件头均注明：修改 Testing 环境 JWT 配置须同步更新测试常量。
+- **CI**：新增 `.github/workflows/dotnet-ci.yml`，在推送/PR 时执行 `dotnet build`、自检工程 `dotnet run` 与集成测试。
+
+### 前端与 AI
+
+- **主题与态势页**：在 `common/theme.css` 补充场景用色板变量；`scene/scene.css` 改为引用主题变量与 `color-mix`，减少页面内硬编码色值。
+- **Python 依赖锁定**：`ai/requirements.txt` 改为固定版本号，便于复现构建。
+
+### 数据库
+
+- **迁移目录**：新增 `database/migrations/README.txt`，约定增量 SQL 命名与执行顺序（基线仍以 `schema.pgsql.sql` 为准）。
+
+---
+
 ## [0.1.3] - 2026-04-11
 
 ### 后端：依赖注入架构加固与启动稳定性修复
@@ -405,4 +520,4 @@
 ## 版本规范
 
 - 版本号遵循 `MAJOR.MINOR.PATCH`
-- 当前版本：`0.1.2`
+- 当前版本：`0.1.9`

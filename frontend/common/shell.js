@@ -197,7 +197,6 @@
   // 暴露工具
   window.aura = {
     animateNumber: (el, target, duration = 1000) => {
-      let start = 0;
       let startTime = null;
       function step(timestamp) {
         if (!startTime) startTime = timestamp;

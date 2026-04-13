@@ -817,6 +817,29 @@ internal sealed class PgSqlStore
             return ([], 0);
         }
     }
+
+    public async Task<bool> TryPingAsync(CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(_connectionString))
+        {
+            _logger?.LogWarning("PostgreSQL 连接串未配置，就绪探测失败。");
+            return false;
+        }
+
+        try
+        {
+            await using var conn = CreateConnection();
+            await conn.OpenAsync(cancellationToken);
+            await using var cmd = new NpgsqlCommand("SELECT 1", conn);
+            var scalar = await cmd.ExecuteScalarAsync(cancellationToken);
+            return scalar is not null;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "PostgreSQL 就绪探测失败。");
+            return false;
+        }
+    }
 }
 
 internal sealed record DbUser(string UserName, string PasswordHash, string? RoleName);

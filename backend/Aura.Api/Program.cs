@@ -12,6 +12,7 @@ using Aura.Api.Internal;
 using Aura.Api.Middleware;
 using Aura.Api.Services;
 using Microsoft.Extensions.DependencyInjection;
+using Prometheus;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 
@@ -38,8 +39,24 @@ builder.Services.AddOpenApi();
 
 // 使用扩展方法注册 Aura 相关服务
 builder.Services.AddAuraServices(builder.Configuration, builder.Environment, isDev);
+builder.Services.AddAuraOpenTelemetry(builder.Configuration, builder.Environment);
 
 var app = builder.Build();
+
+// 关联 ID 与全局异常（须尽早，以便异常响应携带 traceId）
+app.UseMiddleware<CorrelationIdMiddleware>();
+if (app.Environment.IsDevelopment())
+{
+    app.UseDeveloperExceptionPage();
+}
+else
+{
+    app.UseAuraGlobalExceptionHandler();
+}
+
+// Prometheus HTTP 指标（与 MapMetrics 配套；可由 Ops:Metrics:ExposePrometheus 关闭）
+app.UseRouting();
+app.UseHttpMetrics();
 
 // 计算路径
 var projectRoot = Directory.GetParent(app.Environment.ContentRootPath)?.Parent?.FullName ?? app.Environment.ContentRootPath;
@@ -98,6 +115,12 @@ app.UseAuthorization();
 // 使用扩展方法映射路由
 app.MapAuraEndpoints(builder.Configuration, isDev);
 
+if (app.Configuration.GetValue("Ops:Metrics:ExposePrometheus", true))
+{
+    // 暴露 Prometheus 抓取端点（生产环境请通过网络策略或反向代理限制访问范围）
+    app.MapMetrics();
+}
+
 // 注册定时研判逻辑
 var dailyJudgeState = app.Services.GetRequiredService<DailyJudgeScheduleState>();
 var cache = app.Services.GetRequiredService<RedisCacheService>();
@@ -131,7 +154,7 @@ app.Lifetime.ApplicationStarted.Register(() =>
     var urls = string.Join(", ", app.Urls);
     logger.LogInformation("寓瞳中枢服务已成功启动。");
     logger.LogInformation("正在监听：{Urls}", urls);
-    logger.LogInformation("运行环境：{Environment}", app.Environment.IsDevelopment() ? "开发环境" : "生产环境");
+    logger.LogInformation("运行环境：{Environment}", app.Environment.EnvironmentName);
     logger.LogInformation("按 Ctrl+C 键停止服务。");
 });
 
@@ -152,6 +175,24 @@ internal sealed class PureConsoleFormatter : ConsoleFormatter
         var message = logEntry.Formatter(logEntry.State, logEntry.Exception);
         if (string.IsNullOrEmpty(message)) return;
 
+        string? correlation = null;
+        scopeProvider?.ForEachScope<object?>((scope, _) =>
+        {
+            if (correlation is not null) return;
+            if (scope is IEnumerable<KeyValuePair<string, object>> kvps)
+            {
+                foreach (var kv in kvps)
+                {
+                    if (kv.Key == CorrelationIdMiddleware.ScopeKey)
+                    {
+                        correlation = kv.Value?.ToString();
+                        return;
+                    }
+                }
+            }
+        }, null);
+        var correlationPrefix = string.IsNullOrEmpty(correlation) ? "" : $"[{correlation}] ";
+
         var prefix = logEntry.LogLevel switch
         {
             LogLevel.Information => "",
@@ -163,7 +204,7 @@ internal sealed class PureConsoleFormatter : ConsoleFormatter
             _ => ""
         };
 
-        textWriter.WriteLine($"{prefix}{message}");
+        textWriter.WriteLine($"{correlationPrefix}{prefix}{message}");
         if (logEntry.Exception != null)
         {
             textWriter.WriteLine(logEntry.Exception.ToString());

@@ -10,7 +10,8 @@ from pathlib import Path
 
 import numpy as np
 import onnxruntime as ort
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from PIL import Image
 from pydantic import BaseModel
 
@@ -44,6 +45,33 @@ async def _lifespan(app: FastAPI):
 
 
 app = FastAPI(title="寓瞳AI推理服务", version="0.1.0", lifespan=_lifespan)
+
+
+@app.middleware("http")
+async def _aura_ai_api_key_guard(request: Request, call_next):
+    """若设置环境变量 AURA_API_KEY，则除根路径健康检查与 OpenAPI 文档外须携带请求头 X-Aura-Ai-Key。"""
+    expected = os.getenv("AURA_API_KEY", "").strip()
+    if not expected:
+        return await call_next(request)
+    if request.method in ("GET", "HEAD"):
+        path = request.url.path
+        if (
+            path == "/"
+            or path == "/openapi.json"
+            or path.startswith("/docs")
+            or path.startswith("/redoc")
+            or path == "/favicon.ico"
+        ):
+            return await call_next(request)
+    incoming = request.headers.get("X-Aura-Ai-Key", "")
+    if incoming != expected:
+        return JSONResponse(
+            status_code=401,
+            content={"code": 40101, "msg": "未授权访问AI服务"},
+        )
+    return await call_next(request)
+
+
 COLLECTION_NAME = "aura_reid"
 VECTOR_DIM = 512
 _local_index = []
