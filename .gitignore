@@ -46,9 +46,10 @@ coverage/
 *.log
 logs/
 
-# 上传与导出的大文件目录
+# 上传与导出的大文件目录（仅仓库根 storage/；勿在 backend 下另建）
 storage/uploads/
 storage/outputs/
+backend/**/storage/
 
 # 数据与二进制大文件
 *.zip

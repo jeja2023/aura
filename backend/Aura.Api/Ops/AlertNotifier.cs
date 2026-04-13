@@ -102,8 +102,16 @@ internal sealed class AlertNotifier : IAlertNotifier
     private async Task NotifyFileAsync(AlertNotifyMessage message, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(_filePath)) return;
+        /* 禁止相对路径：Path.GetFullPath 会相对进程 CWD，易在 backend/Aura.Api 下误建 storage */
+        if (!Path.IsPathRooted(_filePath))
+        {
+            _logger.LogWarning("告警文件路径必须为绝对路径（请经 ProjectPaths.ResolvePathRelativeToProjectRoot 解析）。path={Path}", _filePath);
+            return;
+        }
+
         try
         {
+            /* 路径应在启动时由 ProjectPaths.ResolvePathRelativeToProjectRoot 解析为绝对路径，勿依赖 CWD */
             var path = Path.GetFullPath(_filePath);
             var dir = Path.GetDirectoryName(path);
             if (!string.IsNullOrWhiteSpace(dir))

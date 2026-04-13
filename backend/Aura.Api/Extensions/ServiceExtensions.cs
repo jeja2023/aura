@@ -19,16 +19,10 @@ namespace Aura.Api.Extensions;
 
 public static class ServiceExtensions
 {
-    private static string ResolveProjectRoot(IHostEnvironment env) =>
-        Directory.GetParent(env.ContentRootPath)?.Parent?.FullName ?? env.ContentRootPath;
-
-    private static string ResolveStorageRoot(IHostEnvironment env) =>
-        Path.Combine(ResolveProjectRoot(env), "storage");
-
     private static string ResolveCaptureRetryFolder(IConfiguration configuration, IHostEnvironment env)
     {
-        var projectRoot = ResolveProjectRoot(env);
-        var storageRoot = ResolveStorageRoot(env);
+        var projectRoot = ProjectPaths.ResolveProjectRoot(env);
+        var storageRoot = ProjectPaths.ResolveStorageRoot(env);
         var retryRoot = configuration["Storage:CaptureRetryRoot"];
         if (string.IsNullOrWhiteSpace(retryRoot))
         {
@@ -57,7 +51,7 @@ public static class ServiceExtensions
         var pgsqlConn = configuration.GetConnectionString("PgSql") ?? "";
         var redisConn = configuration.GetConnectionString("Redis") ?? "";
         var alertWebhookUrl = configuration["Ops:Alert:WebhookUrl"];
-        var alertNotifyFilePath = configuration["Ops:Alert:FilePath"];
+        var alertNotifyFilePath = ProjectPaths.ResolvePathRelativeToProjectRoot(hostEnvironment, configuration["Ops:Alert:FilePath"]);
 
         var aiTotalTimeout = configuration.GetValue("HttpClients:Ai:TotalRequestTimeoutSeconds", 120);
         var aiAttemptTimeout = configuration.GetValue("HttpClients:Ai:AttemptTimeoutSeconds", 90);
@@ -145,7 +139,7 @@ public static class ServiceExtensions
             sp.GetRequiredService<AppStore>(),
             sp.GetRequiredService<PgSqlStore>(),
             sp.GetRequiredService<TabularExportService>(),
-            ResolveStorageRoot(hostEnvironment)));
+            ProjectPaths.ResolveStorageRoot(hostEnvironment)));
         services.AddScoped<OutputApplicationService>();
         services.AddScoped<VectorApplicationService>(sp => new VectorApplicationService(
             sp.GetRequiredService<AiClient>(),
@@ -160,7 +154,7 @@ public static class ServiceExtensions
             sp.GetRequiredService<RetryQueueService>(),
             sp.GetRequiredService<AiClient>(),
             sp.GetRequiredService<EventDispatchService>(),
-            ResolveStorageRoot(hostEnvironment),
+            ProjectPaths.ResolveStorageRoot(hostEnvironment),
             ResolveCaptureRetryFolder(configuration, hostEnvironment),
             configuration.GetValue("CaptureRetry:PreferInlineBase64", false),
             configuration.GetValue("CaptureRetry:AllowInlineBase64Fallback", false),
@@ -169,7 +163,7 @@ public static class ServiceExtensions
         services.AddScoped<ResourceManagementService>(sp => new ResourceManagementService(
             sp.GetRequiredService<AppStore>(),
             sp.GetRequiredService<PgSqlStore>(),
-            ResolveStorageRoot(hostEnvironment)));
+            ProjectPaths.ResolveStorageRoot(hostEnvironment)));
         services.AddScoped<OperationQueryService>();
         services.AddScoped<CaptureOpsService>();
         

@@ -5,6 +5,7 @@ using Aura.Api.Models;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Hosting;
 
 namespace Aura.Api.Extensions;
 
@@ -103,8 +104,8 @@ internal static class AuraEndpointsCampusFloor
             var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
             if (new[] { ".png", ".jpg", ".jpeg", ".webp" }.All(x => x != ext)) return Results.BadRequest(new { code = 40033, msg = "仅支持 png/jpg/jpeg/webp" });
 
-            var projectRoot = Directory.GetParent(AppContext.BaseDirectory)?.Parent?.Parent?.Parent?.FullName ?? AppContext.BaseDirectory;
-            var storageRoot = Path.Combine(projectRoot, "storage");
+            var env = request.HttpContext.RequestServices.GetRequiredService<IHostEnvironment>();
+            var storageRoot = ProjectPaths.ResolveStorageRoot(env);
             var folder = Path.Combine(storageRoot, "uploads", "floors");
             Directory.CreateDirectory(folder);
             var safeName = $"{DateTimeOffset.Now.ToUnixTimeMilliseconds()}_{Guid.NewGuid():N}{ext}";

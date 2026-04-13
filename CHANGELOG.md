@@ -4,6 +4,21 @@
 
 ---
 
+## [0.1.10] - 2026-04-13
+
+### 后端 · 统一存储路径与楼层图上传修复
+
+- **`Internal/ProjectPaths.cs`**：新增仓库根与 **`storage`** 的**唯一解析入口**——优先从 **`ContentRoot` 向上查找 `Aura.sln`** 定位仓库根，失败则回退为「**`ContentRoot` 的上上级**」（兼容本地 **`backend/Aura.Api`** 与容器 **`/app`**）；**`ResolveStorageRoot`** 固定为 **`{仓库根}/storage`**；**`ResolvePathRelativeToProjectRoot`** 将配置中的相对路径解析为**相对仓库根的绝对路径**，**不依赖进程当前工作目录**。
+- **`Program.cs`**、**`ServiceExtensions.cs`**、**`Middleware/FrontendMiddleware.cs`**、**`AuraEndpointsCampusFloor.cs`**：静态 **`/storage`** 与各服务注入的 **`storageRoot`** 均改为使用 **`ProjectPaths`**，与「仅使用仓库根下 **`storage/`**」的设计一致。
+- **楼层图上传**：**`POST /api/floor/upload`** 落盘目录与 **`Program`** 中 **`UseStaticFiles(/storage)`** 的物理根一致，修复此前用 **`AppContext.BaseDirectory`** 推算导致文件写入 **`backend` 侧错误目录**、预览 **`/storage/...` 返回 404** 的问题。
+- **告警落盘**：**`Ops:Alert:FilePath`** 在注册 **`AlertNotifier`** 时经 **`ResolvePathRelativeToProjectRoot`** 解析；**`AlertNotifier`** 对**非绝对路径**拒绝写入并打日志，避免 **`Path.GetFullPath` 相对 CWD**（如 **`start_services`** 将 API 工作目录设为 **`backend/Aura.Api`**）在 **`backend/Aura.Api/storage`** 下误建目录。
+
+### 仓库
+
+- **`.gitignore`**：增加 **`backend/**/storage/`**，避免误将 **`backend` 下误生成的 `storage`** 提交入库。
+
+---
+
 ## [0.1.9] - 2026-04-13
 
 ### 前端 · 三维空间态势页
@@ -520,4 +535,4 @@
 ## 版本规范
 
 - 版本号遵循 `MAJOR.MINOR.PATCH`
-- 当前版本：`0.1.9`
+- 当前版本：`0.1.10`
