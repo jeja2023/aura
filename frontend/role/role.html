@@ -22,34 +22,58 @@
     <main class="app-content">
       <div class="page">
         <section class="role-toolbar">
-          <input id="roleName" type="text" placeholder="角色名，如安保巡查员" />
-          <div class="permission-dropdown" id="permissionDropdown">
-            <button id="permissionToggle" type="button" class="permission-toggle" aria-expanded="false">权限列表（可多选）</button>
-            <div id="permissionMenu" class="permission-menu" hidden>
-              <label><input type="checkbox" value="campus" /> 集宿资源树</label>
-              <label><input type="checkbox" value="floor" /> 楼层图纸</label>
-              <label><input type="checkbox" value="camera" /> 摄像头布点</label>
-              <label><input type="checkbox" value="roi" /> ROI 防区</label>
-              <label><input type="checkbox" value="device" /> NVR 设备</label>
-              <label><input type="checkbox" value="capture" /> 抓拍记录</label>
-              <label><input type="checkbox" value="scene" /> 三维空间态势</label>
-              <label><input type="checkbox" value="alert" /> 告警中心</label>
-              <label><input type="checkbox" value="judge" /> 归寝研判</label>
-              <label><input type="checkbox" value="track" /> 轨迹回放</label>
-              <label><input type="checkbox" value="search" /> 以图搜轨</label>
-              <label><input type="checkbox" value="stats" /> 统计驾驶舱</label>
-              <label><input type="checkbox" value="export" /> 报表导出</label>
-              <label><input type="checkbox" value="role" /> 角色管理</label>
-              <label><input type="checkbox" value="user" /> 用户管理</label>
-              <label><input type="checkbox" value="log" /> 操作与系统日志</label>
-            </div>
-          </div>
-          <button id="create" class="btn-secondary" type="button">创建角色</button>
+          <input id="keyword" class="aura-search-input" type="text" placeholder="角色关键词（名称/权限）" autocomplete="off" />
           <button id="load" class="btn-secondary" type="button">查询角色</button>
+          <button id="openCreateRoleModal" class="btn-primary" type="button">创建角色</button>
         </section>
-        <pre id="result" class="aura-status" role="status" hidden aria-live="polite"></pre>
+        <pre id="result" class="aura-status aura-display-box" role="status" hidden aria-live="polite"></pre>
+        <div id="roleTableWrap" class="role-table-wrap" hidden>
+          <div class="aura-data-table-wrap">
+            <table class="aura-data-table" aria-label="角色列表">
+              <thead id="roleTableHead"></thead>
+              <tbody id="roleTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="rolePager" hidden></div>
       </div>
     </main>
+  </div>
+
+  <div id="roleCreateModal" class="aura-modal-root" hidden>
+    <div class="aura-modal-backdrop" tabindex="-1" aria-hidden="true"></div>
+    <div class="aura-modal-panel role-modal-create" role="dialog" aria-modal="true" aria-labelledby="roleCreateModalTitle">
+      <div class="aura-modal-head">
+        <h2 id="roleCreateModalTitle" class="aura-modal-title">创建角色</h2>
+        <button type="button" class="btn-secondary aura-modal-close" data-aura-modal-dismiss aria-label="关闭对话框">关闭</button>
+      </div>
+      <div class="role-modal-fields aura-modal-fields">
+        <input id="roleName" class="aura-input" type="text" placeholder="角色名称，如：楼栋巡查员" />
+        <div class="role-permission-grid" id="permissionMenu">
+          <label><input type="checkbox" value="campus" /> 集宿资源树</label>
+          <label><input type="checkbox" value="floor" /> 楼层图纸</label>
+          <label><input type="checkbox" value="camera" /> 摄像头布点</label>
+          <label><input type="checkbox" value="roi" /> ROI 防区</label>
+          <label><input type="checkbox" value="device" /> NVR 设备</label>
+          <label><input type="checkbox" value="capture" /> 抓拍记录</label>
+          <label><input type="checkbox" value="scene" /> 三维空间态势</label>
+          <label><input type="checkbox" value="alert" /> 告警中心</label>
+          <label><input type="checkbox" value="judge" /> 归寝研判</label>
+          <label><input type="checkbox" value="track" /> 轨迹回放</label>
+          <label><input type="checkbox" value="search" /> 以图搜轨</label>
+          <label><input type="checkbox" value="stats" /> 统计驾驶舱</label>
+          <label><input type="checkbox" value="export" /> 报表导出</label>
+          <label><input type="checkbox" value="role" /> 角色管理</label>
+          <label><input type="checkbox" value="user" /> 用户管理</label>
+          <label><input type="checkbox" value="log" /> 操作与系统日志</label>
+        </div>
+      </div>
+      <div class="aura-modal-actions">
+        <button type="button" class="btn-secondary" data-aura-modal-dismiss>取消</button>
+        <button id="create" class="btn-primary" type="button">创建角色</button>
+      </div>
+      <pre id="createRoleResult" class="aura-status aura-display-box" role="status" hidden aria-live="polite"></pre>
+    </div>
   </div>
   <script defer src="../common/shell.js"></script>
   <script defer src="./role.js"></script>

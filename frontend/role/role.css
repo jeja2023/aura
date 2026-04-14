@@ -15,69 +15,107 @@
   align-items: flex-end;
 }
 
-.role-toolbar input {
-  width: auto; /* 覆盖 forms.css 的 input 默认 width: 100% */
-  max-width: 100%;
-}
-
-/* 角色名相对窄，权限JSON相对宽 */
-.role-toolbar #roleName {
-  flex: 0 1 220px;
-  min-width: 180px;
-}
-
-.role-toolbar .permission-dropdown {
-  position: relative;
-  flex: 0 1 260px;
-  min-width: 220px;
-}
-
-.permission-toggle {
-  width: 100%;
-  min-height: 38px;
-  text-align: left;
-  border: 1px solid var(--form-control-border);
-  border-radius: var(--form-radius);
-  background: var(--form-control-bg);
-  color: var(--text-main);
-  padding: 9px 12px;
-  cursor: pointer;
-}
-
-.permission-menu {
-  position: absolute;
-  z-index: 20;
-  top: calc(100% + 6px);
-  left: 0;
-  width: 100%;
-  max-height: 220px;
-  overflow: auto;
-  border: 1px solid var(--form-control-border);
-  border-radius: var(--form-radius);
-  background: var(--bg-elevated);
-  box-shadow: var(--shadow);
-  padding: 8px;
-}
-
-.role-toolbar .permission-menu > label {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  width: 100%;
-  gap: 8px;
-  margin: 0;
-  padding: 6px 4px;
-  font-size: 13px;
-  color: var(--text-main);
-}
-
 .role-toolbar button {
   flex: 0 0 auto;
   white-space: nowrap;
+}
+
+.role-toolbar #keyword {
+  width: min(320px, 100%);
+  min-width: 220px;
 }
 
 @media (max-width: 720px) {
   .role-toolbar {
     flex-wrap: wrap;
   }
+}
+
+.role-table-wrap {
+  margin-top: 12px;
+}
+
+.role-modal-create.aura-modal-panel {
+  width: min(100%, 860px);
+  max-height: min(92vh, 820px);
+}
+
+.role-permission-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  background: var(--bg-elevated);
+}
+
+.role-permission-grid > label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 2px 0;
+  line-height: 1.25;
+  font-size: 13px;
+  color: var(--text-main);
+  margin: 0;
+}
+
+@media (max-width: 980px) {
+  .role-modal-create.aura-modal-panel {
+    width: min(100%, 760px);
+  }
+
+  .role-permission-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .role-permission-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.role-table-wrap .aura-data-table-wrap {
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--line) 65%, transparent);
+}
+
+.role-table-wrap .aura-data-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 11px 14px;
+  font-size: 12px;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--card) 62%, var(--bg) 38%);
+}
+
+.role-table-wrap .aura-data-table tbody td {
+  padding: 11px 14px;
+  border-color: color-mix(in srgb, var(--line) 75%, transparent);
+  vertical-align: middle;
+}
+
+.role-table-wrap .aura-data-table tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--bg) 35%, var(--panel) 65%);
+}
+
+.role-table-wrap .aura-data-table tbody tr:hover td {
+  background: rgba(var(--primary-rgb), 0.08);
+}
+
+.role-table-wrap .aura-data-table .role-col-name {
+  min-width: 160px;
+}
+
+.role-table-wrap .aura-data-table .role-col-permission {
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.5;
 }

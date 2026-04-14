@@ -88,7 +88,7 @@ async function post(path, body) {
   return await res.json();
 }
 
-async function load() {
+async function load(options = {}) {
   setResult("");
 
   try {
@@ -97,7 +97,9 @@ async function load() {
       credentials: "include"
     });
     const data = await res.json();
-    setResult(data);
+    if (!options.silentSuccessToast || !data || data.code !== 0) {
+      setResult(data);
+    }
   } catch (error) {
     setResult(`查询失败：${error.message}`);
   }
@@ -155,3 +157,4 @@ document.getElementById("runDaily").addEventListener("click", runDaily);
 document.getElementById("runHome").addEventListener("click", runHome);
 document.getElementById("runAbnormal").addEventListener("click", runAbnormal);
 document.getElementById("runNight").addEventListener("click", runNight);
+void load({ silentSuccessToast: true });

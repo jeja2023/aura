@@ -4,14 +4,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>日志</title>
+  <title>操作日志</title>
   <script src="../common/theme-pref.js"></script>
   <link rel="stylesheet" href="../common/theme.css" />
   <link rel="stylesheet" href="../common/shell.css" />
   <link rel="stylesheet" href="../common/forms.css" />
-  <link rel="stylesheet" href="./log.css" />
+  <link rel="stylesheet" href="./log.css?v=20260413c" />
 </head>
-<body class="app-body" data-shell-title="操作与系统日志">
+<body class="app-body" data-shell-title="操作日志">
   <aside class="app-sidebar" id="auraSidebar" aria-label="主导航"></aside>
   <div class="app-frame">
     <header class="app-topbar">
@@ -22,16 +22,25 @@
     <main class="app-content">
       <div class="page">
         <div class="log-toolbar">
-          <input id="keyword" placeholder="关键字筛选，如设备注册" />
-          <input id="page" placeholder="页码，默认1" />
-          <input id="pageSize" placeholder="每页条数，默认20" />
-          <button id="load" type="button">查询日志</button>
+          <select id="logType">
+            <option value="operation">操作日志</option>
+            <option value="system">系统日志</option>
+          </select>
+          <input id="keyword" class="aura-search-input" placeholder="关键字筛选，如设备注册" />
+          <button id="load" class="btn-secondary" type="button">查询日志</button>
         </div>
-        <pre id="result" class="aura-status" role="status" hidden aria-live="polite"></pre>
+        <pre id="result" class="aura-status aura-display-box" role="status" hidden aria-live="polite"></pre>
+        <div id="tableWrap" class="log-table-wrap" hidden>
+          <table class="log-table">
+            <thead id="tableHead"></thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+        <div id="pager" hidden></div>
       </div>
     </main>
   </div>
   <script defer src="../common/shell.js"></script>
-  <script defer src="./log.js"></script>
+  <script defer src="./log.js?v=20260413c"></script>
 </body>
 </html>

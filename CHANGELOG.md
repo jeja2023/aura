@@ -4,6 +4,47 @@
 
 ---
 
+## [0.1.11] - 2026-04-14
+
+### 前端 · 页面与全局交互统一升级
+
+- **全局样式与交互底座**：`frontend/common/forms.css`、`frontend/common/shell.css`、`frontend/common/theme.css`、`frontend/common/shell.js` 大幅增强，统一了按钮语义（`btn-primary/btn-secondary/btn-danger`）、Toast、分页器（`aura-pager`）、弹窗基础交互、顶栏主题切换与状态提示。
+- **按钮可见性优化（浅色/深色）**：次要按钮与危险按钮全部纳入主题变量控制，强化边框/背景/阴影与 hover 反馈；修复在深浅主题下“按钮存在感弱、操作不显著”的问题。
+- **用户管理重构**：`frontend/user/user.html/.css/.js` 增加创建/重置密码/删除弹窗流程、列表分页、关键词过滤、创建时间与最后登录时间展示、CSV 模板下载、批量导入、导出能力，并统一复用全局按钮/表格/弹窗样式。
+- **角色管理增强**：`frontend/role/role.html/.css/.js` 优化角色列表渲染、权限中文展示、分页能力与创建弹窗流程；移除“查询角色”按钮的页面私有样式覆盖，回归全局按钮体系。
+- **跨页面一致性收敛**：`alert/camera/campus/capture/device/floor/index/judge/log/login/roi/scene/search/stats/track` 等页面的 `html/js/css` 同步接入全局样式与壳层交互能力，减少页面私有重复实现，提升一致性。
+
+### 后端 · 时间序列化、用户域与日志查询能力
+
+- **时间序列化统一**：新增 `backend/Aura.Api/Serialization/AuraJsonSerializerOptions.cs` 与 `DateTimeDisplayJsonConverters.cs`，将 `DateTime/DateTimeOffset` 统一序列化为 `yyyy-MM-dd HH:mm:ss` 展示格式，降低前端解析与显示分歧。
+- **系统日志查询服务化**：新增 `backend/Aura.Api/SystemLogQueryService.cs`，并在 `AuraEndpointsDomain` 中提供系统日志列表查询入口（分页 + 关键词过滤 + 内存回退）。
+- **用户域能力补齐**：`IdentityAdminService`、`PgSqlStore`、`Models/Entities.cs`、`Models/Requests.cs` 等同步支持用户 `display_name`、`last_login_at`、展示昵称与登录时间链路；登录/用户查询流程与实体映射保持一致。
+- **端点与服务扩展**：`AuraEndpointsAuth/Core/Domain`、`ServiceExtensions`、`Program`、`AppStore`、`RetryQueueService`、`CaptureProcessingService`、`RetryProcessingService`、`DeviceManagementService`、`JudgeService` 等完成一轮协同调整，统一时间类型与接口返回结构，完善服务注入与运行稳定性。
+
+### 后端与数据库 · 研判结果时间类型一致性修复
+
+- **Dapper 物化修复**：`backend/Aura.Api/Data/PgSqlStore.cs` 中 `DbJudgeResult` 改为显式属性 + 构造函数映射，修复 `GetJudgeResultsAsync` 物化失败（构造签名不匹配）问题。
+- **CreatedAt 统一语义**：`DbJudgeResult` 对外统一 `CreatedAt: DateTimeOffset`，并兼容 `DateTime`/`DateTimeOffset` 双构造入参，避免驱动或字段类型差异导致的时间映射异常。
+- **开发库基线优化**：`database/schema.pgsql.sql` 将 `judge_result.created_at` 基线改为 `TIMESTAMPTZ`；未部署开发环境可直接按基线建库，无需增量迁移脚本。
+
+### 脚本、部署与测试
+
+- **启动脚本增强**：`start_services.py` 完善开发预检与就绪检查流程（连接串占位检测、端口占用清理、AI/.NET JSON 探针、管理员自动登录 + readiness 校验），提升本机全栈联调稳定性。
+- **部署脚本收敛**：`docker/deploy-aura-ubuntu.sh` 对齐 .NET 10.0.201 镜像版本、补齐生产环境变量与提示文案，强化命名卷保留与删卷风险说明。
+- **集成测试补充**：`backend/Aura.Api.Integration.Tests/HealthEndpointTests.cs` 同步更新健康检查相关断言与用例，覆盖本轮核心健康路径改动。
+- **存储目录占位**：`storage/.gitkeep` 纳入版本管理，确保开发与部署环境在仓库层具备稳定目录基线。
+
+### 按文件落点（审计清单）
+
+- **后端核心**：`backend/Aura.Api/Program.cs`、`backend/Aura.Api/Extensions/AuraEndpointsAuth.cs`、`backend/Aura.Api/Extensions/AuraEndpointsCore.cs`、`backend/Aura.Api/Extensions/AuraEndpointsDomain.cs`、`backend/Aura.Api/Extensions/ServiceExtensions.cs`、`backend/Aura.Api/Data/PgSqlStore.cs`、`backend/Aura.Api/Data/AppStore.cs`、`backend/Aura.Api/Models/Entities.cs`、`backend/Aura.Api/Models/Requests.cs`、`backend/Aura.Api/Internal/DevInitializer.cs`、`backend/Aura.Api/IdentityAdminService.cs`、`backend/Aura.Api/DeviceManagementService.cs`、`backend/Aura.Api/JudgeService.cs`、`backend/Aura.Api/Capture/CaptureProcessingService.cs`、`backend/Aura.Api/RetryProcessingService.cs`、`backend/Aura.Api/Cache/RetryQueueService.cs`。
+- **后端新增文件**：`backend/Aura.Api/Serialization/AuraJsonSerializerOptions.cs`、`backend/Aura.Api/Serialization/DateTimeDisplayJsonConverters.cs`、`backend/Aura.Api/SystemLogQueryService.cs`。
+- **数据库与部署脚本**：`database/schema.pgsql.sql`、`docker/deploy-aura-ubuntu.sh`、`start_services.py`、`storage/.gitkeep`。
+- **前端全局公共层**：`frontend/common/forms.css`、`frontend/common/shell.css`、`frontend/common/shell.js`、`frontend/common/theme.css`。
+- **前端业务页面（HTML/CSS/JS）**：`frontend/alert/*`、`frontend/camera/*`、`frontend/campus/*`、`frontend/capture/*`、`frontend/device/*`、`frontend/floor/*`、`frontend/index/*`、`frontend/judge/*`、`frontend/log/*`、`frontend/login/*`、`frontend/roi/*`、`frontend/role/*`、`frontend/scene/*`、`frontend/search/*`、`frontend/stats/*`、`frontend/track/*`、`frontend/user/*`。
+- **测试与文档**：`backend/Aura.Api.Integration.Tests/HealthEndpointTests.cs`、`CHANGELOG.md`。
+
+---
+
 ## [0.1.10] - 2026-04-13
 
 ### 后端 · 统一存储路径与楼层图上传修复
@@ -535,4 +576,4 @@
 ## 版本规范
 
 - 版本号遵循 `MAJOR.MINOR.PATCH`
-- 当前版本：`0.1.10`
+- 当前版本：`0.1.11`

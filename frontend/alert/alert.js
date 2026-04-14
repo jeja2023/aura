@@ -1,6 +1,9 @@
 /* 文件：告警页脚本（alert.js） | File: Alert Script */
 const apiBase = "";
 const resultEl = document.getElementById("result");
+const createAlertResultEl = document.getElementById("createAlertResult");
+const alertCreateModalEl = document.getElementById("alertCreateModal");
+const openCreateAlertModalBtn = document.getElementById("openCreateAlertModal");
 
 /** 成功提示自动消失定时器 */
 let successStatusTimer = null;
@@ -18,6 +21,42 @@ function hideResult() {
   resultEl.textContent = "";
   resultEl.hidden = true;
   resultEl.classList.remove("is-error");
+}
+
+function hideCreateAlertResult() {
+  if (!createAlertResultEl) return;
+  createAlertResultEl.textContent = "";
+  createAlertResultEl.hidden = true;
+  createAlertResultEl.classList.remove("is-error");
+}
+
+function setCreateAlertResult(data) {
+  if (!createAlertResultEl) return;
+  const isEmpty = !data || (typeof data === "string" && data.trim() === "");
+  if (isEmpty) {
+    hideCreateAlertResult();
+    return;
+  }
+  const message = deriveMessage(data);
+  const isError = isErrorPayload(data, message);
+  createAlertResultEl.textContent = message;
+  createAlertResultEl.hidden = false;
+  createAlertResultEl.classList.toggle("is-error", isError);
+}
+
+function closeAlertCreateModal() {
+  if (!alertCreateModalEl) return;
+  alertCreateModalEl.hidden = true;
+  document.body.style.overflow = "";
+}
+
+function openAlertCreateModal() {
+  if (!alertCreateModalEl) return;
+  alertCreateModalEl.hidden = false;
+  document.body.style.overflow = "hidden";
+  hideCreateAlertResult();
+  const typeEl = document.getElementById("type");
+  if (typeEl instanceof HTMLInputElement) typeEl.focus();
 }
 
 function deriveMessage(data) {
@@ -70,10 +109,10 @@ function setResult(data) {
 async function createAlert() {
   const alertType = document.getElementById("type").value.trim();
   const detail = document.getElementById("detail").value.trim();
-  setResult("");
+  setCreateAlertResult("");
 
   if (!alertType || !detail) {
-    setResult("请填写告警类型和详情");
+    setCreateAlertResult("请填写告警类型和详情");
     return;
   }
 
@@ -85,13 +124,21 @@ async function createAlert() {
       body: JSON.stringify({ alertType, detail })
     });
     const data = await res.json();
-    setResult(data);
+    setCreateAlertResult(data);
+    if (res.ok && data?.code === 0) {
+      const typeEl = document.getElementById("type");
+      const detailEl = document.getElementById("detail");
+      if (typeEl instanceof HTMLInputElement) typeEl.value = "";
+      if (detailEl instanceof HTMLInputElement) detailEl.value = "";
+      closeAlertCreateModal();
+      void load();
+    }
   } catch (error) {
-    setResult(`新增失败：${error.message}`);
+    setCreateAlertResult(`新增失败：${error.message}`);
   }
 }
 
-async function load() {
+async function load(options = {}) {
   setResult("");
 
   try {
@@ -99,11 +146,19 @@ async function load() {
       credentials: "include"
     });
     const data = await res.json();
-    setResult(data);
+    if (!options.silentSuccessToast || !data || data.code !== 0) {
+      setResult(data);
+    }
   } catch (error) {
     setResult(`查询失败：${error.message}`);
   }
 }
 
+openCreateAlertModalBtn?.addEventListener("click", openAlertCreateModal);
+alertCreateModalEl?.querySelectorAll("[data-aura-modal-dismiss]").forEach((el) => {
+  el.addEventListener("click", () => closeAlertCreateModal());
+});
+
 document.getElementById("load").addEventListener("click", load);
 document.getElementById("create").addEventListener("click", createAlert);
+void load({ silentSuccessToast: true });

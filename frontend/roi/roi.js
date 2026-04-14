@@ -182,4 +182,5 @@ document.getElementById("saveBtn").addEventListener("click", async () => {
 });
 
 document.getElementById("loadBtn").addEventListener("click", load);
+void load();
 draw();

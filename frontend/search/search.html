@@ -23,10 +23,10 @@
       <div class="page">
         <section class="card search-toolbar">
           <input id="file" type="file" accept="image/*" />
-          <label title="最多返回的相似结果条数">返回条数 <input id="topk" type="number" value="10" min="1" max="50" /></label>
-          <button id="runBtn" type="button">提特征并检索</button>
+          <label title="最多返回的相似结果条数">返回条数 <input id="topk" class="aura-input" type="number" value="10" min="1" max="50" /></label>
+          <button id="runBtn" class="btn-primary" type="button">提特征并检索</button>
         </section>
-        <pre id="result" class="aura-status" role="status" hidden aria-live="polite"></pre>
+        <pre id="result" class="aura-status aura-display-box" role="status" hidden aria-live="polite"></pre>
       </div>
     </main>
   </div>

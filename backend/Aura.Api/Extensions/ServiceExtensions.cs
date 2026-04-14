@@ -165,6 +165,7 @@ public static class ServiceExtensions
             sp.GetRequiredService<PgSqlStore>(),
             ProjectPaths.ResolveStorageRoot(hostEnvironment)));
         services.AddScoped<OperationQueryService>();
+        services.AddScoped<SystemLogQueryService>();
         services.AddScoped<CaptureOpsService>();
         
         // 多实例水平扩展时需配置 Redis Backplane，否则 SignalR 连接仅落在单节点。

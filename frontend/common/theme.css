@@ -43,6 +43,17 @@
   --btn-secondary-text: var(--text-main);
   --btn-secondary-border: var(--border-subtle);
   --btn-secondary-hover-bg: rgba(var(--primary-rgb), 0.08);
+  --btn-secondary-hover-border: var(--primary);
+  --btn-secondary-shadow: 0 2px 8px rgba(var(--primary-rgb), 0.16);
+  --btn-secondary-hover-shadow: 0 5px 14px rgba(var(--primary-rgb), 0.24);
+  --danger-rgb: 239, 68, 68;
+  --danger: rgb(var(--danger-rgb));
+  --danger-hover-rgb: 220, 38, 38;
+  --danger-hover: rgb(var(--danger-hover-rgb));
+  --danger-text: #ffffff;
+  --danger-border: rgba(var(--danger-rgb), 0.95);
+  --danger-shadow: 0 2px 10px rgba(var(--danger-rgb), 0.28);
+  --danger-hover-shadow: 0 4px 12px rgba(var(--danger-hover-rgb), 0.3);
   /* 文件选择控件在横排卡片中的统一宽度（forms.css） */
   --form-file-input-basis: 320px;
   --form-file-input-min: 200px;
@@ -99,6 +110,17 @@
   --btn-secondary-text: var(--text-main);
   --btn-secondary-border: var(--border-subtle);
   --btn-secondary-hover-bg: rgba(var(--primary-rgb), 0.16);
+  --btn-secondary-hover-border: var(--primary);
+  --btn-secondary-shadow: 0 2px 10px rgba(0, 0, 0, 0.28);
+  --btn-secondary-hover-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  --danger-rgb: 248, 113, 113;
+  --danger: rgb(var(--danger-rgb));
+  --danger-hover-rgb: 239, 68, 68;
+  --danger-hover: rgb(var(--danger-hover-rgb));
+  --danger-text: #ffffff;
+  --danger-border: rgba(var(--danger-rgb), 0.92);
+  --danger-shadow: 0 3px 12px rgba(var(--danger-rgb), 0.32);
+  --danger-hover-shadow: 0 6px 18px rgba(var(--danger-hover-rgb), 0.42);
   --skeleton-bg: #1e293b;
   --skeleton-blink: rgba(255, 255, 255, 0.05);
 }

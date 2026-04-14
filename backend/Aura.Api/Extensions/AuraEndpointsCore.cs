@@ -17,6 +17,8 @@ internal static class AuraEndpointsCore
         var isDev = ctx.IsDev;
         var db = ctx.Db;
         var cache = ctx.Cache;
+        var store = ctx.Store;
+        var allow = ctx.AllowInMemoryFallback;
         var alertNotifier = ctx.AlertNotifier;
         var ai = ctx.Ai;
         var readinessLogger = ctx.ReadinessLogger;
@@ -27,6 +29,52 @@ internal static class AuraEndpointsCore
         // 负载均衡 / K8s 存活探针：无鉴权、无外部依赖，不暴露业务文案
         app.MapGet("/api/health/live", () => Results.Ok(new { status = "alive" }));
         app.MapGet("/api/health", () => Results.Ok(new { code = 0, msg = "寓瞳中枢服务运行正常", time = DateTimeOffset.Now }));
+
+        app.MapPost("/api/audit/page-view", async (HttpRequest request, HttpContext http, PageViewAuditReq req) =>
+        {
+            if (http.User.Identity?.IsAuthenticated != true) return Results.Unauthorized();
+
+            var rawPath = (req.PagePath ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(rawPath) || rawPath.Length > 256 || !rawPath.StartsWith('/'))
+            {
+                return Results.BadRequest(new { code = 40021, msg = "页面路径不合法" });
+            }
+
+            var path = AuraHelpers.Sanitize(rawPath);
+            var userName = http.User.Identity?.Name ?? "unknown";
+            var ip = http.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+            var eventTypeRaw = (req.EventType ?? "enter").Trim().ToLowerInvariant();
+            var isLeave = eventTypeRaw == "leave";
+            var eventName = isLeave ? "页面离开" : "页面进入";
+            var dim = $"{userName}|{path}|{eventName}";
+            var rl = await AuraHelpers.CheckRateLimitAsync(request, cache, "audit.page", 1, TimeSpan.FromMinutes(2), dim);
+            if (rl is not null) return Results.Ok(new { code = 0, msg = "上报成功" });
+
+            var title = AuraHelpers.Sanitize((req.PageTitle ?? "").Trim());
+            var sessionId = AuraHelpers.Sanitize((req.SessionId ?? "").Trim());
+            var stayMs = req.StayMs.GetValueOrDefault();
+            if (stayMs < 0) stayMs = 0;
+            if (stayMs > 7L * 24 * 60 * 60 * 1000) stayMs = 7L * 24 * 60 * 60 * 1000;
+            var stayPart = isLeave ? $", 停留毫秒={stayMs}" : "";
+            var titlePart = string.IsNullOrWhiteSpace(title) ? "" : $", 标题={title}";
+            var sessionPart = string.IsNullOrWhiteSpace(sessionId) ? "" : $", 会话={sessionId}";
+            var detail = $"页面={path}{titlePart}{stayPart}{sessionPart}, IP={ip}";
+
+            var opId = await db.InsertOperationAsync(userName, eventName, detail);
+            await db.InsertSystemLogAsync("信息", "页面审计", $"用户={userName}, {detail}");
+            if (!opId.HasValue && allow)
+            {
+                AuraHelpers.AddOperationLog(store, userName, eventName, detail);
+                store.SystemLogs.Add(new SystemLogEntity(
+                    SystemLogId: Interlocked.Increment(ref store.SystemLogSeed),
+                    Level: "信息",
+                    Source: "页面审计",
+                    Message: $"用户={userName}, {detail}",
+                    CreatedAt: DateTimeOffset.Now));
+            }
+
+            return Results.Ok(new { code = 0, msg = "上报成功" });
+        }).RequireAuthorization();
 
         app.MapGet("/api/ops/readiness", async () =>
         {

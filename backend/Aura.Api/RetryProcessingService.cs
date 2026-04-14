@@ -3,6 +3,7 @@ using Aura.Api.Ai;
 using Aura.Api.Cache;
 using Aura.Api.Data;
 using Aura.Api.Models;
+using Aura.Api.Serialization;
 
 internal sealed class RetryProcessingService
 {
@@ -122,7 +123,7 @@ internal sealed class RetryProcessingService
             map["ai_success"] = aiResult.Success;
             map["ai_dim"] = aiResult.Dim;
             map["ai_msg"] = aiResult.Message;
-            return JsonSerializer.Serialize(map);
+            return JsonSerializer.Serialize(map, AuraJsonSerializerOptions.Default);
         }
         catch
         {
@@ -132,7 +133,7 @@ internal sealed class RetryProcessingService
                 ai_success = aiResult.Success,
                 ai_dim = aiResult.Dim,
                 ai_msg = aiResult.Message
-            });
+            }, AuraJsonSerializerOptions.Default);
         }
     }
 

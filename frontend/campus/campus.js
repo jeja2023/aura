@@ -66,7 +66,7 @@ function setResult(data) {
   }
 }
 
-async function load() {
+async function load(options = {}) {
   setResult("");
 
   try {
@@ -74,10 +74,13 @@ async function load() {
       credentials: "include"
     });
     const data = await res.json();
-    setResult(data);
+    if (!options.silentSuccessToast || !data || data.code !== 0) {
+      setResult(data);
+    }
   } catch (error) {
     setResult(`查询失败：${error.message}`);
   }
 }
 
 document.getElementById("load").addEventListener("click", load);
+void load({ silentSuccessToast: true });

@@ -1,6 +1,7 @@
 /* 文件：公开健康检查集成测试 | File: Health endpoint integration tests */
 using System.Net;
 using System.Net.Http;
+using System.Text;
 using Aura.Api.Middleware;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
@@ -70,5 +71,53 @@ public sealed class HealthEndpointTests : IClassFixture<AuraApiFactory>
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         var location = response.Headers.Location?.ToString() ?? "";
         Assert.Contains("/index/", location, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task 研判异常接口已注册且可访问()
+    {
+        var client = _factory.CreateClient();
+        var token = TestingJwt.CreateToken(role: "building_admin");
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/judge/run/abnormal");
+        request.Headers.Add("Cookie", $"aura_token={token}");
+        request.Content = new StringContent("""{"date":"2026-04-13","groupThreshold":2,"stayMinutes":120}""", Encoding.UTF8, "application/json");
+        var response = await client.SendAsync(request);
+        Assert.NotEqual(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task 研判夜不归宿接口已注册且可访问()
+    {
+        var client = _factory.CreateClient();
+        var token = TestingJwt.CreateToken(role: "building_admin");
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/judge/run/night");
+        request.Headers.Add("Cookie", $"aura_token={token}");
+        request.Content = new StringContent("""{"date":"2026-04-13","cutoffHour":23}""", Encoding.UTF8, "application/json");
+        var response = await client.SendAsync(request);
+        Assert.NotEqual(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task 页面访问审计接口已注册且可访问()
+    {
+        var client = _factory.CreateClient();
+        var token = TestingJwt.CreateToken(role: "building_admin");
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/audit/page-view");
+        request.Headers.Add("Cookie", $"aura_token={token}");
+        request.Content = new StringContent("""{"pagePath":"/index/","pageTitle":"态势看板","eventType":"enter","stayMs":0,"sessionId":"test-session"}""", Encoding.UTF8, "application/json");
+        var response = await client.SendAsync(request);
+        Assert.NotEqual(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task 页面离开审计接口可访问()
+    {
+        var client = _factory.CreateClient();
+        var token = TestingJwt.CreateToken(role: "building_admin");
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/audit/page-view");
+        request.Headers.Add("Cookie", $"aura_token={token}");
+        request.Content = new StringContent("""{"pagePath":"/index/","pageTitle":"态势看板","eventType":"leave","stayMs":1234,"sessionId":"test-session"}""", Encoding.UTF8, "application/json");
+        var response = await client.SendAsync(request);
+        Assert.NotEqual(HttpStatusCode.NotFound, response.StatusCode);
     }
 }

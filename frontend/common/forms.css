@@ -54,6 +54,44 @@
   opacity: var(--form-placeholder-opacity);
 }
 
+/* —— 输入框/搜索框/显示框语义类（全局统一） —— */
+.aura-input {
+  width: 100%;
+  max-width: 100%;
+}
+
+.aura-search-input {
+  background: color-mix(in srgb, var(--form-control-bg) 88%, var(--bg) 12%);
+  border-color: rgba(var(--primary-rgb), 0.32);
+}
+
+.aura-search-input:hover {
+  border-color: rgba(var(--primary-rgb), 0.52);
+}
+
+.aura-search-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.2);
+}
+
+.aura-display-box {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--form-control-border);
+  border-radius: var(--form-radius);
+  background: var(--form-control-bg);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.aura-display-box.is-error {
+  border-color: rgba(var(--primary-rgb), 0.35);
+  background: rgba(var(--primary-rgb), 0.06);
+}
+
 /* 文件选择：虚线边框；宽度由下方「卡片内横排」规则约束，避免占满整行 */
 .app-content input[type="file"],
 .box input[type="file"] {
@@ -94,8 +132,8 @@
 }
 
 /* —— 按钮统一规范（强制复用） —— */
-:is(.app-content, .box, .app-topbar, .panel, .actions, .bar, .toolbar)
-  :is(.btn-primary, .btn-secondary, button:not([class]), button[type="submit"]) {
+:is(.app-content, .box, .app-topbar, .panel, .actions, .bar, .toolbar, .user-card-controls)
+  :is(.btn-primary, .btn-secondary, .btn-danger, button:not([class]), button[type="submit"]) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -113,31 +151,81 @@
 }
 
 /* 主要按钮风格 */
-:is(.btn-primary, button:not([class]), button[type="submit"]) {
+.btn-primary,
+button:not([class]),
+button[type="submit"] {
   color: var(--primary-text);
   background: var(--primary);
+  border-color: var(--primary);
   box-shadow: 0 2px 8px rgba(var(--primary-rgb), 0.25);
 }
-:is(.btn-primary, button:not([class]), button[type="submit"]):hover {
+.btn-primary:hover,
+button:not([class]):hover,
+button[type="submit"]:hover {
   background: var(--primary-hover);
+  border-color: var(--primary-hover);
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(var(--primary-rgb), 0.35);
 }
-:is(.btn-primary, button:not([class]), button[type="submit"]):active {
+.btn-primary:active,
+button:not([class]):active,
+button[type="submit"]:active {
   transform: translateY(0);
   box-shadow: 0 1px 4px rgba(var(--primary-rgb), 0.2);
 }
 
 /* 次要按钮风格 */
 .btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 9px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  border: 1px solid color-mix(in srgb, var(--btn-secondary-border) 38%, var(--primary) 62%);
+  border-radius: var(--form-radius);
+  cursor: pointer;
+  transition: var(--transition-normal);
+  white-space: nowrap;
   color: var(--btn-secondary-text);
-  background: var(--btn-secondary-bg);
-  border-color: var(--btn-secondary-border);
+  background: color-mix(in srgb, var(--btn-secondary-bg) 82%, var(--primary) 18%);
+  box-shadow: var(--btn-secondary-shadow);
 }
 .btn-secondary:hover {
-  border-color: var(--primary);
+  border-color: var(--btn-secondary-hover-border);
   background: var(--btn-secondary-hover-bg);
-  color: var(--primary);
+  color: var(--btn-secondary-text);
+  transform: translateY(-1px);
+  box-shadow: var(--btn-secondary-hover-shadow);
+}
+
+/* 危险按钮风格（删除/危险操作） */
+.btn-danger {
+  color: var(--danger-text);
+  background: var(--danger);
+  border-color: var(--danger-border);
+  box-shadow: var(--danger-shadow);
+}
+
+.btn-danger:hover {
+  background: var(--danger-hover);
+  border-color: var(--danger-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--danger-hover-shadow);
+}
+
+/* 统一焦点态与禁用态 */
+:is(.btn-primary, .btn-secondary, .btn-danger, button:not([class]), button[type="submit"]):focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.25);
+}
+
+:is(.btn-primary, .btn-secondary, .btn-danger, button:not([class]), button[type="submit"]):disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 /* 数字/日期等窄控件在横向 label 内不必全宽撑开 */
@@ -309,5 +397,312 @@
 }
 .app-content .page a[href]:hover {
   text-decoration: underline;
+}
+
+/* 数据表（业务区通用，与日志表视觉对齐；浅色/暗黑随主题变量） */
+.app-content .aura-data-table-wrap {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  overflow: auto;
+  max-height: min(520px, 62vh);
+}
+
+.app-content .aura-data-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.app-content .aura-data-table thead th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text);
+  background: color-mix(in srgb, var(--card) 70%, var(--bg) 30%);
+  border: 1px solid var(--line);
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.app-content .aura-data-table tbody td {
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 9px 12px;
+  vertical-align: middle;
+  word-break: break-word;
+  font-size: 13px;
+}
+
+.app-content .aura-data-table tbody tr:hover td {
+  background: rgba(var(--primary-rgb), 0.06);
+}
+
+.app-content .aura-data-table .aura-col-id {
+  width: 80px;
+}
+
+.app-content .aura-data-table .aura-col-status {
+  width: 92px;
+}
+
+.app-content .aura-data-table .aura-col-action {
+  width: 108px;
+  text-align: center;
+}
+
+.app-content .aura-data-table .aura-col-time {
+  width: 178px;
+}
+
+.app-content .aura-data-table .aura-col-action .btn-secondary {
+  padding-left: 12px;
+  padding-right: 12px;
+  min-height: 34px;
+  font-size: 13px;
+}
+
+/* 模态对话框（全站通用：遮罩 + 面板，随主题变量） */
+.aura-modal-root {
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.aura-modal-root[hidden] {
+  display: none !important;
+}
+
+.aura-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--overlay-scrim);
+  cursor: default;
+}
+
+.aura-modal-panel {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 440px);
+  max-height: min(90vh, 680px);
+  overflow: auto;
+  padding: 20px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+
+.aura-modal-head {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.aura-modal-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.35;
+}
+
+.aura-modal-close {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 6px 14px;
+  font-size: 13px;
+}
+
+/* 全局统一：弹窗文字按钮（关闭/取消/确认） */
+.aura-modal-panel .aura-modal-close.btn-secondary,
+.aura-modal-panel .aura-modal-actions .btn-secondary,
+.aura-modal-panel .aura-modal-actions .btn-primary {
+  min-height: 36px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.aura-modal-panel .aura-modal-close.btn-secondary,
+.aura-modal-panel .aura-modal-actions .btn-secondary {
+  border-color: rgba(var(--primary-rgb), 0.28);
+  background: color-mix(in srgb, var(--btn-secondary-bg) 90%, var(--bg) 10%);
+}
+
+.aura-modal-panel .aura-modal-close.btn-secondary:hover,
+.aura-modal-panel .aura-modal-actions .btn-secondary:hover {
+  border-color: rgba(var(--primary-rgb), 0.5);
+  background: rgba(var(--primary-rgb), 0.1);
+  color: var(--primary);
+}
+
+.aura-modal-panel .aura-modal-actions .btn-primary {
+  min-width: 108px;
+  box-shadow: 0 2px 8px rgba(var(--primary-rgb), 0.26);
+}
+
+/* 弹窗右上角图标关闭（与次要按钮配色一致） */
+.aura-modal-close-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  margin: 0;
+  border-radius: var(--form-radius);
+  border: 1px solid var(--btn-secondary-border);
+  background: var(--btn-secondary-bg);
+  color: var(--btn-secondary-text);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease,
+    transform 0.12s ease;
+}
+
+.aura-modal-close-btn:hover {
+  border-color: var(--primary);
+  background: var(--btn-secondary-hover-bg);
+  color: var(--primary);
+}
+
+.aura-modal-close-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.25);
+}
+
+.aura-modal-close-icon-svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+
+.aura-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+/* 全局统一：弹窗字段区（创建类弹窗复用） */
+.aura-modal-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.aura-modal-fields input,
+.aura-modal-fields select,
+.aura-modal-fields textarea {
+  min-height: 40px;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-weight: 500;
+  border: 1px solid rgba(var(--primary-rgb), 0.35);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--form-control-bg) 92%, var(--bg) 8%);
+  color: var(--text);
+}
+
+.aura-modal-fields input::placeholder,
+.aura-modal-fields textarea::placeholder {
+  color: var(--text-muted);
+  opacity: 0.9;
+}
+
+.aura-modal-fields input:hover,
+.aura-modal-fields select:hover,
+.aura-modal-fields textarea:hover {
+  border-color: rgba(var(--primary-rgb), 0.55);
+}
+
+.aura-modal-fields input:focus,
+.aura-modal-fields select:focus,
+.aura-modal-fields textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.2);
+}
+
+/* 全局分页条（列表页统一复用） */
+.aura-pager {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 10px;
+  width: 100%;
+  padding-top: 8px;
+}
+
+.aura-pager-info {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 0 4px;
+  white-space: nowrap;
+}
+
+.aura-pager .aura-pager-btn.btn-secondary {
+  min-height: 34px;
+  padding: 6px 14px;
+  font-size: 13px;
+  border-color: rgba(var(--primary-rgb), 0.3);
+  background: color-mix(in srgb, var(--btn-secondary-bg) 88%, var(--bg) 12%);
+  color: var(--text-main);
+  border-radius: 8px;
+}
+
+.aura-pager .aura-pager-btn.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  border-color: var(--btn-secondary-border);
+  color: var(--text-muted);
+  background: var(--btn-secondary-bg);
+  transform: none;
+}
+
+.aura-pager-size-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.aura-pager-size-label .aura-pager-size {
+  min-height: 32px;
+  width: auto;
+  min-width: 72px;
+}
+
+/* 覆盖全局 label/select 规则：分页“每页 xx 条”强制同一行展示 */
+.app-content .aura-pager .aura-pager-size-label {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
+.app-content .aura-pager .aura-pager-size-label .aura-pager-size {
+  width: auto;
+  min-width: 84px;
+  height: 34px;
+  min-height: 34px;
+  padding: 6px 28px 6px 10px;
 }
 

@@ -7,78 +7,28 @@
   padding: 16px;
 }
 
-/* 用户管理：创建/查询/更新三卡片同一行（小屏自动换行） */
-.user-cards {
+.user-page {
   display: flex;
-  flex-wrap: nowrap;
+  flex-direction: column;
   gap: 16px;
-  align-items: flex-start;
 }
 
-/* 用户管理：Tabs（一个页面内切换三个标签页） */
-.user-tabs-header {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 10px;
-  align-items: center;
-  margin-bottom: 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--line);
-}
-
-.user-tab {
-  /* 注意：forms.css 会统一覆盖 button 的外观，这里用更高选择器在下方兜底 */
-}
-
-.user-tab.is-active {
-  /* 注意：激活态同样在下方兜底 */
-}
-
-.app-content .page .user-tabs-header .user-tab {
-  border: none !important;
-  background: transparent !important;
-  color: var(--muted) !important;
-  border-radius: 0 !important;
-  padding: 8px 12px !important;
-  cursor: pointer;
-  white-space: nowrap;
-  min-height: auto !important;
-  border-bottom: 2px solid transparent !important;
-  transition: border-color 0.15s ease, color 0.15s ease;
-}
-
-.app-content .page .user-tabs-header .user-tab:hover {
-  background: transparent !important;
-}
-
-.app-content .page .user-tabs-header .user-tab.is-active {
-  color: var(--primary) !important;
-  border-bottom-color: var(--primary) !important;
-  background: transparent !important;
-}
-
-.app-content .page .user-tabs-header .user-tab.is-active:hover {
-  background: transparent !important;
-}
-
-.user-tab-panel {
-  display: none;
-}
-
-.user-tab-panel.is-active {
-  display: block;
+.user-card-hint {
+  margin: -4px 0 12px 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
 }
 
 .user-card {
-  min-width: 280px;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 14px;
 }
 
-.user-tab-panel .user-card {
-  flex: none;
+.user-card--list {
+  flex: 1 1 100%;
   min-width: 0;
 }
 
@@ -96,53 +46,119 @@
 
 .user-card-controls {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 12px 16px;
   align-items: flex-end;
 }
 
 .user-card-controls input,
 .user-card-controls select {
-  width: auto; /* 覆盖 forms.css 默认 width:100% */
+  width: auto;
   max-width: 100%;
 }
 
-/* 创建用户 */
-.user-card-controls #userName {
-  flex: 0 1 160px;
-  min-width: 120px;
-}
-
-.user-card-controls #password {
-  flex: 0 1 170px;
-  min-width: 130px;
-}
-
-.user-card-controls #roleId {
-  flex: 0 1 160px;
-  min-width: 120px;
-}
-
-/* 查询用户 */
-.user-card-controls #userKeyword {
-  flex: 0 1 280px;
-  min-width: 180px;
-}
-
-/* 更新用户状态 */
-.user-card-controls #statusUserId {
-  flex: 0 1 140px;
-  min-width: 120px;
-}
-
-.user-card-controls #statusValue {
-  flex: 0 1 180px;
-  min-width: 120px;
+/* 查询行：关键词固定较短宽度，按钮并排 */
+.user-card-controls--query #userKeyword {
+  flex: 0 1 240px;
+  width: 240px;
+  max-width: min(100%, 280px);
+  min-width: 160px;
 }
 
 .user-card-controls button {
   flex: 0 0 auto;
   white-space: nowrap;
+}
+
+.user-modal-lead {
+  margin: 0 0 12px 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.user-modal-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.user-modal-fields input,
+.user-modal-fields select {
+  width: 100%;
+  max-width: 100%;
+}
+
+.user-reset-password-note {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--card) 90%, var(--bg) 10%);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.user-modal-actions.user-modal-actions {
+  margin-top: 22px;
+  padding-top: 4px;
+  gap: 12px;
+}
+
+.user-modal-id-box {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 88%, var(--bg) 12%);
+}
+
+.user-modal-id-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: none;
+}
+
+.user-modal-id-value {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 创建弹窗顶部分割强调 */
+.user-modal-create.aura-modal-panel {
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 20px 22px 18px;
+  box-shadow: 0 10px 26px rgba(var(--primary-rgb), 0.18);
+}
+
+.user-modal-create .aura-modal-head {
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.user-modal-create .aura-modal-title {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+
+.user-modal-create .user-modal-lead {
+  margin: 2px 0 14px 0;
+  font-size: 13px;
+}
+
+.user-modal-create .aura-modal-actions {
+  margin-top: 16px;
+  justify-content: flex-end;
 }
 
 .user-result {
@@ -157,6 +173,10 @@
   word-break: break-word;
 }
 
+.user-result--modal {
+  margin-top: 12px;
+}
+
 .user-result.is-error {
   color: var(--text-main);
   border-color: rgba(var(--primary-rgb), 0.35);
@@ -165,9 +185,6 @@
 
 .user-list {
   margin-top: 12px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
 }
 
 .user-list-meta {
@@ -176,24 +193,159 @@
   font-size: 12px;
 }
 
-.user-list-item {
-  border: 1px solid var(--line);
-  background: var(--panel);
-  color: var(--text);
+.user-list-empty {
+  margin: 12px 0 0 0;
+  padding: 14px 12px;
+  border: 1px dashed var(--line);
   border-radius: 8px;
-  padding: 6px 10px;
-  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+  background: color-mix(in srgb, var(--card) 55%, var(--bg) 45%);
 }
 
-.user-list-item:hover {
+/* 用户列表表格：圆角容器、斑马纹、表头固定感 */
+.user-card--list .aura-data-table-wrap {
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--line) 65%, transparent);
+}
+
+.user-card--list .aura-data-table {
+  border: none;
+}
+
+.user-card--list .aura-data-table .aura-col-action {
+  width: auto;
+  min-width: 260px;
+  text-align: center;
+  white-space: normal;
+}
+
+.user-card--list .aura-data-table .aura-col-no {
+  width: 68px;
+  text-align: center;
+}
+
+.user-card--list .aura-data-table .user-table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+}
+
+.user-card--list .aura-data-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 11px 14px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--card) 62%, var(--bg) 38%);
+  border-bottom: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+  border-top: none;
+}
+
+.user-card--list .aura-data-table thead th:first-child {
+  border-top-left-radius: 0;
+}
+
+.user-card--list .aura-data-table thead th:last-child {
+  border-right: none;
+}
+
+.user-card--list .aura-data-table tbody td {
+  padding: 11px 14px;
+  border-color: color-mix(in srgb, var(--line) 75%, transparent);
+  border-left: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
+  border-right: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
+  vertical-align: middle;
+}
+
+.user-card--list .aura-data-table tbody td:last-child {
+  border-right: none;
+}
+
+.user-card--list .aura-data-table tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--bg) 35%, var(--panel) 65%);
+}
+
+.user-card--list .aura-data-table tbody tr:hover td {
+  background: rgba(var(--primary-rgb), 0.09);
+}
+
+.user-card--list .aura-data-table tbody tr:last-child td:first-child {
+  border-bottom-left-radius: 8px;
+}
+
+.user-card--list .aura-data-table tbody tr:last-child td:last-child {
+  border-bottom-right-radius: 8px;
+}
+
+.user-card--list .aura-data-table tbody td:first-child {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.user-card--list .aura-data-table .user-table-status-toggle,
+.user-card--list .aura-data-table .user-table-delete,
+.user-card--list .aura-data-table .user-table-reset-password {
+  min-height: 32px;
+  padding: 6px 12px;
+  border-width: 1px;
+  border-style: solid;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.user-card--list .aura-data-table .user-table-status-toggle,
+.user-card--list .aura-data-table .user-table-reset-password {
+  border-color: rgba(var(--primary-rgb), 0.35);
+  color: var(--primary);
+  background: rgba(var(--primary-rgb), 0.06);
+}
+
+.user-card--list .aura-data-table .user-table-status-toggle:hover,
+.user-card--list .aura-data-table .user-table-reset-password:hover {
   border-color: var(--primary);
+  background: rgba(var(--primary-rgb), 0.12);
+  color: var(--primary);
+}
+
+.user-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--line);
+}
+
+.user-status.is-on {
+  color: var(--text);
+  background: rgba(var(--primary-rgb), 0.12);
+  border-color: rgba(var(--primary-rgb), 0.35);
+}
+
+.user-status.is-off {
+  color: var(--muted);
+  background: var(--card);
 }
 
 @media (max-width: 980px) {
-  .user-tabs-header {
-    flex-wrap: wrap;
-  }
   .user-card-controls {
     flex-wrap: wrap;
+  }
+
+  .user-card-controls--query #userKeyword {
+    flex: 1 1 100%;
+    width: 100%;
+    max-width: 100%;
   }
 }

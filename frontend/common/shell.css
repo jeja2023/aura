@@ -224,7 +224,9 @@
   line-height: 1.55;
 }
 
-.app-content button:not(.app-sidebar-toggle):not(.btn-primary) {
+/* 仅作用于未单独指定语义类的按钮；勿覆盖 .btn-secondary / 列表芯片等 */
+.app-content
+  button:not(.app-sidebar-toggle):not(.btn-primary):not(.btn-secondary) {
   color: var(--primary-text);
   font-weight: 600;
 }
@@ -278,4 +280,47 @@
   color: var(--text-main);
   border-color: rgba(var(--primary-rgb), 0.35);
   background: rgba(var(--primary-rgb), 0.06);
+}
+
+/* 成功/普通提示统一改为 Toast，不再占页面布局 */
+.aura-status:not(.is-error) {
+  display: none !important;
+}
+
+.aura-toast-host {
+  position: fixed;
+  top: 72px;
+  right: 16px;
+  z-index: 1200;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.aura-toast {
+  min-width: 180px;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(var(--primary-rgb), 0.55);
+  background: color-mix(in srgb, var(--primary) 12%, var(--form-control-bg) 88%);
+  color: var(--text-main);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.45;
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.aura-toast.is-show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.aura-toast.is-error {
+  border-color: rgba(var(--primary-rgb), 0.75);
+  background: color-mix(in srgb, var(--primary) 18%, var(--form-control-bg) 82%);
 }

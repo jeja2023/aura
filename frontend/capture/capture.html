@@ -22,15 +22,41 @@
     <main class="app-content">
       <div class="page">
         <div class="capture-toolbar">
-          <input id="deviceId" placeholder="设备ID，默认1" />
-          <input id="channelNo" placeholder="通道号，默认1" />
-          <input id="meta" placeholder="元数据，如：异常-夜间滞留" />
-          <button id="create" type="button">新增模拟抓拍</button>
-          <button id="load" type="button">查询抓拍</button>
+          <button id="load" class="btn-secondary" type="button">查询抓拍</button>
+          <button id="openCreateCaptureModal" class="btn-primary" type="button">新增模拟抓拍</button>
         </div>
-        <pre id="result" class="aura-status" role="status" hidden aria-live="polite"></pre>
+        <pre id="result" class="aura-status aura-display-box" role="status" hidden aria-live="polite"></pre>
+        <div id="captureTableWrap" class="capture-table-wrap" hidden>
+          <div class="aura-data-table-wrap">
+            <table class="aura-data-table" aria-label="抓拍列表">
+              <thead id="captureTableHead"></thead>
+              <tbody id="captureTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="capturePager" hidden></div>
       </div>
     </main>
+  </div>
+
+  <div id="captureCreateModal" class="aura-modal-root" hidden>
+    <div class="aura-modal-backdrop" tabindex="-1" aria-hidden="true"></div>
+    <div class="aura-modal-panel capture-modal-create" role="dialog" aria-modal="true" aria-labelledby="captureCreateModalTitle">
+      <div class="aura-modal-head">
+        <h2 id="captureCreateModalTitle" class="aura-modal-title">新增模拟抓拍</h2>
+        <button type="button" class="btn-secondary aura-modal-close" data-aura-modal-dismiss aria-label="关闭对话框">关闭</button>
+      </div>
+      <div class="capture-modal-fields aura-modal-fields">
+        <input id="deviceId" class="aura-input" placeholder="设备ID，默认1" />
+        <input id="channelNo" class="aura-input" placeholder="通道号，默认1" />
+        <input id="meta" class="aura-input" placeholder="元数据，如：异常-夜间滞留" />
+      </div>
+      <div class="aura-modal-actions">
+        <button type="button" class="btn-secondary" data-aura-modal-dismiss>取消</button>
+        <button id="create" type="button" class="btn-primary">新增抓拍</button>
+      </div>
+      <pre id="createCaptureResult" class="aura-status aura-display-box" role="status" hidden aria-live="polite"></pre>
+    </div>
   </div>
   <script defer src="../common/shell.js"></script>
   <script defer src="./capture.js"></script>
