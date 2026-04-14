@@ -185,6 +185,21 @@
   min-height: 0;
 }
 
+/* 正文区域统一尺寸：内容少也保持一致留白与宽度（不影响 scene-mode 全屏页） */
+.app-content:not(.scene-mode) {
+  display: flex;
+  flex-direction: column;
+}
+
+.app-content:not(.scene-mode) > :first-child {
+  width: 100%;
+  max-width: var(--app-content-max-width);
+  margin-left: auto;
+  margin-right: auto;
+  flex: 1;
+  min-height: 0;
+}
+
 .app-content.scene-mode {
   padding: 0;
   overflow: hidden;

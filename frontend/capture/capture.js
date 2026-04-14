@@ -8,9 +8,15 @@ const captureTableWrapEl = document.getElementById("captureTableWrap");
 const capturePagerEl = document.getElementById("capturePager");
 const captureTableHeadEl = document.getElementById("captureTableHead");
 const captureTableBodyEl = document.getElementById("captureTableBody");
+const exportCaptureBtn = document.getElementById("exportCapture");
 let latestCaptureRows = [];
 let capturePage = 1;
-let capturePageSize = 20;
+let capturePageSize = 15;
+
+function setExportEnabled(enabled) {
+  if (!exportCaptureBtn) return;
+  exportCaptureBtn.disabled = !enabled;
+}
 
 /** 成功提示自动消失定时器 */
 let successStatusTimer = null;
@@ -150,7 +156,7 @@ function renderCaptureTable(rows) {
       page: pageData.page,
       pageSize: pageData.pageSize,
       total: pageData.total,
-      pageSizeOptions: [10, 20, 50, 100],
+      pageSizeOptions: [15, 30, 45, 60],
       onChange: (nextPage, nextPageSize) => {
         capturePage = nextPage;
         capturePageSize = nextPageSize;
@@ -220,6 +226,7 @@ async function createMock() {
 async function load() {
   setResult("");
   hideTable();
+  setExportEnabled(false);
 
   try {
     const res = await fetch(`${apiBase}/api/capture/list?limit=500`, {
@@ -228,12 +235,17 @@ async function load() {
     const data = await res.json();
     if (!res.ok || data?.code !== 0) {
       setResult(data);
+      latestCaptureRows = [];
+      setExportEnabled(false);
       return;
     }
     latestCaptureRows = Array.isArray(data.data) ? data.data : [];
     renderCaptureTable(latestCaptureRows);
+    setExportEnabled(latestCaptureRows.length > 0);
   } catch (error) {
     setResult(`查询失败：${error.message}`);
+    latestCaptureRows = [];
+    setExportEnabled(false);
   }
 }
 
@@ -244,4 +256,17 @@ captureCreateModalEl?.querySelectorAll("[data-aura-modal-dismiss]").forEach((el)
 
 document.getElementById("load").addEventListener("click", load);
 document.getElementById("create").addEventListener("click", createMock);
+exportCaptureBtn?.addEventListener("click", async (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  if (window.aura && typeof window.aura.exportDataset === "function") {
+    await window.aura.exportDataset({
+      apiBase,
+      dataset: "capture",
+      onError: (message) => setResult(message)
+    });
+    return;
+  }
+  setResult("导出失败：缺少全局导出能力");
+});
 void load();

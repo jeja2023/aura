@@ -7,7 +7,7 @@ const deviceTableHeadEl = document.getElementById("deviceTableHead");
 const deviceTableBodyEl = document.getElementById("deviceTableBody");
 let latestDeviceRows = [];
 let devicePage = 1;
-let devicePageSize = 20;
+let devicePageSize = 15;
 
 /** 成功提示自动消失定时器 */
 let successStatusTimer = null;
@@ -115,7 +115,7 @@ function renderDeviceTable(rows) {
       page: pageData.page,
       pageSize: pageData.pageSize,
       total: pageData.total,
-      pageSizeOptions: [10, 20, 50, 100],
+      pageSizeOptions: [15, 30, 45, 60],
       onChange: (nextPage, nextPageSize) => {
         devicePage = nextPage;
         devicePageSize = nextPageSize;

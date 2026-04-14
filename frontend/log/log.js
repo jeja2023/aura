@@ -5,8 +5,16 @@ const tableWrapEl = document.getElementById("tableWrap");
 const pagerEl = document.getElementById("pager");
 const tableHeadEl = document.getElementById("tableHead");
 const tableBodyEl = document.getElementById("tableBody");
+const exportLogBtn = document.getElementById("exportLog");
 let logPage = 1;
-let logPageSize = 20;
+let logPageSize = 15;
+let latestLogRows = [];
+
+function setExportVisible(visible) {
+  if (!exportLogBtn) return;
+  exportLogBtn.hidden = !visible;
+  exportLogBtn.disabled = !visible;
+}
 
 /** 成功提示自动消失定时器 */
 let successStatusTimer = null;
@@ -34,6 +42,8 @@ function hideTable() {
   if (tableHeadEl) tableHeadEl.innerHTML = "";
   if (tableBodyEl) tableBodyEl.innerHTML = "";
   if (tableWrapEl) tableWrapEl.hidden = true;
+  latestLogRows = [];
+  setExportVisible(false);
 }
 
 function deriveMessage(data) {
@@ -194,6 +204,8 @@ function renderSystemTable(rows) {
 
 function renderTable(logType, payload) {
   const rows = Array.isArray(payload?.data) ? payload.data : [];
+  latestLogRows = rows;
+  setExportVisible(rows.length > 0);
   const pager = payload?.pager || {};
   if (rows.length === 0) {
     if (tableHeadEl) tableHeadEl.innerHTML = "";
@@ -212,7 +224,7 @@ function renderTable(logType, payload) {
       page: Number(pager.page ?? logPage),
       pageSize: Number(pager.pageSize ?? logPageSize),
       total: Number(pager.total ?? rows.length),
-      pageSizeOptions: [10, 20, 50, 100],
+      pageSizeOptions: [15, 30, 45, 60],
       onChange: (nextPage, nextPageSize) => {
         logPage = nextPage;
         logPageSize = nextPageSize;
@@ -228,10 +240,10 @@ async function load(options = {}) {
   const keyword = document.getElementById("keyword").value.trim();
   if (!options.keepPageInput) {
     logPage = Number(logPage || 1);
-    logPageSize = Number(logPageSize || 20);
+    logPageSize = Number(logPageSize || 15);
   }
   if (!Number.isFinite(logPage) || logPage <= 0) logPage = 1;
-  if (!Number.isFinite(logPageSize) || logPageSize <= 0) logPageSize = 20;
+  if (!Number.isFinite(logPageSize) || logPageSize <= 0) logPageSize = 15;
   const query = new URLSearchParams({ page: String(logPage), pageSize: String(logPageSize) });
   setResult("");
   hideTable();
@@ -264,4 +276,22 @@ async function load(options = {}) {
 }
 
 document.getElementById("load").addEventListener("click", load);
+exportLogBtn?.addEventListener("click", async (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  if (!latestLogRows.length) return;
+  const logType = String(document.getElementById("logType")?.value || "operation").toLowerCase();
+  const dataset = logType === "system" ? "system" : "operation";
+  const keyword = String(document.getElementById("keyword")?.value || "").trim();
+  if (window.aura && typeof window.aura.exportDataset === "function") {
+    await window.aura.exportDataset({
+      apiBase,
+      dataset,
+      keyword,
+      onError: (message) => setResult(message)
+    });
+    return;
+  }
+  setResult("导出失败：缺少全局导出能力");
+});
 void load({ silentSuccessToast: true });

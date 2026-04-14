@@ -1,6 +1,13 @@
 /* 文件：研判页脚本（judge.js） | File: Judge Script */
 const apiBase = "";
 const resultEl = document.getElementById("result");
+const exportJudgeBtn = document.getElementById("exportJudge");
+let latestJudgeRows = [];
+
+function setExportEnabled(enabled) {
+  if (!exportJudgeBtn) return;
+  exportJudgeBtn.disabled = !enabled;
+}
 
 /** 成功提示自动消失定时器 */
 let successStatusTimer = null;
@@ -90,6 +97,7 @@ async function post(path, body) {
 
 async function load(options = {}) {
   setResult("");
+  if (!options.keepExportState) setExportEnabled(false);
 
   try {
     const date = getDate();
@@ -97,11 +105,15 @@ async function load(options = {}) {
       credentials: "include"
     });
     const data = await res.json();
+    latestJudgeRows = Array.isArray(data?.data) ? data.data : [];
+    setExportEnabled(latestJudgeRows.length > 0);
     if (!options.silentSuccessToast || !data || data.code !== 0) {
       setResult(data);
     }
   } catch (error) {
     setResult(`查询失败：${error.message}`);
+    latestJudgeRows = [];
+    setExportEnabled(false);
   }
 }
 
@@ -157,4 +169,17 @@ document.getElementById("runDaily").addEventListener("click", runDaily);
 document.getElementById("runHome").addEventListener("click", runHome);
 document.getElementById("runAbnormal").addEventListener("click", runAbnormal);
 document.getElementById("runNight").addEventListener("click", runNight);
+exportJudgeBtn?.addEventListener("click", async (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  if (window.aura && typeof window.aura.exportDataset === "function") {
+    await window.aura.exportDataset({
+      apiBase,
+      dataset: "judge",
+      onError: (message) => setResult(message)
+    });
+    return;
+  }
+  setResult("导出失败：缺少全局导出能力");
+});
 void load({ silentSuccessToast: true });

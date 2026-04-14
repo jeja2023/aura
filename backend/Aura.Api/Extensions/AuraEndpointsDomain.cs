@@ -127,15 +127,37 @@ internal static class AuraEndpointsDomain
         }).RequireAuthorization("楼栋管理员");
 
         var statsGroup = app.MapGroup("/api/stats");
-        statsGroup.MapGet("/overview", async (StatsApplicationService svc) => await svc.GetOverviewAsync()).RequireAuthorization("楼栋管理员");
-        statsGroup.MapGet("/dashboard", async (StatsApplicationService svc) => await svc.GetDashboardAsync()).RequireAuthorization("楼栋管理员");
+        statsGroup.MapGet("/overview", async (StatsApplicationService svc) =>
+        {
+            try
+            {
+                var data = await svc.GetOverviewAsync();
+                return Results.Ok(new { code = 0, msg = "查询成功", data });
+            }
+            catch (Exception ex)
+            {
+                return Results.Ok(new { code = 50001, msg = $"概览查询失败：{ex.Message}" });
+            }
+        }).RequireAuthorization("楼栋管理员");
+        statsGroup.MapGet("/dashboard", async (StatsApplicationService svc) =>
+        {
+            try
+            {
+                var data = await svc.GetDashboardAsync();
+                return Results.Ok(new { code = 0, msg = "查询成功", data });
+            }
+            catch (Exception ex)
+            {
+                return Results.Ok(new { code = 50002, msg = $"图表数据查询失败：{ex.Message}" });
+            }
+        }).RequireAuthorization("楼栋管理员");
 
         var exportGroup = app.MapGroup("/api/export");
-        exportGroup.MapGet("/{type}", async (HttpRequest request, string type, ExportApplicationService svc, string dataset = "capture", int maxRows = 5000) =>
+        exportGroup.MapGet("/{type}", async (HttpRequest request, string type, ExportApplicationService svc, string dataset = "capture", int maxRows = 5000, string? keyword = null) =>
         {
             var rl = await AuraHelpers.CheckRateLimitAsync(request, cache, "export", 5, TimeSpan.FromMinutes(1));
             if (rl is not null) return rl;
-            return await svc.ExportAsync(type, dataset, maxRows);
+            return await svc.ExportAsync(type, dataset, maxRows, keyword);
         }).RequireAuthorization("楼栋管理员");
 
         var outputGroup = app.MapGroup("/api/output");

@@ -4,6 +4,13 @@ const resultEl = document.getElementById("result");
 const createAlertResultEl = document.getElementById("createAlertResult");
 const alertCreateModalEl = document.getElementById("alertCreateModal");
 const openCreateAlertModalBtn = document.getElementById("openCreateAlertModal");
+const exportAlertBtn = document.getElementById("exportAlert");
+let latestAlertRows = [];
+
+function setExportEnabled(enabled) {
+  if (!exportAlertBtn) return;
+  exportAlertBtn.disabled = !enabled;
+}
 
 /** 成功提示自动消失定时器 */
 let successStatusTimer = null;
@@ -140,17 +147,22 @@ async function createAlert() {
 
 async function load(options = {}) {
   setResult("");
+  if (!options.keepExportState) setExportEnabled(false);
 
   try {
     const res = await fetch(`${apiBase}/api/alert/list?limit=500`, {
       credentials: "include"
     });
     const data = await res.json();
+    latestAlertRows = Array.isArray(data?.data) ? data.data : [];
+    setExportEnabled(latestAlertRows.length > 0);
     if (!options.silentSuccessToast || !data || data.code !== 0) {
       setResult(data);
     }
   } catch (error) {
     setResult(`查询失败：${error.message}`);
+    latestAlertRows = [];
+    setExportEnabled(false);
   }
 }
 
@@ -161,4 +173,17 @@ alertCreateModalEl?.querySelectorAll("[data-aura-modal-dismiss]").forEach((el) =
 
 document.getElementById("load").addEventListener("click", load);
 document.getElementById("create").addEventListener("click", createAlert);
+exportAlertBtn?.addEventListener("click", async (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  if (window.aura && typeof window.aura.exportDataset === "function") {
+    await window.aura.exportDataset({
+      apiBase,
+      dataset: "alert",
+      onError: (message) => setResult(message)
+    });
+    return;
+  }
+  setResult("导出失败：缺少全局导出能力");
+});
 void load({ silentSuccessToast: true });

@@ -1056,7 +1056,7 @@ internal sealed record DbUserListItem(long UserId, string UserName, long Status,
 internal sealed record DbCampusNode(long NodeId, long? ParentId, string LevelType, string NodeName);
 internal sealed record DbFloor(long FloorId, long NodeId, string FilePath, decimal ScaleRatio);
 internal sealed record DbCamera(long CameraId, long FloorId, long DeviceId, int ChannelNo, decimal PosX, decimal PosY);
-internal sealed record DbRoi(long RoiId, long CameraId, long RoomNodeId, string VerticesJson, DateTimeOffset CreatedAt);
+internal sealed record DbRoi(long RoiId, long CameraId, long RoomNodeId, string VerticesJson, DateTime CreatedAt);
 internal sealed record DbTrackEvent(long EventId, string Vid, long CameraId, long RoiId, DateTimeOffset EventTime);
 internal sealed record DbJudgeResult
 {
