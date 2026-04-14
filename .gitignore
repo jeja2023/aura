@@ -36,6 +36,10 @@ TestResults/
 # 构建与缓存
 dist/
 build/
+.build_out/
+.outchk/
+.tmp_api_build/
+.verify_build_custom/
 .verify_build/
 coverage/
 .cache/
