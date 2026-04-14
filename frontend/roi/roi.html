@@ -11,7 +11,7 @@
   <link rel="stylesheet" href="../common/forms.css" />
   <link rel="stylesheet" href="./roi.css" />
 </head>
-<body class="app-body" data-shell-title="ROI 防区编辑">
+<body class="app-body" data-shell-title="重点防区编辑">
   <aside class="app-sidebar" id="auraSidebar" aria-label="主导航"></aside>
   <div class="app-frame">
     <header class="app-topbar">
@@ -21,21 +21,55 @@
     </header>
     <main class="app-content">
       <div class="page">
-        <p class="page-lead">在底图上绘制多边形防区，并关联到房间节点。</p>
-        <section class="panel">
-          <label>摄像头ID <input id="cameraId" class="aura-input" type="number" value="1" /></label>
-          <label>房间节点ID <input id="roomNodeId" class="aura-input" type="number" value="4" /></label>
-          <label class="bg-url-field">底图URL <input id="bgUrl" class="aura-search-input" type="text" placeholder="/uploads/floors/xxx.png 或完整URL" /></label>
-          <button id="loadBgBtn" class="btn-secondary" type="button">加载底图</button>
-          <button id="undoBtn" class="btn-secondary" type="button">撤销点</button>
-          <button id="clearBtn" class="btn-secondary" type="button">清空点</button>
-          <button id="saveBtn" class="btn-primary" type="button">保存ROI</button>
-          <button id="loadBtn" class="btn-secondary" type="button">查询防区</button>
-        </section>
-        <canvas id="canvas" width="900" height="520"></canvas>
+        <div class="roi-layout">
+          <section class="panel roi-panel roi-panel-controls" aria-label="防区参数与操作">
+            <div class="roi-panel-head">
+              <h2 class="roi-panel-title">防区参数与操作</h2>
+            </div>
+            <p class="page-lead">在底图上绘制多边形防区，并关联到房间节点。</p>
+            <section class="roi-floor-switch" aria-label="楼层切换">
+              <div class="roi-floor-switch-head">
+                <span class="roi-floor-switch-title">楼层切换</span>
+                <span id="floorCount" class="roi-floor-count">暂无楼层</span>
+              </div>
+              <div id="roiFloorList" class="roi-floor-list" aria-live="polite"></div>
+            </section>
+          </section>
+          <div class="roi-main">
+            <section class="panel roi-panel roi-panel-canvas" aria-label="底图与防区">
+              <div class="roi-panel-head">
+                <h2 class="roi-panel-title">底图与防区</h2>
+                <div class="roi-panel-head-actions">
+                  <button id="addRoiBtn" class="btn-secondary" type="button">新增防区</button>
+                  <button id="undoBtn" class="btn-secondary" type="button">撤销点</button>
+                  <button id="clearBtn" class="btn-secondary" type="button">清空点</button>
+                  <button id="loadBtn" class="btn-secondary" type="button">刷新</button>
+                </div>
+              </div>
+              <canvas id="canvas" width="980" height="560"></canvas>
+            </section>
+          </div>
+        </div>
         <pre id="result" class="aura-status aura-display-box" role="status" aria-live="polite">提示：点击画布依次落点，至少3个点可保存。</pre>
       </div>
     </main>
+  </div>
+  <div id="roiConfigModal" class="aura-modal-root" hidden>
+    <div class="aura-modal-backdrop" tabindex="-1" aria-hidden="true"></div>
+    <div class="aura-modal-panel" role="dialog" aria-modal="true" aria-labelledby="roiConfigModalTitle">
+      <div class="aura-modal-head">
+        <h2 id="roiConfigModalTitle" class="aura-modal-title">防区配置</h2>
+        <button type="button" class="btn-secondary aura-modal-close" data-roi-modal-dismiss aria-label="关闭对话框">关闭</button>
+      </div>
+      <div class="aura-modal-fields">
+        <label>摄像头ID <input id="modalCameraId" class="aura-input" type="number" /></label>
+        <label>房间节点ID <input id="modalRoomNodeId" class="aura-input" type="number" /></label>
+      </div>
+      <div class="aura-modal-actions">
+        <button type="button" class="btn-secondary" data-roi-modal-dismiss>取消</button>
+        <button type="button" id="confirmRoiConfigBtn" class="btn-primary">确认并开始标注</button>
+      </div>
+    </div>
   </div>
   <script defer src="../common/shell.js"></script>
   <script defer src="./roi.js"></script>

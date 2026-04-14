@@ -11,19 +11,178 @@
   margin-bottom: 12px;
 }
 
-.panel .bg-url-field {
-  flex: 1 1 360px;
-  min-width: 280px;
-  max-width: 520px;
+.app-content .panel.roi-panel {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
 }
 
-.panel .bg-url-field > #bgUrl {
+.roi-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 360px) 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.roi-main {
+  min-width: 0;
+}
+
+.roi-panel {
+  margin-bottom: 0;
+}
+
+.roi-panel-controls {
+  position: sticky;
+  top: 0;
+  max-height: 100vh;
+  gap: 10px;
+}
+
+.roi-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.roi-panel-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.roi-panel-title {
+  margin: 0;
+  font-size: 16px;
+  color: var(--text-main);
+}
+
+.page-lead {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.roi-floor-switch {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.roi-floor-switch-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.roi-floor-switch-title {
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+.roi-floor-count {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.roi-floor-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.roi-floor-item {
+  display: flex;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--text-main);
+  padding: 8px 10px;
+  align-items: center;
+  justify-content: space-between;
+  font: inherit;
+}
+
+button.roi-floor-item {
+  cursor: pointer;
+}
+
+button.roi-floor-item:hover {
+  border-color: var(--primary);
+}
+
+.roi-floor-item.is-active {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 30%, transparent);
+}
+
+.roi-floor-name {
+  color: var(--text-main);
+}
+
+.roi-floor-badge {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.roi-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.roi-fields > label {
+  margin: 0;
+}
+
+.roi-fields > label > input {
+  min-height: 40px;
+}
+
+.roi-fields .bg-url-field {
+  width: 100%;
+}
+
+.roi-fields .bg-url-field > #bgUrl {
   min-height: 40px;
   height: 40px;
 }
 
 #canvas {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--canvas-bg);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color) 35%, transparent);
+}
+
+#result {
+  margin-top: 10px;
+}
+
+@media (max-width: 980px) {
+  .roi-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .roi-panel-controls {
+    position: static;
+    max-height: none;
+  }
+
+  .roi-panel-head-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .roi-floor-list {
+    grid-template-columns: 1fr;
+  }
 }

@@ -1,8 +1,8 @@
 /* 文件：首页样式（index.css） | File: Home Styles */
 .dashboard {
   display: grid;
-  grid-template-columns: repeat(2, minmax(280px, 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(2, minmax(300px, 1fr));
+  gap: 14px;
   align-content: start;
 }
 
@@ -10,9 +10,9 @@
   border: 1px solid var(--border-subtle);
   background: var(--bg-card);
   border-radius: 12px;
-  padding: 16px;
+  padding: 14px;
   box-shadow: var(--shadow);
-  min-height: 220px;
+  min-height: 150px;
 }
 
 .card-wide {
@@ -20,15 +20,152 @@
 }
 
 .card h2 {
-  margin: 0 0 12px;
-  font-size: 22px;
+  margin: 0 0 10px;
+  font-size: 20px;
   color: var(--text-main);
+}
+
+.card .aura-display-box {
+  margin-top: 0;
+  min-height: 56px;
+}
+
+.status-panel {
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  padding: 12px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  align-items: center;
+}
+
+.status-badge {
+  min-width: 64px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: center;
+  border: 1px solid transparent;
+  color: var(--text-main);
+  background: var(--bg-card);
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.status-badge.is-ok {
+  border-color: var(--success-border);
+  color: var(--success-text);
+  background: var(--success);
+}
+
+.status-badge.is-error {
+  border-color: var(--danger-border);
+  color: var(--danger-text);
+  background: var(--danger);
+}
+
+.status-badge.is-loading {
+  border-color: var(--border-subtle);
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--bg-elevated) 84%, var(--primary) 16%);
+  position: relative;
+  overflow: hidden;
+  animation: status-loading-pulse 1.6s ease-in-out infinite;
+}
+
+.status-badge.is-loading::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    110deg,
+    transparent 0%,
+    transparent 35%,
+    var(--bg-card) 50%,
+    transparent 65%,
+    transparent 100%
+  );
+  opacity: 0.55;
+  transform: translateX(-120%);
+  animation: status-loading-shine 1.6s ease-in-out infinite;
+}
+
+.status-main {
+  min-width: 0;
+}
+
+.status-text {
+  margin: 0;
+  color: var(--text-main);
+  font-size: 15px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.status-time {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+@keyframes status-loading-pulse {
+  0%,
+  100% {
+    opacity: 0.86;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes status-loading-shine {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(120%);
+  }
+}
+
+.overview-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.overview-item {
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  padding: 10px 12px;
+  min-height: 78px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.overview-label {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.overview-value {
+  font-size: 24px;
+  color: var(--text-main);
+  line-height: 1.2;
+}
+
+.card-wide {
+  min-height: 220px;
 }
 
 .event-list {
   margin: 0;
   padding: 0 0 0 1.25rem;
-  max-height: min(42vh, 360px);
+  min-height: 150px;
+  max-height: min(46vh, 380px);
   overflow: auto;
 }
 
@@ -45,7 +182,7 @@
   }
 
   .card {
-    min-height: 0;
+    min-height: 130px;
   }
 
   .card h2 {
@@ -54,5 +191,9 @@
 
   .card-wide {
     grid-column: auto;
+  }
+
+  .overview-cards {
+    grid-template-columns: 1fr;
   }
 }

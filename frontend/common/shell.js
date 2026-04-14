@@ -9,7 +9,7 @@
         { href: "/campus/", label: "集宿资源树" },
         { href: "/floor/", label: "楼层图纸" },
         { href: "/camera/", label: "摄像头布点" },
-        { href: "/roi/", label: "ROI 防区" }
+        { href: "/roi/", label: "重点防区" }
       ]
     },
     {
@@ -238,6 +238,8 @@
   }
 
   function showToast(message, isError = false, durationMs = 2200) {
+    const disableToast = String(document.body?.getAttribute("data-aura-disable-toast") || "").toLowerCase();
+    if (disableToast === "1" || disableToast === "true" || disableToast === "yes") return;
     const text = String(message || "").trim();
     if (!text) return;
     const host = ensureToastHost();
@@ -340,7 +342,9 @@
   }
 
   function bridgeStatusToToast() {
-    const statusEls = Array.from(document.querySelectorAll(".aura-status"));
+    const statusEls = Array.from(document.querySelectorAll(".aura-status")).filter(
+      (el) => !el.hasAttribute("data-aura-no-toast")
+    );
     if (statusEls.length === 0) return;
 
     const handle = (el) => {
@@ -363,6 +367,38 @@
     });
   }
 
+  function enableTableCellTooltip() {
+    const shouldSkipCell = (cell) => {
+      if (!cell) return true;
+      if (cell.classList.contains("aura-col-action") || cell.classList.contains("aura-col-action-group")) return true;
+      if (cell.querySelector("button, a, input, select, textarea")) return true;
+      return false;
+    };
+
+    const updateCellTitle = (cell) => {
+      if (shouldSkipCell(cell)) return;
+      const text = (cell.textContent || "").trim();
+      if (!text) return;
+      if (cell.scrollWidth > cell.clientWidth) {
+        cell.title = text;
+      } else if (cell.title) {
+        cell.removeAttribute("title");
+      }
+    };
+
+    document.addEventListener("mouseover", (event) => {
+      const cell = event.target instanceof Element ? event.target.closest(".aura-data-table td, .aura-data-table th") : null;
+      if (!cell) return;
+      updateCellTitle(cell);
+    });
+
+    document.addEventListener("focusin", (event) => {
+      const cell = event.target instanceof Element ? event.target.closest(".aura-data-table td, .aura-data-table th") : null;
+      if (!cell) return;
+      updateCellTitle(cell);
+    });
+  }
+
   async function bootstrap() {
     const sidebar = document.getElementById("auraSidebar");
     if (sidebar) {
@@ -374,6 +410,7 @@
     mountLogout();
     mountSidebarToggle();
     bridgeStatusToToast();
+    enableTableCellTooltip();
     reportPageView("enter", 0);
     window.addEventListener("pagehide", reportPageLeave);
     initAnimateNumbers();

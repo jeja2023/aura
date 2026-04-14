@@ -1,24 +1,14 @@
 /* 文件：首页脚本（index.js） | File: Home Script */
 const apiBase = "";
 const eventListEl = document.getElementById("events");
-const statusEl = document.getElementById("status");
-const overviewEl = document.getElementById("overview");
-
-const SUCCESS_STATUS_MS = 5000;
-let statusSuccessTimer = null;
-let overviewSuccessTimer = null;
-
-function clearStatusTimer(timerRefName) {
-  if (timerRefName === "status") {
-    if (statusSuccessTimer != null) clearTimeout(statusSuccessTimer);
-    statusSuccessTimer = null;
-    return;
-  }
-  if (timerRefName === "overview") {
-    if (overviewSuccessTimer != null) clearTimeout(overviewSuccessTimer);
-    overviewSuccessTimer = null;
-  }
-}
+const statusBadgeEl = document.getElementById("statusBadge");
+const statusTextEl = document.getElementById("statusText");
+const statusTimeEl = document.getElementById("statusTime");
+const overviewCardsEl = document.getElementById("overviewCards");
+const overviewMessageEl = document.getElementById("overviewMessage");
+const overviewCaptureEl = document.getElementById("overviewCapture");
+const overviewAlertEl = document.getElementById("overviewAlert");
+const overviewDeviceEl = document.getElementById("overviewDevice");
 
 function hidePre(preEl) {
   if (!preEl) return;
@@ -27,30 +17,39 @@ function hidePre(preEl) {
   preEl.classList.remove("is-error");
 }
 
-function setPre(preEl, message, isError, timerTarget) {
+function setPre(preEl, message, isError) {
   if (!preEl) return;
   if (!message) {
     hidePre(preEl);
-    clearStatusTimer(timerTarget);
     return;
   }
 
   preEl.textContent = message;
   preEl.hidden = false;
   preEl.classList.toggle("is-error", Boolean(isError));
+}
 
-  clearStatusTimer(timerTarget);
-  if (!isError) {
-    const timerSetter = (fn) => {
-      if (timerTarget === "status") statusSuccessTimer = fn();
-      if (timerTarget === "overview") overviewSuccessTimer = fn();
-    };
-    timerSetter(() => window.setTimeout(() => {
-      if (timerTarget === "status") statusSuccessTimer = null;
-      if (timerTarget === "overview") overviewSuccessTimer = null;
-      hidePre(preEl);
-    }, SUCCESS_STATUS_MS));
+function setOverviewCards(totalCapture, totalAlert, onlineDevice) {
+  if (overviewCaptureEl) overviewCaptureEl.textContent = String(totalCapture ?? 0);
+  if (overviewAlertEl) overviewAlertEl.textContent = String(totalAlert ?? 0);
+  if (overviewDeviceEl) overviewDeviceEl.textContent = String(onlineDevice ?? 0);
+  if (overviewCardsEl) overviewCardsEl.hidden = false;
+  hidePre(overviewMessageEl);
+}
+
+function setOverviewError(message) {
+  if (overviewCardsEl) overviewCardsEl.hidden = true;
+  setPre(overviewMessageEl, message, true);
+}
+
+function setStatusView(state, text, timeText) {
+  if (statusBadgeEl) {
+    statusBadgeEl.classList.remove("is-ok", "is-error", "is-loading");
+    statusBadgeEl.classList.add(`is-${state}`);
+    statusBadgeEl.textContent = state === "ok" ? "正常" : state === "error" ? "异常" : "加载中";
   }
+  if (statusTextEl) statusTextEl.textContent = text || "--";
+  if (statusTimeEl) statusTimeEl.textContent = timeText || "--";
 }
 
 function formatPayload(payload) {
@@ -121,51 +120,49 @@ function pushEvent(name, payload) {
 }
 
 async function loadStatus() {
-  setPre(statusEl, "", false, "status");
+  setStatusView("loading", "正在加载系统状态…", "--");
   try {
     const res = await fetch(`${apiBase}/api/health`);
     if (!res.ok) {
-      setPre(statusEl, `状态加载失败：HTTP ${res.status}`, true, "status");
+      setStatusView("error", `状态加载失败：HTTP ${res.status}`, `更新时间：${formatLocalYMDHMS(new Date())}`);
       return;
     }
     const data = await res.json();
-    const message = data?.msg
-      ? `${data.msg}（${data.time ? formatTimeYMDHMS(data.time) : ""}）`
-      : "系统状态已更新";
-    setPre(statusEl, message, false, "status");
+    const message = data?.msg || "系统状态已更新";
+    const updateTime = data?.time ? formatTimeYMDHMS(data.time) : formatLocalYMDHMS(new Date());
+    const normalized = String(message).toLowerCase();
+    const isOk = normalized.includes("正常") || normalized.includes("healthy") || normalized.includes("ok");
+    setStatusView(isOk ? "ok" : "loading", message, `更新时间：${updateTime}`);
   } catch (error) {
-    setPre(statusEl, `状态加载失败：${error.message}`, true, "status");
+    setStatusView("error", `状态加载失败：${error.message}`, `更新时间：${formatLocalYMDHMS(new Date())}`);
   }
 }
 
 async function loadOverview() {
-  setPre(overviewEl, "", false, "overview");
+  if (overviewCardsEl) overviewCardsEl.hidden = false;
+  setPre(overviewMessageEl, "正在加载统计概览…", false);
   try {
     const res = await fetch(`${apiBase}/api/stats/overview`, {
       credentials: "include"
     });
     if (res.status === 401) {
-      setPre(overviewEl, "概览加载失败：登录已失效，请重新登录。", true, "overview");
+      setOverviewError("概览加载失败：登录已失效，请重新登录。");
       return;
     }
     if (!res.ok) {
-      setPre(overviewEl, `概览加载失败：HTTP ${res.status}`, true, "overview");
+      setOverviewError(`概览加载失败：HTTP ${res.status}`);
       return;
     }
     const data = await res.json();
     if (data?.code === 0 && data?.data) {
       const d = data.data;
-      setPre(
-        overviewEl,
-        `抓拍合计：${d.totalCapture ?? 0} 条；告警合计：${d.totalAlert ?? 0} 条；在线设备：${d.onlineDevice ?? 0} 台`,
-        false,
-        "overview"
-      );
+      setOverviewCards(d.totalCapture, d.totalAlert, d.onlineDevice);
     } else {
-      setPre(overviewEl, data?.msg || "概览已更新", false, "overview");
+      if (overviewCardsEl) overviewCardsEl.hidden = false;
+      setPre(overviewMessageEl, data?.msg || "概览已更新", false);
     }
   } catch (error) {
-    setPre(overviewEl, `概览加载失败：${error.message}`, true, "overview");
+    setOverviewError(`概览加载失败：${error.message}`);
   }
 }
 

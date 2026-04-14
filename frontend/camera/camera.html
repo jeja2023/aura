@@ -21,20 +21,52 @@
     </header>
     <main class="app-content">
       <div class="page">
-        <p class="page-lead">在楼层平面图上拖拽布置摄像头物理点位。</p>
-        <section class="panel">
-          <label>楼层ID <input id="floorId" class="aura-input" type="number" value="1" /></label>
-          <label>设备ID <input id="deviceId" class="aura-input" type="number" value="1" /></label>
-          <label>通道号 <input id="channelNo" class="aura-input" type="number" value="1" /></label>
-          <label class="bg-url-field">底图URL <input id="bgUrl" class="aura-search-input" type="text" placeholder="/uploads/floors/xxx.png 或完整URL" /></label>
-          <button id="loadBgBtn" class="btn-secondary" type="button">加载底图</button>
-          <button id="saveBtn" class="btn-primary" type="button">保存新点位</button>
-          <button id="listBtn" class="btn-secondary" type="button">查询点位</button>
-        </section>
-        <canvas id="canvas" width="900" height="520"></canvas>
-        <pre id="result" class="aura-status aura-display-box">提示：点击画布新增点位；拖拽红点可调整坐标。</pre>
+        <div class="camera-layout">
+          <section class="panel camera-panel camera-panel-floors" aria-label="楼层切换">
+            <div class="camera-panel-head">
+              <h2 class="camera-panel-title">楼层切换</h2>
+              <div class="camera-panel-head-actions">
+                <span id="floorCount" class="camera-floor-count"></span>
+              </div>
+            </div>
+            <div id="floorSwitchList" class="camera-floor-list" aria-live="polite"></div>
+          </section>
+          <div class="camera-main">
+            <section class="panel camera-panel">
+              <div class="camera-panel-head">
+                <h2 class="camera-panel-title">楼层图纸与点位</h2>
+                <div class="camera-panel-actions">
+                  <button id="addPointBtn" class="btn-secondary" type="button">新增点位</button>
+                  <button id="listBtn" class="btn-secondary" type="button">刷新</button>
+                </div>
+              </div>
+              <canvas id="canvas" width="980" height="560"></canvas>
+            </section>
+          </div>
+        </div>
+        <pre id="result" class="aura-status aura-display-box">提示：点击画布后通过弹窗确认新增点位；拖拽未保存点可调整坐标。</pre>
       </div>
     </main>
+  </div>
+  <div id="cameraPointModal" class="aura-modal-root" hidden>
+    <div class="aura-modal-backdrop" tabindex="-1" aria-hidden="true"></div>
+    <div class="aura-modal-panel" role="dialog" aria-modal="true" aria-labelledby="cameraPointModalTitle">
+      <div class="aura-modal-head">
+        <h2 id="cameraPointModalTitle" class="aura-modal-title">新增点位</h2>
+        <button type="button" class="btn-secondary aura-modal-close" data-camera-modal-dismiss aria-label="关闭对话框">关闭</button>
+      </div>
+      <div class="aura-modal-fields">
+        <label>楼层ID <input id="modalFloorId" class="aura-input" type="number" /></label>
+        <label>设备ID <input id="modalDeviceId" class="aura-input" type="number" /></label>
+        <label>通道号 <input id="modalChannelNo" class="aura-input" type="number" /></label>
+        <label>X 坐标 <input id="modalPosX" class="aura-input" type="number" step="0.01" readonly /></label>
+        <label>Y 坐标 <input id="modalPosY" class="aura-input" type="number" step="0.01" readonly /></label>
+      </div>
+      <div class="aura-modal-actions">
+        <button type="button" class="btn-secondary" data-camera-modal-dismiss>取消</button>
+        <button type="button" id="confirmAddPointBtn" class="btn-primary">确认新增</button>
+      </div>
+    </div>
   </div>
   <script defer src="../common/shell.js"></script>
   <script defer src="./camera.js"></script>

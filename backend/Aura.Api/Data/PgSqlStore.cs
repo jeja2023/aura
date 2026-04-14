@@ -65,6 +65,19 @@ internal sealed class PgSqlStore
         _userLastLoginColumnEnsured = true;
     }
 
+    private static async Task EnsureIdentitySequenceSyncedAsync(NpgsqlConnection conn, string tableName, string idColumnName)
+    {
+        await conn.ExecuteAsync(
+            """
+            SELECT setval(
+              pg_get_serial_sequence(@TableName, @IdColumnName),
+              COALESCE((SELECT MAX(v) FROM (SELECT 0::bigint AS v UNION ALL SELECT {0} FROM {1}) t), 0) + 1,
+              false
+            )
+            """.Replace("{0}", idColumnName).Replace("{1}", tableName),
+            new { TableName = tableName, IdColumnName = idColumnName });
+    }
+
     public async Task<DbUser?> FindUserAsync(string userName)
     {
         try
@@ -688,6 +701,7 @@ internal sealed class PgSqlStore
         try
         {
             await using var conn = CreateConnection();
+            await EnsureIdentitySequenceSyncedAsync(conn, "sys_role", "role_id");
             return await conn.ExecuteScalarAsync<long>(
                 """
                 INSERT INTO sys_role(role_name, permission_json, created_at)
@@ -733,6 +747,7 @@ internal sealed class PgSqlStore
         try
         {
             await using var conn = CreateConnection();
+            await EnsureIdentitySequenceSyncedAsync(conn, "sys_user", "user_id");
             await EnsureUserDisplayNameColumnAsync(conn);
             await EnsureUserLastLoginColumnAsync(conn);
             return await conn.ExecuteScalarAsync<long>(
@@ -1057,7 +1072,35 @@ internal sealed record DbCampusNode(long NodeId, long? ParentId, string LevelTyp
 internal sealed record DbFloor(long FloorId, long NodeId, string FilePath, decimal ScaleRatio);
 internal sealed record DbCamera(long CameraId, long FloorId, long DeviceId, int ChannelNo, decimal PosX, decimal PosY);
 internal sealed record DbRoi(long RoiId, long CameraId, long RoomNodeId, string VerticesJson, DateTime CreatedAt);
-internal sealed record DbTrackEvent(long EventId, string Vid, long CameraId, long RoiId, DateTimeOffset EventTime);
+internal sealed record DbTrackEvent
+{
+    public long EventId { get; }
+    public string Vid { get; }
+    public long CameraId { get; }
+    public long RoiId { get; }
+    public DateTimeOffset EventTime { get; }
+
+    public DbTrackEvent(long eventId, string vid, long cameraId, long roiId, DateTime eventTime)
+    {
+        EventId = eventId;
+        Vid = vid;
+        CameraId = cameraId;
+        RoiId = roiId;
+        var normalized = eventTime.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(eventTime, DateTimeKind.Local)
+            : eventTime;
+        EventTime = new DateTimeOffset(normalized);
+    }
+
+    public DbTrackEvent(long eventId, string vid, long cameraId, long roiId, DateTimeOffset eventTime)
+    {
+        EventId = eventId;
+        Vid = vid;
+        CameraId = cameraId;
+        RoiId = roiId;
+        EventTime = eventTime;
+    }
+}
 internal sealed record DbJudgeResult
 {
     public long JudgeId { get; }
