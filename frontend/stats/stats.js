@@ -63,16 +63,6 @@ async function load() {
     }
 
     renderCharts(dashboard.data || {});
-    const od = overview.data || {};
-    const cap = od.totalCapture ?? 0;
-    const al = od.totalAlert ?? 0;
-    const on = od.onlineDevice ?? 0;
-    setStatus(`图表已根据最新数据刷新：抓拍合计 ${cap} 条、告警合计 ${al} 条，在线设备 ${on} 台。`, false);
-    clearSuccessStatusTimer();
-    successStatusTimer = window.setTimeout(() => {
-      successStatusTimer = null;
-      setStatus("");
-    }, SUCCESS_STATUS_MS);
   } catch (error) {
     setStatus(`查询失败：${error.message}`, true);
   }

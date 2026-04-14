@@ -4,9 +4,14 @@ const resultEl = document.getElementById("result");
 const exportJudgeBtn = document.getElementById("exportJudge");
 let latestJudgeRows = [];
 
-function setExportEnabled(enabled) {
+function setExportVisible(visible) {
   if (!exportJudgeBtn) return;
-  exportJudgeBtn.disabled = !enabled;
+  if (window.aura && typeof window.aura.setElementVisible === "function") {
+    window.aura.setElementVisible(exportJudgeBtn, visible);
+    return;
+  }
+  exportJudgeBtn.hidden = !visible;
+  exportJudgeBtn.disabled = !visible;
 }
 
 /** 成功提示自动消失定时器 */
@@ -97,7 +102,7 @@ async function post(path, body) {
 
 async function load(options = {}) {
   setResult("");
-  if (!options.keepExportState) setExportEnabled(false);
+  if (!options.keepExportState) setExportVisible(false);
 
   try {
     const date = getDate();
@@ -106,14 +111,14 @@ async function load(options = {}) {
     });
     const data = await res.json();
     latestJudgeRows = Array.isArray(data?.data) ? data.data : [];
-    setExportEnabled(latestJudgeRows.length > 0);
+    setExportVisible(latestJudgeRows.length > 0);
     if (!options.silentSuccessToast || !data || data.code !== 0) {
       setResult(data);
     }
   } catch (error) {
     setResult(`查询失败：${error.message}`);
     latestJudgeRows = [];
-    setExportEnabled(false);
+    setExportVisible(false);
   }
 }
 

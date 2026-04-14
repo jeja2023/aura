@@ -12,6 +12,10 @@ let latestLogRows = [];
 
 function setExportVisible(visible) {
   if (!exportLogBtn) return;
+  if (window.aura && typeof window.aura.setElementVisible === "function") {
+    window.aura.setElementVisible(exportLogBtn, visible);
+    return;
+  }
   exportLogBtn.hidden = !visible;
   exportLogBtn.disabled = !visible;
 }
