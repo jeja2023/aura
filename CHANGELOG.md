@@ -34,6 +34,15 @@
 - **集成测试补充**：`backend/Aura.Api.Integration.Tests/HealthEndpointTests.cs` 同步更新健康检查相关断言与用例，覆盖本轮核心健康路径改动。
 - **存储目录占位**：`storage/.gitkeep` 纳入版本管理，确保开发与部署环境在仓库层具备稳定目录基线。
 
+### 0.1.11 补充修订（导出链路与数据表统一）
+
+- **导出能力全局统一**：`frontend/common/shell.js` 新增全局导出方法 `window.aura.exportDataset(options)`，统一处理“选择格式 -> 请求导出接口 -> 解析 `downloadUrl` -> 打开下载链接”流程。
+- **业务页导出改造**：`frontend/capture/capture.js`、`frontend/alert/alert.js`、`frontend/judge/judge.js`、`frontend/log/log.js`、`frontend/user/user.js` 全部改为复用全局导出方法，并为导出点击统一加入 `preventDefault/stopPropagation` 防止误刷新。
+- **后端导出数据集扩展与兼容**：`backend/Aura.Api/Export/ExportApplicationService.cs` 新增 `dataset=user` 导出，支持用户名/昵称关键字过滤；同时增加 `log/logs/systemlog/users/userlist` 等历史别名兼容映射，降低前后端版本错配风险。
+- **日志页导出交互修复**：`frontend/log/log.js` 与 `frontend/log/log.html` 调整为“有数据才显示导出按钮、无数据隐藏”，并与后端 JSON 导出返回协议对齐（不再直接打开导出接口 JSON 页面）。
+- **用户/角色数据表样式收敛**：`frontend/user/user.css`、`frontend/role/role.css` 移除页面私有表格视觉重写，改为完全复用 `frontend/common/forms.css` 的全局 `.aura-data-table` 规范。
+- **操作列全局规范补齐**：`frontend/common/forms.css` 新增 `aura-col-action-group` 与 `aura-table-actions` 语义类，并统一收紧操作列按钮尺寸与单元格上下内边距，修复“按钮显示不完整、行高被撑高”问题。
+
 ### 按文件落点（审计清单）
 
 - **后端核心**：`backend/Aura.Api/Program.cs`、`backend/Aura.Api/Extensions/AuraEndpointsAuth.cs`、`backend/Aura.Api/Extensions/AuraEndpointsCore.cs`、`backend/Aura.Api/Extensions/AuraEndpointsDomain.cs`、`backend/Aura.Api/Extensions/ServiceExtensions.cs`、`backend/Aura.Api/Data/PgSqlStore.cs`、`backend/Aura.Api/Data/AppStore.cs`、`backend/Aura.Api/Models/Entities.cs`、`backend/Aura.Api/Models/Requests.cs`、`backend/Aura.Api/Internal/DevInitializer.cs`、`backend/Aura.Api/IdentityAdminService.cs`、`backend/Aura.Api/DeviceManagementService.cs`、`backend/Aura.Api/JudgeService.cs`、`backend/Aura.Api/Capture/CaptureProcessingService.cs`、`backend/Aura.Api/RetryProcessingService.cs`、`backend/Aura.Api/Cache/RetryQueueService.cs`。

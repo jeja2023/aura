@@ -13,7 +13,7 @@ const roleTableBodyEl = document.getElementById("roleTableBody");
 let latestRoleRows = [];
 let latestFilteredRoleRows = [];
 let rolePage = 1;
-let rolePageSize = 20;
+let rolePageSize = 15;
 
 /** 成功提示自动消失定时器 */
 let successStatusTimer = null;
@@ -223,7 +223,7 @@ function renderRoleTable(rows) {
       page: pageData.page,
       pageSize: pageData.pageSize,
       total: pageData.total,
-      pageSizeOptions: [10, 20, 50, 100],
+      pageSizeOptions: [15, 30, 45, 60],
       onChange: (nextPage, nextPageSize) => {
         rolePage = nextPage;
         rolePageSize = nextPageSize;

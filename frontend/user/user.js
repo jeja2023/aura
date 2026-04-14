@@ -20,7 +20,7 @@ const deleteUserIdDisplayEl = document.getElementById("deleteUserIdDisplay");
 const deleteResultEl = document.getElementById("deleteResult");
 const confirmDeleteUserBtn = document.getElementById("confirmDeleteUser");
 let latestUserPayload = null;
-const DEFAULT_USER_PAGE_SIZE = 20;
+const DEFAULT_USER_PAGE_SIZE = 15;
 let userPage = 1;
 let userPageSize = DEFAULT_USER_PAGE_SIZE;
 
@@ -349,16 +349,17 @@ function renderUserList(payload) {
         <td class="aura-col-status"><span class="${statusClass}">${statusLabel}</span></td>
         <td class="aura-col-time">${createdCell}</td>
         <td class="aura-col-time">${lastLoginCell}</td>
-        <td class="aura-col-action">
-          <div class="user-table-actions" role="group" aria-label="用户操作">
+        <td class="aura-col-action-group">
+          <div class="aura-table-actions" role="group" aria-label="用户操作">
             <button
               type="button"
-              class="btn-secondary user-table-status-toggle"
+              class="btn-secondary"
+              data-user-action="toggle-status"
               data-next-status="${nextStatus}"
               aria-label="切换账号状态为${nextStatusLabel}"
             >${nextStatusLabel}</button>
-            <button type="button" class="btn-danger user-table-delete" data-user-action="delete">删除</button>
-            <button type="button" class="btn-secondary user-table-reset-password" data-user-action="reset-password">重置密码</button>
+            <button type="button" class="btn-danger" data-user-action="delete">删除</button>
+            <button type="button" class="btn-secondary" data-user-action="reset-password">重置密码</button>
           </div>
         </td>
       </tr>`;
@@ -384,7 +385,7 @@ function renderUserList(payload) {
     <th scope="col" class="aura-col-status">状态</th>
     <th scope="col" class="aura-col-time">创建时间</th>
     <th scope="col" class="aura-col-time">最后登录时间</th>
-    <th scope="col" class="aura-col-action">操作</th>
+    <th scope="col" class="aura-col-action-group">操作</th>
   </tr></thead><tbody>${bodyRows}</tbody></table></div>`;
 
   if (userPagerEl && window.aura && typeof window.aura.renderPager === "function") {
@@ -392,7 +393,7 @@ function renderUserList(payload) {
       page: pageData.page,
       pageSize: pageData.pageSize,
       total: filteredCount,
-      pageSizeOptions: [10, 20, 50, 100],
+      pageSizeOptions: [15, 30, 45, 60],
       onChange: (nextPage, nextPageSize) => {
         userPage = nextPage;
         userPageSize = nextPageSize;
@@ -458,47 +459,17 @@ function downloadUserImportTemplate() {
 }
 
 async function exportUsers() {
-  let payload = latestUserPayload;
-  if (!payload || !Array.isArray(payload.data)) {
-    try {
-      const res = await fetch(`${apiBase}/api/user/list`, { credentials: "include" });
-      payload = await res.json();
-    } catch (error) {
-      showToast(`导出失败：${error.message}`, true);
-      return;
-    }
-  }
-  const rows = Array.isArray(payload?.data) ? payload.data : [];
-  if (!rows.length) {
-    showToast("暂无可导出的用户", true);
+  if (window.aura && typeof window.aura.exportDataset === "function") {
+    const keyword = String(userKeywordEl?.value ?? "").trim();
+    await window.aura.exportDataset({
+      apiBase,
+      dataset: "user",
+      keyword,
+      onError: (message) => showToast(message, true)
+    });
     return;
   }
-
-  const header = ["序号", "用户名", "昵称", "角色", "状态", "创建时间", "最后登录时间"];
-  const csvRows = [header.join(",")];
-  rows.forEach((row, index) => {
-    const userName = row.userName ?? row.user_name ?? row.UserName ?? "";
-    const displayName = row.displayName ?? row.display_name ?? row.DisplayName ?? "";
-    const roleName = formatRoleLabel(row);
-    const status = Number(row.status ?? row.Status ?? 0) === 1 ? "启用" : "禁用";
-    const createdAt = formatExportDateTime(row.createdAt ?? row.created_at ?? row.CreatedAt ?? "");
-    const lastLoginAt = formatExportDateTime(row.lastLoginAt ?? row.last_login_at ?? row.LastLoginAt ?? "");
-    csvRows.push([index + 1, userName, displayName, roleName, status, createdAt, lastLoginAt].map(toCsvCell).join(","));
-  });
-
-  const blob = new Blob([`\uFEFF${csvRows.join("\r\n")}`], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  const d = new Date();
-  const pad = (n) => String(n).padStart(2, "0");
-  const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
-  a.href = url;
-  a.download = `用户列表_${stamp}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-  showToast(`导出成功，共 ${rows.length} 条`, false);
+  showToast("导出失败：缺少全局导出能力", true);
 }
 
 async function importUsersFromCsv(file) {
@@ -672,7 +643,9 @@ confirmDeleteUserBtn?.addEventListener("click", deleteUser);
 
 document.getElementById("load").addEventListener("click", load);
 document.getElementById("create").addEventListener("click", createUser);
-document.getElementById("exportUsers")?.addEventListener("click", () => {
+document.getElementById("exportUsers")?.addEventListener("click", (event) => {
+  event.preventDefault();
+  event.stopPropagation();
   void exportUsers();
 });
 document.getElementById("downloadImportTemplate")?.addEventListener("click", () => {
@@ -705,19 +678,20 @@ userListEl?.addEventListener("click", (event) => {
   const userId = Number(userIdRaw);
   if (!userId || !Number.isFinite(userId)) return;
 
-  if (btn.classList.contains("user-table-status-toggle")) {
+  const action = String(btn.dataset.userAction || "").trim();
+  if (action === "toggle-status") {
     const nextStatus = Number(btn.dataset.nextStatus ?? "");
     if (nextStatus !== 0 && nextStatus !== 1) return;
     void updateUserStatusQuick(userId, nextStatus);
     return;
   }
 
-  if (btn.classList.contains("user-table-delete")) {
+  if (action === "delete") {
     openDeleteModal(userId, userId);
     return;
   }
 
-  if (btn.classList.contains("user-table-reset-password")) {
+  if (action === "reset-password") {
     openResetPasswordModal(userId);
     return;
   }

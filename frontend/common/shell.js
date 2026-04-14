@@ -33,7 +33,7 @@
       title: "统计与导出",
       items: [
         { href: "/stats/", label: "统计驾驶舱" },
-        { href: "/export/", label: "报表导出" }
+        // 报表导出已合并到各业务页面工具条（抓拍/告警/研判），不再单独入口
       ]
     },
     {
@@ -252,6 +252,84 @@
     }, Math.max(800, durationMs));
   }
 
+  function chooseExportFormat() {
+    return new Promise((resolve) => {
+      const root = document.createElement("div");
+      root.className = "aura-modal-root";
+      root.innerHTML = `<div class="aura-modal-backdrop" tabindex="-1" aria-hidden="true"></div>
+<div class="aura-modal-panel" role="dialog" aria-modal="true" aria-labelledby="auraExportFormatTitle">
+  <div class="aura-modal-head">
+    <h2 id="auraExportFormatTitle" class="aura-modal-title">选择导出格式</h2>
+    <button type="button" class="btn-secondary aura-modal-close" data-export-format-cancel>取消</button>
+  </div>
+  <p class="aura-status">请选择导出文件格式。将按当前筛选条件导出。</p>
+  <div class="aura-modal-actions">
+    <button type="button" class="btn-secondary" data-export-format="csv">导出 CSV</button>
+    <button type="button" class="btn-primary" data-export-format="xlsx">导出 XLSX</button>
+  </div>
+</div>`;
+
+      const prevOverflow = document.body.style.overflow;
+      document.body.appendChild(root);
+      document.body.style.overflow = "hidden";
+
+      const finish = (value) => {
+        if (!root.isConnected) return;
+        root.remove();
+        document.body.style.overflow = prevOverflow;
+        resolve(value);
+      };
+
+      root.querySelectorAll("[data-export-format]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const type = String(btn.getAttribute("data-export-format") || "").toLowerCase();
+          finish(type === "xlsx" ? "xlsx" : "csv");
+        });
+      });
+
+      root.querySelectorAll("[data-export-format-cancel], .aura-modal-backdrop").forEach((el) => {
+        el.addEventListener("click", () => finish(""));
+      });
+    });
+  }
+
+  async function exportDataset(options = {}) {
+    const apiBase = String(options.apiBase || "");
+    const dataset = String(options.dataset || "").trim().toLowerCase();
+    const keyword = String(options.keyword || "").trim();
+    const onError = typeof options.onError === "function" ? options.onError : null;
+    const onSuccess = typeof options.onSuccess === "function" ? options.onSuccess : null;
+    if (!dataset) {
+      if (onError) onError("导出失败：缺少数据集参数");
+      return false;
+    }
+    const safeType = await chooseExportFormat();
+    if (!safeType) return false;
+    const query = new URLSearchParams({ dataset });
+    if (keyword) query.set("keyword", keyword);
+    try {
+      const res = await fetch(`${apiBase}/api/export/${safeType}?${query.toString()}`, {
+        credentials: "include"
+      });
+      const data = await res.json();
+      if (!res.ok || data?.code !== 0) {
+        if (onError) onError(data?.msg || "导出失败");
+        return false;
+      }
+      const downloadUrl = String(data?.data?.downloadUrl || "").trim();
+      if (!downloadUrl) {
+        if (onError) onError("导出失败：未返回下载地址");
+        return false;
+      }
+      window.open(`${apiBase}${downloadUrl}`, "_blank", "noopener,noreferrer");
+      if (onSuccess) onSuccess(data);
+      return true;
+    } catch (error) {
+      if (onError) onError(`导出失败：${error.message}`);
+      return false;
+    }
+  }
+
   function bridgeStatusToToast() {
     const statusEls = Array.from(document.querySelectorAll(".aura-status"));
     if (statusEls.length === 0) return;
@@ -349,7 +427,7 @@
     },
     renderPager: (container, options) => {
       if (!container || !options) return;
-      const pageSizeOptions = Array.isArray(options.pageSizeOptions) && options.pageSizeOptions.length > 0 ? options.pageSizeOptions : [10, 20, 50, 100];
+      const pageSizeOptions = Array.isArray(options.pageSizeOptions) && options.pageSizeOptions.length > 0 ? options.pageSizeOptions : [15, 30, 45, 60];
       const total = Math.max(0, Number(options.total) || 0);
       const pageSize = Math.max(1, Number(options.pageSize) || pageSizeOptions[0]);
       const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -390,6 +468,8 @@
         });
       }
     },
+    chooseExportFormat: () => chooseExportFormat(),
+    exportDataset: (options) => exportDataset(options),
     toast: (message, isError = false, durationMs = 2200) => showToast(message, isError, durationMs),
     animateNumber: (el, target, duration = 1000) => {
       let startTime = null;

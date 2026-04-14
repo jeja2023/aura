@@ -7,6 +7,7 @@
   padding: 16px;
   display: grid;
   gap: 12px;
+  align-content: start;
 }
 
 /* 工具条：输入框不占满整行，与按钮同一行、底边对齐（覆盖 forms 里 input 默认 width:100%） */

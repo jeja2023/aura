@@ -399,13 +399,40 @@ button[type="submit"]:active {
   text-decoration: underline;
 }
 
+/* =========================
+ * 全局数据表规范（强制统一）
+ *
+ * 目标：
+ * - 所有“数据表格页面”必须复用同一套样式：`.aura-data-table-wrap` + `.aura-data-table`
+ * - 表格行高以「NVR 设备管理」页面为基准，保证全站一致
+ * - 表格内按钮不允许撑大行高
+ *
+ * 必须复用（禁止页面私有重写的项）：
+ * - 表头/表体基础 padding（行高基准）、font-size、line-height、border、背景
+ * - 表格内按钮 min-height / padding（避免撑高行）
+ *
+ * 允许页面级覆写的项（仅限于“语义差异”，不改变基准行高）：
+ * - 列宽：例如 `.aura-col-id`、`.aura-col-time`、自定义列 class 的 `width/min-width`
+ * - 表头是否 sticky：可在页面 CSS 对 `thead th` 加 `position: sticky; top: 0;`
+ * - 斑马纹、hover 强度：可调整 `tbody tr:nth-child(even)` 或 `tr:hover`
+ * - 表格外层可视区域高度：允许调整 `.aura-data-table-wrap` 的 `max-height/min-height`
+ *
+ * 不建议：
+ * - 新建 `.xxx-table` / `.xxx-table-wrap` 这类私有表格体系；如确需差异，优先新增“列 class”
+ *   或在页面级对 `.aura-data-table` 做最小覆写（仅限上面允许的项）。
+ * ========================= */
 /* 数据表（业务区通用，与日志表视觉对齐；浅色/暗黑随主题变量） */
 .app-content .aura-data-table-wrap {
+  /* 关键规范：默认每页 15 条时不出现“表格内部”纵向滚动条；
+     超过 15 条才出现滚动条；分页控件固定在 15 条高度下方。 */
+  --table-page-size: 15;
+  --table-head-height: 40px;
+  --table-row-height: 38px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--bg);
   overflow: auto;
-  max-height: min(520px, 62vh);
+  max-height: calc(var(--table-head-height) + (var(--table-row-height) * var(--table-page-size)) + 4px);
 }
 
 .app-content .aura-data-table {
@@ -420,17 +447,27 @@ button[type="submit"]:active {
   color: var(--text);
   background: color-mix(in srgb, var(--card) 70%, var(--bg) 30%);
   border: 1px solid var(--line);
-  padding: 10px 12px;
+  padding: 10px 12px; /* 以 NVR 设备页为基准 */
   font-size: 13px;
+  line-height: 1.35;
+  height: var(--table-head-height);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .app-content .aura-data-table tbody td {
   border: 1px solid var(--line);
   color: var(--text);
-  padding: 9px 12px;
+  padding: 9px 12px; /* 以 NVR 设备页为基准 */
   vertical-align: middle;
   word-break: break-word;
   font-size: 13px;
+  line-height: 1.35;
+  height: var(--table-row-height);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .app-content .aura-data-table tbody tr:hover td {
@@ -450,15 +487,79 @@ button[type="submit"]:active {
   text-align: center;
 }
 
+/* 多按钮操作列：用于“禁用/删除/重置密码”等组合动作 */
+.app-content .aura-data-table .aura-col-action-group {
+  min-width: 220px;
+  text-align: center;
+}
+
+.app-content .aura-data-table tbody td.aura-col-action-group {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.app-content .aura-data-table .aura-table-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
 .app-content .aura-data-table .aura-col-time {
   width: 178px;
 }
 
-.app-content .aura-data-table .aura-col-action .btn-secondary {
-  padding-left: 12px;
-  padding-right: 12px;
-  min-height: 34px;
-  font-size: 13px;
+/* 表格内按钮规范（强制统一，不允许撑高行） */
+.app-content .aura-data-table {
+  --table-btn-min-height: 30px;
+  --table-btn-padding-y: 5px;
+  --table-btn-padding-x: 12px;
+  --table-btn-font-size: 13px;
+  --table-btn-radius: 8px;
+  --table-btn-line-height: 1.15;
+  /* 操作列统一更紧凑，避免按钮撑高行高 */
+  --table-action-btn-min-height: 24px;
+  --table-action-btn-padding-y: 2px;
+  --table-action-btn-padding-x: 8px;
+}
+
+.app-content .aura-data-table :is(td, th) :is(.btn-primary, .btn-secondary, .btn-danger, button) {
+  min-height: var(--table-btn-min-height);
+  padding: var(--table-btn-padding-y) var(--table-btn-padding-x);
+  font-size: var(--table-btn-font-size);
+  line-height: var(--table-btn-line-height);
+  border-radius: var(--table-btn-radius);
+  transform: none; /* 禁止表格内按钮上浮导致行高/布局抖动 */
+}
+
+.app-content .aura-data-table :is(td, th) :is(.btn-primary, .btn-secondary, .btn-danger, button):hover,
+.app-content .aura-data-table :is(td, th) :is(.btn-primary, .btn-secondary, .btn-danger, button):active {
+  transform: none;
+}
+
+.app-content .aura-data-table :is(td, th) :is(.btn-primary, .btn-secondary, .btn-danger, button):focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.22);
+}
+
+/* 常见“操作列”按钮再收紧一点，避免多按钮时挤压 */
+.app-content .aura-data-table .aura-col-action :is(.btn-primary, .btn-secondary, .btn-danger, button) {
+  min-height: var(--table-action-btn-min-height);
+  padding: var(--table-action-btn-padding-y) var(--table-action-btn-padding-x);
+}
+
+.app-content .aura-data-table .aura-col-action-group :is(.btn-primary, .btn-secondary, .btn-danger, button) {
+  min-height: var(--table-action-btn-min-height);
+  padding: var(--table-action-btn-padding-y) var(--table-action-btn-padding-x);
+}
+
+/* 操作列单元格上下内边距统一收紧，避免把整行撑高 */
+.app-content .aura-data-table tbody td.aura-col-action,
+.app-content .aura-data-table tbody td.aura-col-action-group {
+  padding-top: 4px;
+  padding-bottom: 4px;
 }
 
 /* 模态对话框（全站通用：遮罩 + 面板，随主题变量） */
