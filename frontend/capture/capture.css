@@ -10,30 +10,10 @@
 /* 抓拍记录：输入框与按钮同一行（小屏自动换行） */
 .capture-toolbar {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 12px 16px;
   align-items: flex-end;
   margin-bottom: 14px;
-}
-
-.capture-toolbar input {
-  width: auto; /* 覆盖 forms.css 默认全宽 */
-  max-width: 100%;
-}
-
-.capture-toolbar #deviceId {
-  flex: 0 1 220px;
-  min-width: 140px;
-}
-
-.capture-toolbar #channelNo {
-  flex: 0 1 220px;
-  min-width: 140px;
-}
-
-.capture-toolbar #meta {
-  flex: 1 1 360px;
-  min-width: 260px;
 }
 
 .capture-toolbar button {
@@ -45,4 +25,18 @@
   .capture-toolbar {
     flex-wrap: wrap;
   }
+}
+
+.capture-table-wrap {
+  margin-top: 12px;
+}
+
+.capture-modal-create.aura-modal-panel {
+  width: min(100%, 580px);
+}
+
+.capture-modal-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }

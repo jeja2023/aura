@@ -22,8 +22,8 @@
     <main class="app-content">
       <div class="page">
         <section class="card floor-toolbar">
-          <label>资源节点ID <input id="nodeId" type="number" value="3" /></label>
-          <label>缩放比例 <input id="scaleRatio" type="number" step="0.0001" value="1.0000" /></label>
+          <label>资源节点ID <input id="nodeId" class="aura-input" type="number" value="3" /></label>
+          <label>缩放比例 <input id="scaleRatio" class="aura-input" type="number" step="0.0001" value="1.0000" /></label>
           <input id="file" type="file" accept=".png,.jpg,.jpeg,.webp,.svg" aria-label="选择楼层图文件" />
           <button id="uploadBtn" class="btn-primary" type="button">上传并创建楼层图</button>
           <button id="listBtn" class="btn-secondary" type="button">查询楼层图</button>
@@ -32,7 +32,7 @@
           <h2>预览</h2>
           <img id="preview" alt="floor-preview" />
         </section>
-        <pre id="result" class="aura-status" role="status" hidden aria-live="polite"></pre>
+        <pre id="result" class="aura-status aura-display-box" role="status" hidden aria-live="polite"></pre>
       </div>
     </main>
   </div>

@@ -63,6 +63,27 @@ internal static class AuraEndpointsDomain
             await dispatch.BroadcastRoleEventAsync("judge.updated", ret);
             return Results.Ok(new { code = 0, msg = "归寝研判完成", data = ret });
         }).RequireAuthorization("楼栋管理员");
+        judgeGroup.MapPost("/run/abnormal", async (HttpRequest request, JudgeAbnormalReq req, JudgeService svc, EventDispatchService dispatch) =>
+        {
+            var rl = await AuraHelpers.CheckRateLimitAsync(request, cache, "judge.run.abnormal", 1, TimeSpan.FromMinutes(10));
+            if (rl is not null) return rl;
+            var date = string.IsNullOrWhiteSpace(req.Date) ? DateOnly.FromDateTime(DateTime.Now) : DateOnly.Parse(req.Date);
+            var groupThreshold = req.GroupThreshold <= 0 ? 2 : req.GroupThreshold;
+            var stayMinutes = req.StayMinutes <= 0 ? 120 : req.StayMinutes;
+            var ret = await svc.RunGroupRentAndStayAsync(date, groupThreshold, stayMinutes);
+            await dispatch.BroadcastRoleEventAsync("judge.updated", ret);
+            return Results.Ok(new { code = 0, msg = "群租/滞留研判完成", data = ret });
+        }).RequireAuthorization("楼栋管理员");
+        judgeGroup.MapPost("/run/night", async (HttpRequest request, JudgeNightReq req, JudgeService svc, EventDispatchService dispatch) =>
+        {
+            var rl = await AuraHelpers.CheckRateLimitAsync(request, cache, "judge.run.night", 1, TimeSpan.FromMinutes(10));
+            if (rl is not null) return rl;
+            var date = string.IsNullOrWhiteSpace(req.Date) ? DateOnly.FromDateTime(DateTime.Now) : DateOnly.Parse(req.Date);
+            var cutoff = req.CutoffHour < 0 || req.CutoffHour > 23 ? 23 : req.CutoffHour;
+            var ret = await svc.RunNightAbsenceAsync(date, cutoff);
+            await dispatch.BroadcastRoleEventAsync("judge.updated", ret);
+            return Results.Ok(new { code = 0, msg = "夜不归宿研判完成", data = ret });
+        }).RequireAuthorization("楼栋管理员");
         judgeGroup.MapPost("/run/daily", async (HttpRequest request, JudgeNightReq req, JudgeService svc, EventDispatchService dispatch) =>
         {
             var rl = await AuraHelpers.CheckRateLimitAsync(request, cache, "judge.run.daily", 1, TimeSpan.FromMinutes(10));
@@ -144,5 +165,8 @@ internal static class AuraEndpointsDomain
 
         var operationGroup = app.MapGroup("/api/operation");
         operationGroup.MapGet("/list", async (OperationQueryService svc, string? keyword, int page = 1, int pageSize = 20) => await svc.GetOperationsAsync(keyword, page, pageSize)).RequireAuthorization("超级管理员");
+
+        var systemLogGroup = app.MapGroup("/api/system-log");
+        systemLogGroup.MapGet("/list", async (SystemLogQueryService svc, string? keyword, int page = 1, int pageSize = 20) => await svc.GetSystemLogsAsync(keyword, page, pageSize)).RequireAuthorization("超级管理员");
     }
 }

@@ -25,17 +25,18 @@
         <section class="bar track-toolbar">
           <input
             id="vid"
+            class="aura-search-input"
             type="text"
             placeholder="请输入人员虚拟编号"
             aria-label="人员虚拟编号"
             autocomplete="off"
           />
-          <button id="load" type="button">查询轨迹</button>
-          <button id="play" type="button">播放动画</button>
-          <button id="pause" type="button">暂停</button>
+          <button id="load" class="btn-secondary" type="button">查询轨迹</button>
+          <button id="play" class="btn-secondary" type="button">播放动画</button>
+          <button id="pause" class="btn-secondary" type="button">暂停</button>
         </section>
         <canvas id="canvas" width="900" height="520"></canvas>
-        <pre id="result" class="aura-status" role="status" hidden aria-live="polite"></pre>
+        <pre id="result" class="aura-status aura-display-box" role="status" hidden aria-live="polite"></pre>
       </div>
     </main>
   </div>

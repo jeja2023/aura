@@ -21,63 +21,106 @@
     </header>
     <main class="app-content">
       <div class="page">
-        <section class="user-tabs" aria-label="用户管理 Tabs">
-          <div class="user-tabs-header" role="tablist" aria-label="切换操作">
-            <button id="tab-create" class="user-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="panel-create">创建用户</button>
-            <button id="tab-query" class="user-tab" type="button" role="tab" aria-selected="false" aria-controls="panel-query">查询用户</button>
-            <button id="tab-update" class="user-tab" type="button" role="tab" aria-selected="false" aria-controls="panel-update">更新用户状态</button>
-          </div>
-
-          <div class="user-tabs-body">
-            <div id="panel-create" class="user-tab-panel is-active" role="tabpanel" aria-labelledby="tab-create">
-              <div class="user-card" aria-label="创建用户">
-                <div class="user-card-title">创建用户</div>
-                <div class="user-card-controls">
-                  <input id="userName" type="text" placeholder="用户名" />
-                  <input id="password" type="password" placeholder="密码" />
-                  <select id="roleId" aria-label="角色">
-                    <option value="2" selected>普通用户（2）</option>
-                    <option value="1">管理员（1）</option>
-                  </select>
-                  <button id="create" class="btn-secondary" type="button">创建用户</button>
-                </div>
-                <pre id="createResult" class="user-result" hidden role="status" aria-live="polite"></pre>
-              </div>
+        <section class="user-page" aria-label="用户管理">
+          <div class="user-card user-card--list" aria-label="查询用户">
+            <div class="user-card-controls user-card-controls--query">
+              <input id="userKeyword" class="aura-search-input" type="text" placeholder="用户名关键词" autocomplete="off" />
+              <button id="load" class="btn-secondary" type="button">查询用户</button>
+              <button id="openCreateModal" class="btn-primary" type="button">创建用户</button>
+              <button id="downloadImportTemplate" class="btn-secondary" type="button">下载导入模板</button>
+              <button id="openImport" class="btn-secondary" type="button">批量导入</button>
+              <button id="exportUsers" class="btn-secondary" type="button">导出用户</button>
+              <input id="importFile" type="file" accept=".csv,text/csv" hidden />
             </div>
-
-            <div id="panel-query" class="user-tab-panel" role="tabpanel" aria-labelledby="tab-query">
-              <div class="user-card" aria-label="查询用户">
-                <div class="user-card-title">查询用户</div>
-                <div class="user-card-controls">
-                  <input id="userKeyword" type="text" placeholder="用户名关键词" autocomplete="off" />
-                  <button id="load" class="btn-secondary" type="button">查询用户</button>
-                </div>
-                <pre id="queryResult" class="user-result" hidden role="status" aria-live="polite"></pre>
-                <div id="userListMeta" class="user-list-meta" aria-live="polite"></div>
-                <div id="userList" class="user-list" aria-live="polite"></div>
-              </div>
-            </div>
-
-            <div id="panel-update" class="user-tab-panel" role="tabpanel" aria-labelledby="tab-update">
-              <div class="user-card" aria-label="更新用户状态">
-                <div class="user-card-title">更新用户状态</div>
-                <div class="user-card-controls">
-                  <input id="statusUserId" type="text" placeholder="用户ID" autocomplete="off" />
-                  <select id="statusValue" aria-label="状态" autocomplete="off">
-                    <option value="" selected>选择状态</option>
-                    <option value="1">启用（1）</option>
-                    <option value="0">禁用（0）</option>
-                  </select>
-                  <button id="updateStatus" class="btn-secondary" type="button">更新状态</button>
-                </div>
-                <pre id="updateResult" class="user-result" hidden role="status" aria-live="polite"></pre>
-              </div>
-            </div>
+            <pre id="queryResult" class="user-result aura-display-box" hidden role="status" aria-live="polite"></pre>
+            <div id="userListMeta" class="user-list-meta" aria-live="polite"></div>
+            <div id="userList" class="user-list" aria-live="polite"></div>
+            <div id="userPager" hidden aria-label="用户列表分页"></div>
           </div>
         </section>
       </div>
     </main>
   </div>
+
+  <div id="userModalCreate" class="aura-modal-root" hidden>
+    <div class="aura-modal-backdrop" tabindex="-1" aria-hidden="true"></div>
+    <div class="aura-modal-panel user-modal-create" role="dialog" aria-modal="true" aria-labelledby="userModalCreateTitle">
+      <div class="aura-modal-head">
+        <h2 id="userModalCreateTitle" class="aura-modal-title">创建用户</h2>
+        <button type="button" class="btn-secondary aura-modal-close" data-aura-modal-dismiss aria-label="关闭对话框">关闭</button>
+      </div>
+      <p class="user-modal-lead">提交成功后将关闭窗口并刷新列表。</p>
+      <div class="user-modal-fields aura-modal-fields">
+        <input id="userName" class="aura-input" type="text" placeholder="用户名" autocomplete="username" />
+        <input id="displayName" class="aura-input" type="text" placeholder="昵称（用于页面展示）" autocomplete="name" />
+        <input id="password" class="aura-input" type="password" placeholder="密码" autocomplete="new-password" />
+        <select id="roleId" aria-label="角色">
+          <option value="2" selected>普通用户（2）</option>
+          <option value="1">管理员（1）</option>
+        </select>
+      </div>
+      <div class="aura-modal-actions">
+        <button id="create" class="btn-primary" type="button">创建</button>
+      </div>
+      <pre id="createResult" class="user-result user-result--modal aura-display-box" hidden role="status" aria-live="polite"></pre>
+    </div>
+  </div>
+
+  <div id="userModalResetPassword" class="aura-modal-root" hidden>
+    <div class="aura-modal-backdrop" tabindex="-1" aria-hidden="true"></div>
+    <div class="aura-modal-panel user-modal-reset-password" role="dialog" aria-modal="true" aria-labelledby="userModalResetPasswordTitle">
+      <div class="aura-modal-head">
+        <h2 id="userModalResetPasswordTitle" class="aura-modal-title">重置密码</h2>
+        <button type="button" class="aura-modal-close-btn" data-aura-modal-dismiss aria-label="关闭">
+          <svg class="aura-modal-close-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path
+              fill="currentColor"
+              d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
+            />
+          </svg>
+        </button>
+      </div>
+      <p class="user-modal-lead">确认后将直接重置为系统默认密钥，用户登录后可自行修改。</p>
+      <div class="user-modal-fields user-modal-fields--reset-password">
+        <input type="hidden" id="resetUserId" value="" />
+        <div class="user-reset-password-note">默认密钥：Aura@123456</div>
+      </div>
+      <div class="aura-modal-actions user-modal-actions">
+        <button type="button" class="btn-secondary user-modal-btn-cancel" data-aura-modal-dismiss>取消</button>
+        <button id="confirmResetPassword" class="btn-primary user-modal-btn-save" type="button">确认重置</button>
+      </div>
+      <pre id="resetPasswordResult" class="user-result user-result--modal aura-display-box" hidden role="status" aria-live="polite"></pre>
+    </div>
+  </div>
+
+  <div id="userModalDelete" class="aura-modal-root" hidden>
+    <div class="aura-modal-backdrop" tabindex="-1" aria-hidden="true"></div>
+    <div class="aura-modal-panel user-modal-delete" role="dialog" aria-modal="true" aria-labelledby="userModalDeleteTitle">
+      <div class="aura-modal-head">
+        <h2 id="userModalDeleteTitle" class="aura-modal-title">删除用户</h2>
+        <button type="button" class="aura-modal-close-btn" data-aura-modal-dismiss aria-label="关闭">
+          <svg class="aura-modal-close-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path
+              fill="currentColor"
+              d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
+            />
+          </svg>
+        </button>
+      </div>
+      <p class="user-modal-lead">确认删除该用户？删除后不可恢复。</p>
+      <div class="user-modal-id-box" aria-live="polite">
+        <span class="user-modal-id-label">用户ID</span>
+        <strong id="deleteUserIdDisplay" class="user-modal-id-value">—</strong>
+        <input type="hidden" id="deleteUserId" value="" />
+      </div>
+      <div class="user-modal-actions user-modal-actions--delete">
+        <button type="button" class="btn-secondary user-modal-btn-cancel" data-aura-modal-dismiss>取消</button>
+        <button id="confirmDeleteUser" class="btn-danger user-modal-btn-save" type="button">删除</button>
+      </div>
+      <pre id="deleteResult" class="user-result user-result--modal aura-display-box" hidden role="status" aria-live="polite"></pre>
+    </div>
+  </div>
+
   <script defer src="../common/shell.js"></script>
   <script defer src="./user.js"></script>
 </body>

@@ -22,14 +22,31 @@
     <main class="app-content">
       <div class="page">
         <div class="alert-toolbar">
-          <input id="type" placeholder="告警类型，如群租告警" />
-          <input id="detail" placeholder="告警详情" />
-          <button id="create" type="button">新增告警</button>
-          <button id="load" type="button">查询告警</button>
+          <button id="load" class="btn-secondary" type="button">查询告警</button>
+          <button id="openCreateAlertModal" class="btn-primary" type="button">新增告警</button>
         </div>
-        <pre id="result" class="aura-status" role="status" hidden aria-live="polite"></pre>
+        <pre id="result" class="aura-status aura-display-box" role="status" hidden aria-live="polite"></pre>
       </div>
     </main>
+  </div>
+
+  <div id="alertCreateModal" class="aura-modal-root" hidden>
+    <div class="aura-modal-backdrop" tabindex="-1" aria-hidden="true"></div>
+    <div class="aura-modal-panel alert-modal-create" role="dialog" aria-modal="true" aria-labelledby="alertCreateModalTitle">
+      <div class="aura-modal-head">
+        <h2 id="alertCreateModalTitle" class="aura-modal-title">新增告警</h2>
+        <button type="button" class="btn-secondary aura-modal-close" data-aura-modal-dismiss aria-label="关闭对话框">关闭</button>
+      </div>
+      <div class="alert-modal-fields aura-modal-fields">
+        <input id="type" class="aura-input" placeholder="告警类型，如群租告警" />
+        <input id="detail" class="aura-input" placeholder="告警详情" />
+      </div>
+      <div class="aura-modal-actions">
+        <button type="button" class="btn-secondary" data-aura-modal-dismiss>取消</button>
+        <button id="create" type="button" class="btn-primary">新增告警</button>
+      </div>
+      <pre id="createAlertResult" class="aura-status aura-display-box" role="status" hidden aria-live="polite"></pre>
+    </div>
   </div>
   <script defer src="../common/shell.js"></script>
   <script defer src="./alert.js"></script>

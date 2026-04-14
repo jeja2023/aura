@@ -7,7 +7,7 @@
   padding: 16px;
 }
 
-/* 操作与系统日志：查询按钮与三个输入框同一行（小屏自动换行） */
+/* 操作与系统日志：查询按钮与筛选项同一行（小屏自动换行） */
 .log-toolbar {
   display: flex;
   flex-wrap: nowrap;
@@ -21,24 +21,61 @@
   max-width: 100%;
 }
 
+.log-toolbar #logType {
+  flex: 0 1 160px;
+  min-width: 120px;
+}
+
 .log-toolbar #keyword {
   flex: 0 1 360px;
   min-width: 180px;
 }
 
-.log-toolbar #page {
-  flex: 0 1 160px;
-  min-width: 120px;
-}
-
-.log-toolbar #pageSize {
-  flex: 0 1 220px;
-  min-width: 140px;
-}
-
 .log-toolbar button {
   flex: 0 0 auto;
   white-space: nowrap;
+}
+
+.log-table-wrap {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  overflow: auto;
+  min-height: 220px;
+  max-height: 560px;
+}
+
+.log-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  border: 1px solid var(--line);
+}
+
+.log-table thead th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text);
+  background: color-mix(in srgb, var(--card) 70%, var(--bg) 30%);
+  border: 1px solid var(--line);
+  padding: 10px 12px;
+}
+
+.log-table tbody td {
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 9px 12px;
+  vertical-align: top;
+  word-break: break-word;
+  font-size: 13px;
+}
+
+.log-table .col-time {
+  width: 190px;
+}
+
+.log-table .col-main {
+  width: 130px;
 }
 
 @media (max-width: 980px) {

@@ -5,6 +5,7 @@ using Aura.Api.Capture;
 using Aura.Api.Data;
 using Aura.Api.Models;
 using Aura.Api.Ops;
+using Aura.Api.Serialization;
 using Microsoft.AspNetCore.Http;
 
 internal sealed class CaptureProcessingService
@@ -233,7 +234,7 @@ internal sealed class CaptureProcessingService
             map["ai_success"] = aiResult.Success;
             map["ai_dim"] = aiResult.Dim;
             map["ai_msg"] = aiResult.Message;
-            return JsonSerializer.Serialize(map);
+            return JsonSerializer.Serialize(map, AuraJsonSerializerOptions.Default);
         }
         catch
         {
@@ -243,7 +244,7 @@ internal sealed class CaptureProcessingService
                 ai_success = aiResult.Success,
                 ai_dim = aiResult.Dim,
                 ai_msg = aiResult.Message
-            });
+            }, AuraJsonSerializerOptions.Default);
         }
     }
 

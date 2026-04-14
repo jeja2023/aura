@@ -10,6 +10,7 @@ internal sealed class AppStore
     public long RoiSeed;
     public long AlertSeed;
     public long OperationSeed;
+    public long SystemLogSeed;
     public long RoleSeed = 2;
     public long UserSeed = 1;
     public long CampusSeed = 4;
@@ -25,6 +26,7 @@ internal sealed class AppStore
     public List<RoiEntity> Rois { get; } = [];
     public List<AlertEntity> Alerts { get; } = [];
     public List<OperationEntity> Operations { get; } = [];
+    public List<SystemLogEntity> SystemLogs { get; } = [];
     public List<RoleEntity> Roles { get; } =
     [
         new(1, "super_admin", "[\"all\"]"),
@@ -32,7 +34,7 @@ internal sealed class AppStore
     ];
     public List<UserEntity> Users { get; } =
     [
-        new(1, "admin", "super_admin", 1, DateTimeOffset.Now)
+        new(1, "admin", "系统管理员", "super_admin", 1, 1, DateTimeOffset.Now, DateTimeOffset.Now)
     ];
     public List<CampusNodeEntity> CampusNodes { get; } =
     [

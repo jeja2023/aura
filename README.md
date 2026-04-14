@@ -4,7 +4,7 @@
 
 ## 项目状态
 
-- 当前版本：`0.1.8`
+- 当前版本：`0.1.11`
 - 阶段状态：第一至第五阶段均已验收通过
 - 交付结论：计划项已全部完成并在 `开发计划.md` 归档勾选
 - 工程状态：后端可构建（推荐打开根目录 **`Aura.sln`** 或 `dotnet build backend/Aura.Api/Aura.Api.csproj`）、前端页面可访问、核心链路可联调
@@ -15,7 +15,7 @@
 
 - `Aura.sln`：Visual Studio / Rider 解决方案入口
 - `Directory.Build.props`：统一 MSBuild 中间输出路径（`.verify_build\obj`）并排除误编译 `obj` 生成物，便于本机工具链
-- `backend/Aura.Api`：.NET 10 WebAPI 中枢服务；启动入口为 **`Program.cs`**，服务注册在 **`Extensions/ServiceExtensions.cs`**，路由在 **`Extensions/EndpointExtensions.cs`**，安全头与前端路由中间件在 **`Middleware/`**
+- `backend/Aura.Api`：.NET 10 WebAPI 中枢服务；启动入口为 **`Program.cs`**，服务注册在 **`Extensions/ServiceExtensions.cs`**，路由按域拆分在 **`Extensions/AuraEndpoints*.cs`**，安全头与前端路由中间件在 **`Middleware/`**
 - `backend/Aura.Api.Tests`：轻量自检工程（聚类/导出等），可选执行
 - `backend/Aura.Api.Integration.Tests`：xUnit 集成测试（`WebApplicationFactory`，环境为 `Testing`）。**维护提示**：若修改 `backend/Aura.Api/appsettings.Testing.json` 中的 **`Jwt:Key` / `Jwt:Issuer` / `Jwt:Audience`**，必须同步修改 **`backend/Aura.Api.Integration.Tests/TestingJwt.cs`** 内同名常量，否则 `dotnet test` 会失败。
 - `ai`：Python FastAPI AI 服务（特征提取/检索）

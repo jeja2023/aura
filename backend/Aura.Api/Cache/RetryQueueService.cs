@@ -1,5 +1,6 @@
 /* 文件：重试队列服务（RetryQueueService.cs） | File: Retry Queue Service */
 using System.Text.Json;
+using Aura.Api.Serialization;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
 
@@ -41,7 +42,7 @@ internal sealed class RetryQueueService
         }
         try
         {
-            var json = JsonSerializer.Serialize(task);
+            var json = JsonSerializer.Serialize(task, AuraJsonSerializerOptions.Default);
             await _db.ListRightPushAsync(QueueKey, json);
         }
         catch (Exception ex)
@@ -63,7 +64,7 @@ internal sealed class RetryQueueService
             {
                 return null;
             }
-            return JsonSerializer.Deserialize<RetryTask>(value.ToString());
+            return JsonSerializer.Deserialize<RetryTask>(value.ToString(), AuraJsonSerializerOptions.Default);
         }
         catch (Exception ex)
         {

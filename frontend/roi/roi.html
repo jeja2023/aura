@@ -23,17 +23,17 @@
       <div class="page">
         <p class="page-lead">在底图上绘制多边形防区，并关联到房间节点。</p>
         <section class="panel">
-          <label>摄像头ID <input id="cameraId" type="number" value="1" /></label>
-          <label>房间节点ID <input id="roomNodeId" type="number" value="4" /></label>
-          <label class="bg-url-field">底图URL <input id="bgUrl" type="text" placeholder="/uploads/floors/xxx.png 或完整URL" /></label>
-          <button id="loadBgBtn" type="button">加载底图</button>
-          <button id="undoBtn" type="button">撤销点</button>
-          <button id="clearBtn" type="button">清空点</button>
-          <button id="saveBtn" type="button">保存ROI</button>
-          <button id="loadBtn" type="button">查询防区</button>
+          <label>摄像头ID <input id="cameraId" class="aura-input" type="number" value="1" /></label>
+          <label>房间节点ID <input id="roomNodeId" class="aura-input" type="number" value="4" /></label>
+          <label class="bg-url-field">底图URL <input id="bgUrl" class="aura-search-input" type="text" placeholder="/uploads/floors/xxx.png 或完整URL" /></label>
+          <button id="loadBgBtn" class="btn-secondary" type="button">加载底图</button>
+          <button id="undoBtn" class="btn-secondary" type="button">撤销点</button>
+          <button id="clearBtn" class="btn-secondary" type="button">清空点</button>
+          <button id="saveBtn" class="btn-primary" type="button">保存ROI</button>
+          <button id="loadBtn" class="btn-secondary" type="button">查询防区</button>
         </section>
         <canvas id="canvas" width="900" height="520"></canvas>
-        <pre id="result" class="aura-status" role="status" aria-live="polite">提示：点击画布依次落点，至少3个点可保存。</pre>
+        <pre id="result" class="aura-status aura-display-box" role="status" aria-live="polite">提示：点击画布依次落点，至少3个点可保存。</pre>
       </div>
     </main>
   </div>

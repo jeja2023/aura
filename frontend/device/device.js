@@ -1,6 +1,13 @@
 /* 文件：设备页脚本（device.js） | File: Device Script */
 const apiBase = "";
 const resultEl = document.getElementById("result");
+const deviceTableWrapEl = document.getElementById("deviceTableWrap");
+const devicePagerEl = document.getElementById("devicePager");
+const deviceTableHeadEl = document.getElementById("deviceTableHead");
+const deviceTableBodyEl = document.getElementById("deviceTableBody");
+let latestDeviceRows = [];
+let devicePage = 1;
+let devicePageSize = 20;
 
 /** 成功提示自动消失定时器 */
 let successStatusTimer = null;
@@ -18,6 +25,16 @@ function hideResult() {
   resultEl.textContent = "";
   resultEl.hidden = true;
   resultEl.classList.remove("is-error");
+}
+
+function hideTable() {
+  if (devicePagerEl) {
+    devicePagerEl.hidden = true;
+    devicePagerEl.innerHTML = "";
+  }
+  if (deviceTableHeadEl) deviceTableHeadEl.innerHTML = "";
+  if (deviceTableBodyEl) deviceTableBodyEl.innerHTML = "";
+  if (deviceTableWrapEl) deviceTableWrapEl.hidden = true;
 }
 
 function deriveMessage(data) {
@@ -38,6 +55,74 @@ function isErrorPayload(data, message) {
     return /失败|错误|异常|请/.test(message);
   }
   return false;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function formatTime(v) {
+  if (typeof window.formatDateTimeDisplay === "function") return window.formatDateTimeDisplay(v, "-");
+  return String(v ?? "-");
+}
+
+function renderDeviceTable(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  const pagerApi = window.aura && typeof window.aura.paginateArray === "function" ? window.aura : null;
+  const pageData = pagerApi
+    ? pagerApi.paginateArray(list, devicePage, devicePageSize)
+    : { rows: list, page: 1, pageSize: list.length || 20, total: list.length, totalPages: 1 };
+  devicePage = pageData.page;
+  devicePageSize = pageData.pageSize;
+  if (!deviceTableHeadEl || !deviceTableBodyEl) return;
+  deviceTableHeadEl.innerHTML = `<tr>
+    <th class="aura-col-no">序号</th>
+    <th class="aura-col-id">设备ID</th>
+    <th>名称</th>
+    <th>IP</th>
+    <th>端口</th>
+    <th>品牌</th>
+    <th>协议</th>
+    <th>状态</th>
+    <th class="aura-col-time">创建时间</th>
+  </tr>`;
+  if (!pageData.rows.length) {
+    deviceTableBodyEl.innerHTML = `<tr><td colspan="9">暂无设备数据。</td></tr>`;
+  } else {
+    const start = (pageData.page - 1) * pageData.pageSize;
+    deviceTableBodyEl.innerHTML = pageData.rows
+      .map((row, idx) => `<tr>
+        <td class="aura-col-no">${start + idx + 1}</td>
+        <td class="aura-col-id">${escapeHtml(row.deviceId ?? row.DeviceId ?? "-")}</td>
+        <td>${escapeHtml(row.name ?? row.Name ?? "-")}</td>
+        <td>${escapeHtml(row.ip ?? row.Ip ?? "-")}</td>
+        <td>${escapeHtml(row.port ?? row.Port ?? "-")}</td>
+        <td>${escapeHtml(row.brand ?? row.Brand ?? "-")}</td>
+        <td>${escapeHtml(row.protocol ?? row.Protocol ?? "-")}</td>
+        <td>${escapeHtml(row.status ?? row.Status ?? "-")}</td>
+        <td class="aura-col-time">${escapeHtml(formatTime(row.createdAt ?? row.CreatedAt))}</td>
+      </tr>`)
+      .join("");
+  }
+  if (deviceTableWrapEl) deviceTableWrapEl.hidden = false;
+  if (devicePagerEl && window.aura && typeof window.aura.renderPager === "function") {
+    window.aura.renderPager(devicePagerEl, {
+      page: pageData.page,
+      pageSize: pageData.pageSize,
+      total: pageData.total,
+      pageSizeOptions: [10, 20, 50, 100],
+      onChange: (nextPage, nextPageSize) => {
+        devicePage = nextPage;
+        devicePageSize = nextPageSize;
+        renderDeviceTable(latestDeviceRows);
+      }
+    });
+  }
 }
 
 function setResult(data) {
@@ -68,16 +153,23 @@ function setResult(data) {
 
 async function load() {
   setResult("");
+  hideTable();
 
   try {
     const res = await fetch(`${apiBase}/api/device/list`, {
       credentials: "include"
     });
     const data = await res.json();
-    setResult(data);
+    if (!res.ok || data?.code !== 0) {
+      setResult(data);
+      return;
+    }
+    latestDeviceRows = Array.isArray(data.data) ? data.data : [];
+    renderDeviceTable(latestDeviceRows);
   } catch (error) {
     setResult(`查询失败：${error.message}`);
   }
 }
 
 document.getElementById("load").addEventListener("click", load);
+void load();

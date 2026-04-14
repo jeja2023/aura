@@ -33,6 +33,9 @@ internal static class AuraEndpointsAuth
         var userGroup = app.MapGroup("/api/user");
         userGroup.MapGet("/list", async (IdentityAdminService svc) => await svc.GetUsersAsync()).RequireAuthorization("超级管理员");
         userGroup.MapPost("/create", async (UserCreateReq req, IdentityAdminService svc) => await svc.CreateUserAsync(req)).RequireAuthorization("超级管理员");
+        userGroup.MapPut("/{userId:long}", async (long userId, UserUpdateReq req, IdentityAdminService svc) => await svc.UpdateUserAsync(userId, req)).RequireAuthorization("超级管理员");
+        userGroup.MapPost("/{userId:long}/password", async (long userId, UserPasswordResetReq req, IdentityAdminService svc) => await svc.ResetUserPasswordAsync(userId, req)).RequireAuthorization("超级管理员");
         userGroup.MapPost("/status/{userId:long}", async (long userId, UserStatusReq req, IdentityAdminService svc) => await svc.UpdateUserStatusAsync(userId, req)).RequireAuthorization("超级管理员");
+        userGroup.MapDelete("/{userId:long}", async (long userId, IdentityAdminService svc) => await svc.DeleteUserAsync(userId)).RequireAuthorization("超级管理员");
     }
 }

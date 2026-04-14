@@ -45,11 +45,21 @@ def _wait_http_json_probe(
     *,
     ignore_tls: bool = False,
     predicate: Callable[[dict[str, Any]], bool],
+    progress_label: Optional[str] = None,
+    progress_interval_sec: int = 15,
 ) -> bool:
     """轮询 URL，要求 HTTP 状态码为 2xx，且响应体为 JSON 且满足 predicate(data)。"""
-    deadline = time.time() + timeout_sec
+    start_ts = time.time()
+    deadline = start_ts + timeout_sec
+    next_progress_ts = start_ts + progress_interval_sec
     context = ssl._create_unverified_context() if ignore_tls else None
     while time.time() < deadline:
+        now = time.time()
+        if progress_label and now >= next_progress_ts:
+            print(
+                f"[检查] {progress_label} 仍在等待，已耗时约 {int(now - start_ts)} 秒（上限 {timeout_sec} 秒）…"
+            )
+            next_progress_ts = now + progress_interval_sec
         try:
             with urllib.request.urlopen(url, timeout=2, context=context) as resp:
                 status = resp.status
@@ -270,6 +280,7 @@ def main() -> int:
             AI_HEALTH_URL,
             timeout_sec=120,
             predicate=lambda d: d.get("code") == 0 and d.get("model_loaded") is True,
+            progress_label="AI 服务（含 ONNX 加载）",
         ):
             raise RuntimeError(
                 "AI 服务 120 秒内未就绪（需 ONNX 加载完成）。请检查：1) 8000 端口；2) ai/.venv 与依赖；3) 模型路径 AURA_MODEL_PATH；4) uvicorn 控制台报错。"
@@ -309,6 +320,7 @@ def main() -> int:
             timeout_sec=180,
             ignore_tls=True,
             predicate=lambda d: d.get("code") == 0 and "寓瞳" in str(d.get("msg", "")),
+            progress_label=".NET API（首次启动可能含编译，请稍候）",
         ):
             raise RuntimeError(
                 ".NET 服务 180 秒内未就绪（首次 dotnet run 含编译可能较慢）。请检查 PostgreSQL/Redis 是否可达、AllowedHosts、HTTPS 开发证书及控制台日志。"

@@ -10,6 +10,7 @@ using Aura.Api.Data;
 using Aura.Api.Extensions;
 using Aura.Api.Internal;
 using Aura.Api.Middleware;
+using Aura.Api.Serialization;
 using Aura.Api.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Prometheus;
@@ -27,11 +28,13 @@ builder.Logging.AddConsoleFormatter<PureConsoleFormatter, ConsoleFormatterOption
 System.Globalization.CultureInfo.DefaultThreadCurrentCulture = new System.Globalization.CultureInfo("zh-CN");
 System.Globalization.CultureInfo.DefaultThreadCurrentUICulture = new System.Globalization.CultureInfo("zh-CN");
 
-// 配置 JSON 选项
+// 配置 JSON 选项（时间字段不以 ISO「T」形式输出）
 builder.Services.ConfigureHttpJsonOptions(o =>
 {
     o.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
     o.SerializerOptions.PropertyNameCaseInsensitive = true;
+    foreach (var c in AuraJsonSerializerOptions.Default.Converters)
+        o.SerializerOptions.Converters.Add(c);
 });
 
 builder.Services.AddOpenApi();

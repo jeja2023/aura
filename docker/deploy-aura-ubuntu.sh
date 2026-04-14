@@ -40,6 +40,13 @@ ARANGO_ROOT_PASSWORD="arangodb_123456"
 ARANGO_PASSWORD="arangodb_123456"
 AURA_MODEL_PATH="/app/models/osnet_ibn_x1_0.onnx"
 
+# Docker 编排所需基础镜像（新 .env 生成与旧 .env 补全共用，避免升级后校验失败）
+COMPOSE_POSTGRES_IMAGE="postgres:16-alpine"
+COMPOSE_REDIS_IMAGE="redis:7-alpine"
+COMPOSE_PYTHON_BASE_IMAGE="python:3.11-slim"
+COMPOSE_DOTNET_SDK_IMAGE="mcr.microsoft.com/dotnet/sdk:10.0.201"
+COMPOSE_DOTNET_ASPNET_IMAGE="mcr.microsoft.com/dotnet/aspnet:10.0.201"
+
 # API 运行环境（与 appsettings.Production.json、前端静态路径一致；写入 .env 供 compose 使用）
 ASPNETCORE_ENVIRONMENT_VALUE="Production"
 
@@ -88,11 +95,11 @@ else
 AURA_ADMIN_USER=${AURA_ADMIN_USER}
 AURA_ADMIN_PASSWORD=${AURA_ADMIN_PASSWORD}
 
-POSTGRES_IMAGE=postgres:16-alpine
-REDIS_IMAGE=redis:7-alpine
-PYTHON_BASE_IMAGE=python:3.11-slim
-DOTNET_SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:10.0.201
-DOTNET_ASPNET_IMAGE=mcr.microsoft.com/dotnet/aspnet:10.0.201
+POSTGRES_IMAGE=${COMPOSE_POSTGRES_IMAGE}
+REDIS_IMAGE=${COMPOSE_REDIS_IMAGE}
+PYTHON_BASE_IMAGE=${COMPOSE_PYTHON_BASE_IMAGE}
+DOTNET_SDK_IMAGE=${COMPOSE_DOTNET_SDK_IMAGE}
+DOTNET_ASPNET_IMAGE=${COMPOSE_DOTNET_ASPNET_IMAGE}
 
 POSTGRES_DB=${POSTGRES_DB}
 POSTGRES_USER=${POSTGRES_USER}
@@ -117,6 +124,21 @@ if ! grep -q '^ASPNETCORE_ENVIRONMENT=' .env 2>/dev/null; then
   echo "ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT_VALUE}" >> .env
   echo "==> 已向 .env 追加 ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT_VALUE}（旧部署补全）"
 fi
+
+# 升级后若沿用旧 .env，补全 compose 镜像变量（与自动生成模板一致）
+append_env_if_absent() {
+  local key="$1"
+  local val="$2"
+  if ! grep -q "^${key}=" .env 2>/dev/null; then
+    echo "${key}=${val}" >> .env
+    echo "==> 已向 .env 追加 ${key}=${val}（旧部署补全）"
+  fi
+}
+append_env_if_absent POSTGRES_IMAGE "${COMPOSE_POSTGRES_IMAGE}"
+append_env_if_absent REDIS_IMAGE "${COMPOSE_REDIS_IMAGE}"
+append_env_if_absent PYTHON_BASE_IMAGE "${COMPOSE_PYTHON_BASE_IMAGE}"
+append_env_if_absent DOTNET_SDK_IMAGE "${COMPOSE_DOTNET_SDK_IMAGE}"
+append_env_if_absent DOTNET_ASPNET_IMAGE "${COMPOSE_DOTNET_ASPNET_IMAGE}"
 
 # 读取 .env 并导出，统一用于后续 compose 与变量校验
 set -a

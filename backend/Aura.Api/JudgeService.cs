@@ -1,7 +1,8 @@
 using System.Text.Json;
 using Aura.Api.Data;
-using Aura.Api.Ops;
 using Aura.Api.Models;
+using Aura.Api.Ops;
+using Aura.Api.Serialization;
 
 internal sealed class JudgeService
 {
@@ -43,7 +44,7 @@ internal sealed class JudgeService
                 continue;
             }
 
-            var detail = JsonSerializer.Serialize(new { roomAgg.Count, roomAgg.Last });
+            var detail = JsonSerializer.Serialize(new { roomAgg.Count, roomAgg.Last }, AuraJsonSerializerOptions.Default);
             var id = await _db.InsertJudgeResultAsync(group.Key, roomAgg.RoomId, "home_room", judgeDate, detail);
             if (id.HasValue)
             {
@@ -87,7 +88,7 @@ internal sealed class JudgeService
                 continue;
             }
 
-            var detail = JsonSerializer.Serialize(new { distinctVidCount = distinctVid.Length, vids = distinctVid });
+            var detail = JsonSerializer.Serialize(new { distinctVidCount = distinctVid.Length, vids = distinctVid }, AuraJsonSerializerOptions.Default);
             var id = await _db.InsertJudgeResultAsync($"ROOM_{room.Key}", room.Key, "group_rent", judgeDate, detail);
             if (id.HasValue)
             {
@@ -113,7 +114,7 @@ internal sealed class JudgeService
                 continue;
             }
 
-            var detail = JsonSerializer.Serialize(new { stayMinutes = minutes, first, last });
+            var detail = JsonSerializer.Serialize(new { stayMinutes = minutes, first, last }, AuraJsonSerializerOptions.Default);
             var id = await _db.InsertJudgeResultAsync(personRoom.Key.Vid, personRoom.Key.RoomId, "abnormal_stay", judgeDate, detail);
             if (id.HasValue)
             {
@@ -162,7 +163,7 @@ internal sealed class JudgeService
                 continue;
             }
 
-            var detail = JsonSerializer.Serialize(new { cutoffHour, message = "截止时间后未回到归属房间" });
+            var detail = JsonSerializer.Serialize(new { cutoffHour, message = "截止时间后未回到归属房间" }, AuraJsonSerializerOptions.Default);
             var id = await _db.InsertJudgeResultAsync(row.Vid, row.RoomId, "night_absence", judgeDate, detail);
             if (id.HasValue)
             {

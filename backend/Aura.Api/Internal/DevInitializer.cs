@@ -20,7 +20,7 @@ internal static class DevInitializer
                 bool ok = false;
                 if (users.Count == 0)
                 {
-                    var id = await db.InsertUserAsync("admin", hash, 1);
+                    var id = await db.InsertUserAsync("admin", "系统管理员", hash, 1);
                     ok = id.HasValue;
                 }
                 else

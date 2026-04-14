@@ -9,6 +9,19 @@ let floorData = [];
 let cameraData = [];
 let currentFloorId = null;
 
+function showToast(message, isError = false) {
+  const text = String(message ?? "").trim();
+  if (!text) return;
+  if (window.aura && typeof window.aura.toast === "function") {
+    window.aura.toast(text, isError);
+    return;
+  }
+}
+
+function isErrorText(text) {
+  return /失败|错误|异常|未|无权限|超时|断开/.test(String(text ?? ""));
+}
+
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x101826);
 const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
@@ -21,22 +34,42 @@ const mouse = new THREE.Vector2();
 function setResult(data) {
   if (!resultEl) return;
   if (typeof data === "string") {
-    resultEl.textContent = data;
+    if (isErrorText(data)) {
+      resultEl.textContent = data;
+      resultEl.classList.add("is-error");
+    } else {
+      showToast(data, false);
+      resultEl.classList.remove("is-error");
+    }
     return;
   }
   if (data && typeof data === "object") {
     if (typeof data.msg === "string") {
-      resultEl.textContent = data.msg;
+      if (isErrorText(data.msg)) {
+        resultEl.textContent = data.msg;
+        resultEl.classList.add("is-error");
+      } else {
+        showToast(data.msg, false);
+        resultEl.classList.remove("is-error");
+      }
       return;
     }
     if (Array.isArray(data.data)) {
-      resultEl.textContent = `共 ${data.data.length} 条结果`;
+      showToast(`共 ${data.data.length} 条结果`, false);
+      resultEl.classList.remove("is-error");
       return;
     }
-    resultEl.textContent = "操作完成";
+    resultEl.classList.remove("is-error");
     return;
   }
-  resultEl.textContent = String(data ?? "");
+  const text = String(data ?? "");
+  if (isErrorText(text)) {
+    resultEl.textContent = text;
+    resultEl.classList.add("is-error");
+    return;
+  }
+  showToast(text, false);
+  resultEl.classList.remove("is-error");
 }
 
 function resize() {

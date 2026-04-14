@@ -23,16 +23,16 @@
       <div class="page">
         <p class="page-lead">在楼层平面图上拖拽布置摄像头物理点位。</p>
         <section class="panel">
-          <label>楼层ID <input id="floorId" type="number" value="1" /></label>
-          <label>设备ID <input id="deviceId" type="number" value="1" /></label>
-          <label>通道号 <input id="channelNo" type="number" value="1" /></label>
-          <label class="bg-url-field">底图URL <input id="bgUrl" type="text" placeholder="/uploads/floors/xxx.png 或完整URL" /></label>
-          <button id="loadBgBtn" type="button">加载底图</button>
-          <button id="saveBtn" type="button">保存新点位</button>
-          <button id="listBtn" type="button">查询点位</button>
+          <label>楼层ID <input id="floorId" class="aura-input" type="number" value="1" /></label>
+          <label>设备ID <input id="deviceId" class="aura-input" type="number" value="1" /></label>
+          <label>通道号 <input id="channelNo" class="aura-input" type="number" value="1" /></label>
+          <label class="bg-url-field">底图URL <input id="bgUrl" class="aura-search-input" type="text" placeholder="/uploads/floors/xxx.png 或完整URL" /></label>
+          <button id="loadBgBtn" class="btn-secondary" type="button">加载底图</button>
+          <button id="saveBtn" class="btn-primary" type="button">保存新点位</button>
+          <button id="listBtn" class="btn-secondary" type="button">查询点位</button>
         </section>
         <canvas id="canvas" width="900" height="520"></canvas>
-        <pre id="result">提示：点击画布新增点位；拖拽红点可调整坐标。</pre>
+        <pre id="result" class="aura-status aura-display-box">提示：点击画布新增点位；拖拽红点可调整坐标。</pre>
       </div>
     </main>
   </div>

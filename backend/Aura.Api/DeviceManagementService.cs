@@ -2,6 +2,7 @@ using System.Text.Json;
 using Aura.Api.Cache;
 using Aura.Api.Data;
 using Aura.Api.Models;
+using Aura.Api.Serialization;
 
 namespace Aura.Api;
 
@@ -25,7 +26,7 @@ internal sealed class DeviceManagementService
         var cached = await _cache.GetAsync("device:list");
         if (!string.IsNullOrWhiteSpace(cached))
         {
-            var cacheRows = JsonSerializer.Deserialize<List<DbDevice>>(cached);
+            var cacheRows = JsonSerializer.Deserialize<List<DbDevice>>(cached, AuraJsonSerializerOptions.Default);
             if (cacheRows is { Count: > 0 })
             {
                 _logger.LogInformation("从缓存中获取设备列表");
@@ -36,7 +37,7 @@ internal sealed class DeviceManagementService
         var rows = await _db.GetDevicesAsync();
         if (rows.Count > 0)
         {
-            await _cache.SetAsync("device:list", JsonSerializer.Serialize(rows), TimeSpan.FromMinutes(3));
+            await _cache.SetAsync("device:list", JsonSerializer.Serialize(rows, AuraJsonSerializerOptions.Default), TimeSpan.FromMinutes(3));
             return Results.Ok(new { code = 0, msg = "查询成功", data = rows });
         }
 
