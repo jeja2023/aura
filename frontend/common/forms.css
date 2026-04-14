@@ -94,7 +94,8 @@
 
 /* 文件选择：虚线边框；宽度由下方「卡片内横排」规则约束，避免占满整行 */
 .app-content input[type="file"],
-.box input[type="file"] {
+.box input[type="file"],
+.aura-modal-panel input[type="file"] {
   padding: 8px 12px;
   cursor: pointer;
   border-style: dashed;
@@ -107,6 +108,7 @@
 /* 文件选择按钮统一为全局次要按钮风格，并添加视觉反馈 */
 .app-content input[type="file"]::file-selector-button,
 .box input[type="file"]::file-selector-button,
+.aura-modal-panel input[type="file"]::file-selector-button,
 .app-content input[type="file"]::-webkit-file-upload-button,
 .box input[type="file"]::-webkit-file-upload-button {
   min-height: 28px;
@@ -124,6 +126,7 @@
 }
 .app-content input[type="file"]::file-selector-button:hover,
 .box input[type="file"]::file-selector-button:hover,
+.aura-modal-panel input[type="file"]::file-selector-button:hover,
 .app-content input[type="file"]::-webkit-file-upload-button:hover,
 .box input[type="file"]::-webkit-file-upload-button:hover {
   border-color: var(--primary);
@@ -709,6 +712,18 @@ button[type="submit"]:active {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.aura-modal-fields label {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--text-muted);
 }
 
 .aura-modal-fields input,

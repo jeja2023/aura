@@ -6,3 +6,300 @@
   border-radius: 10px;
   padding: 16px;
 }
+
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.page-head-main {
+  min-width: 0;
+}
+
+.page-title {
+  margin: 0;
+  color: var(--text-main);
+  font-size: 18px;
+}
+
+.page-subtitle {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+}
+
+.tree-stats {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.tree-stat-chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 10px;
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+  font-size: 12px;
+}
+
+.page-actions {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.tree-search {
+  min-width: min(360px, 100%);
+  flex: 1 1 280px;
+  margin: 0;
+}
+
+.tree-search-label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.tree-wrap {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  padding: 12px;
+  max-height: min(68vh, 760px);
+  overflow: auto;
+}
+
+.campus-tree,
+.campus-tree ul {
+  list-style: none;
+  margin: 0;
+  padding-left: 0;
+}
+
+.campus-tree {
+  padding-left: 0;
+  display: block;
+}
+
+.tree-node {
+  margin: 6px 0;
+  display: grid;
+  grid-template-columns: minmax(180px, max-content) 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+.campus-tree > .tree-node {
+  margin: 8px 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+  padding: 10px;
+  grid-template-columns: minmax(220px, 320px) 1fr;
+}
+
+.campus-tree > .tree-node > ul {
+  margin-top: 0;
+}
+
+/* 每一级子节点都在父节点右侧纵向排列，形成稳定的向右分级树 */
+.campus-tree > .tree-node > ul,
+.campus-tree [data-depth="1"] > ul,
+.campus-tree [data-depth="2"] > ul {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-left: 12px;
+  margin-left: 0;
+  margin-top: 2px;
+  border-left: 1px dashed color-mix(in srgb, var(--line) 70%, var(--text-muted) 30%);
+}
+
+.campus-tree > .tree-node > ul > .tree-node,
+.campus-tree [data-depth="1"] > ul > .tree-node,
+.campus-tree [data-depth="2"] > ul > .tree-node {
+  border: 1px dashed color-mix(in srgb, var(--line) 75%, var(--text-muted) 25%);
+  border-radius: 8px;
+  padding: 6px;
+  margin: 0;
+  min-width: 0;
+  grid-template-columns: minmax(170px, max-content) 1fr;
+}
+
+.campus-tree [data-depth="1"] {
+  background: color-mix(in srgb, var(--card) 88%, var(--ok) 12%);
+}
+
+.campus-tree [data-depth="2"] {
+  background: color-mix(in srgb, var(--card) 90%, var(--warn) 10%);
+}
+
+.campus-tree [data-depth="3"] {
+  background: color-mix(in srgb, var(--card) 92%, var(--danger) 8%);
+  grid-template-columns: 1fr;
+}
+
+.tree-line {
+  display: inline-grid;
+  grid-template-columns: 18px auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  border-radius: 8px;
+  padding: 4px 8px;
+  width: 100%;
+  border: 1px solid transparent;
+}
+
+.tree-line:hover {
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--line));
+  background: color-mix(in srgb, var(--bg-elevated) 80%, var(--primary) 20%);
+}
+
+.tree-toggle {
+  width: 20px;
+  height: 20px;
+  border: 1px solid color-mix(in srgb, var(--line) 70%, var(--text-main) 30%);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--card) 75%, var(--bg-elevated) 25%);
+  color: var(--text-main);
+  cursor: pointer;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tree-toggle::before {
+  content: "";
+  display: inline-block;
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 7px solid currentColor;
+  transform: translateX(1px);
+}
+
+.tree-toggle.is-expanded::before {
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 7px solid currentColor;
+  border-bottom: 0;
+  transform: translateY(1px);
+}
+
+.tree-toggle:hover {
+  border-color: color-mix(in srgb, var(--primary) 55%, var(--line));
+  background: color-mix(in srgb, var(--primary) 14%, var(--card) 86%);
+}
+
+.tree-toggle:active {
+  transform: translateY(1px);
+}
+
+.tree-toggle.is-leaf {
+  cursor: default;
+  opacity: 0.7;
+  color: var(--text-muted);
+}
+
+.tree-toggle.is-leaf::before {
+  width: 6px;
+  height: 6px;
+  border: 0;
+  border-radius: 999px;
+  background: currentColor;
+  transform: none;
+}
+
+.tree-name {
+  color: var(--text-main);
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.tree-meta {
+  color: var(--text-muted);
+  font-size: 12px;
+  justify-self: end;
+}
+
+.tree-level-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 12px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--text-muted);
+}
+
+.tree-level-badge.is-campus {
+  border-color: color-mix(in srgb, var(--primary) 50%, var(--line));
+  color: var(--primary);
+}
+
+.tree-level-badge.is-building {
+  border-color: color-mix(in srgb, var(--ok) 50%, var(--line));
+  color: var(--ok);
+}
+
+.tree-level-badge.is-floor {
+  border-color: color-mix(in srgb, var(--warn) 55%, var(--line));
+  color: var(--warn);
+}
+
+.tree-level-badge.is-room {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+  color: var(--danger);
+}
+
+@media (max-width: 920px) {
+  .page-head {
+    flex-direction: column;
+  }
+
+  .tree-stats {
+    justify-content: flex-start;
+  }
+
+  .tree-line {
+    grid-template-columns: 18px auto;
+  }
+
+  .tree-meta {
+    grid-column: 2;
+    justify-self: start;
+    padding-left: 0;
+  }
+
+  .campus-tree {
+    display: block;
+  }
+
+  .campus-tree > .tree-node {
+    grid-template-columns: 1fr;
+  }
+
+  .campus-tree > .tree-node > ul > .tree-node,
+  .campus-tree [data-depth="1"] > ul > .tree-node,
+  .campus-tree [data-depth="2"] > ul > .tree-node {
+    grid-template-columns: 1fr;
+  }
+}

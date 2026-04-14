@@ -4,14 +4,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>寓瞳态势看板</title>
+  <title>态势看板</title>
   <script src="../common/theme-pref.js"></script>
   <link rel="stylesheet" href="../common/theme.css" />
   <link rel="stylesheet" href="../common/shell.css" />
   <link rel="stylesheet" href="../common/forms.css" />
   <link rel="stylesheet" href="./index.css" />
 </head>
-<body class="app-body" data-shell-title="寓瞳态势看板">
+<body class="app-body" data-shell-title="态势看板" data-aura-disable-toast="true">
   <aside class="app-sidebar" id="auraSidebar" aria-label="主导航"></aside>
   <div class="app-frame">
     <header class="app-topbar">
@@ -25,14 +25,34 @@
       <div class="dashboard">
         <section class="card">
           <h2>系统状态</h2>
-          <pre id="status" class="aura-status aura-display-box" role="status" hidden aria-live="polite"></pre>
+          <div id="statusPanel" class="status-panel" role="status" aria-live="polite">
+            <span id="statusBadge" class="status-badge is-loading">加载中</span>
+            <div class="status-main">
+              <p id="statusText" class="status-text">正在初始化系统状态…</p>
+              <p id="statusTime" class="status-time">--</p>
+            </div>
+          </div>
         </section>
         <section class="card">
           <h2>统计概览</h2>
-          <pre id="overview" class="aura-status aura-display-box" role="status" hidden aria-live="polite"></pre>
+          <div id="overviewCards" class="overview-cards" role="status" aria-live="polite">
+            <article class="overview-item">
+              <span class="overview-label">抓拍合计</span>
+              <strong id="overviewCapture" class="overview-value">--</strong>
+            </article>
+            <article class="overview-item">
+              <span class="overview-label">告警合计</span>
+              <strong id="overviewAlert" class="overview-value">--</strong>
+            </article>
+            <article class="overview-item">
+              <span class="overview-label">在线设备</span>
+              <strong id="overviewDevice" class="overview-value">--</strong>
+            </article>
+          </div>
+          <pre id="overviewMessage" class="aura-display-box" data-aura-no-toast hidden></pre>
         </section>
         <section class="card card-wide">
-          <h2>态势事件流（SignalR）</h2>
+          <h2>态势事件流</h2>
           <ul id="events" class="event-list"></ul>
         </section>
       </div>

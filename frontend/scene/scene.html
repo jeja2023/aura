@@ -78,6 +78,12 @@
               <h2>实时事件流</h2>
               <span class="panel-hint">保留最近 12 条</span>
             </div>
+            <div class="event-filter-bar" id="eventFilterBar" role="tablist" aria-label="事件类型筛选">
+              <button type="button" class="event-filter-chip is-active" data-event-filter="all">全部</button>
+              <button type="button" class="event-filter-chip" data-event-filter="capture">抓拍</button>
+              <button type="button" class="event-filter-chip" data-event-filter="alert">告警</button>
+              <button type="button" class="event-filter-chip" data-event-filter="track">轨迹</button>
+            </div>
             <ul id="eventFeed" class="event-feed"></ul>
           </section>
 

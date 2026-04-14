@@ -21,8 +21,26 @@
     </header>
     <main class="app-content">
       <div class="page">
-        <button id="load" class="btn-secondary" type="button">查询资源树</button>
+        <div class="page-head">
+          <div class="page-head-main">
+            <h2 class="page-title">资源树总览</h2>
+            <p class="page-subtitle">支持按关键字筛选节点，并可一键展开或收起全部层级。</p>
+          </div>
+          <div id="treeStats" class="tree-stats" aria-live="polite"></div>
+        </div>
+        <div class="page-actions">
+          <label class="tree-search" aria-label="搜索资源节点">
+            <span class="tree-search-label">搜索</span>
+            <input id="treeKeyword" class="aura-input aura-search-input" type="text" placeholder="按名称 / 层级 / ID 筛选" />
+          </label>
+          <button id="expandAllBtn" class="btn-secondary" type="button">全部展开</button>
+          <button id="collapseAllBtn" class="btn-secondary" type="button">全部收起</button>
+          <button id="load" class="btn-secondary" type="button">刷新资源树</button>
+        </div>
         <pre id="result" class="aura-status aura-display-box" role="status" hidden aria-live="polite"></pre>
+        <div id="treeWrap" class="tree-wrap" hidden>
+          <ul id="treeRoot" class="campus-tree" aria-label="集宿资源树"></ul>
+        </div>
       </div>
     </main>
   </div>

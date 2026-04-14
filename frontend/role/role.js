@@ -122,7 +122,7 @@ const PERMISSION_CN_MAP = Object.freeze({
   campus: "集宿资源树",
   floor: "楼层图纸",
   camera: "摄像头布点",
-  roi: "ROI 防区",
+  roi: "重点防区",
   device: "NVR 设备",
   capture: "抓拍记录",
   scene: "三维空间态势",

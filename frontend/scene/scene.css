@@ -246,6 +246,36 @@
   overflow: auto;
 }
 
+.event-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.event-filter-chip {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-elevated) 95%, transparent);
+  color: var(--text-subtle);
+  font-size: 12px;
+  line-height: 1;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.event-filter-chip:hover {
+  border-color: rgba(var(--primary-rgb), 0.55);
+  color: var(--text-main);
+}
+
+.event-filter-chip.is-active {
+  border-color: rgba(var(--primary-rgb), 0.78);
+  background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.9), rgba(var(--cyan-accent-rgb), 0.9));
+  color: var(--primary-text);
+}
+
 .event-feed li {
   border: 1px solid var(--line);
   border-radius: 12px;

@@ -52,6 +52,14 @@ internal static class AuraEndpointsDomain
             if (!allow) return Results.Ok(new { code = 0, msg = "查询成功", data = new List<DbTrackEvent>() });
             return Results.Ok(new { code = 0, msg = "查询成功", data = store.TrackEvents.Where(x => x.Vid == vid).OrderByDescending(x => x.EventTime).Take(limit) });
         }).RequireAuthorization("楼栋管理员");
+        trackGroup.MapGet("/history/list", async (HttpRequest httpReq) =>
+        {
+            var limit = int.TryParse(httpReq.Query["limit"].FirstOrDefault(), out var l) ? l : 200;
+            var rows = await db.GetTrackEventsAsync(null, limit);
+            if (rows.Count > 0) return Results.Ok(new { code = 0, msg = "查询成功", data = rows });
+            if (!allow) return Results.Ok(new { code = 0, msg = "查询成功", data = new List<DbTrackEvent>() });
+            return Results.Ok(new { code = 0, msg = "查询成功", data = store.TrackEvents.OrderByDescending(x => x.EventTime).Take(limit) });
+        }).RequireAuthorization("楼栋管理员");
 
         var judgeGroup = app.MapGroup("/api/judge");
         judgeGroup.MapPost("/run/home", async (HttpRequest request, JudgeRunReq req, JudgeService svc, EventDispatchService dispatch) =>
