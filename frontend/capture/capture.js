@@ -13,9 +13,14 @@ let latestCaptureRows = [];
 let capturePage = 1;
 let capturePageSize = 15;
 
-function setExportEnabled(enabled) {
+function setExportVisible(visible) {
   if (!exportCaptureBtn) return;
-  exportCaptureBtn.disabled = !enabled;
+  if (window.aura && typeof window.aura.setElementVisible === "function") {
+    window.aura.setElementVisible(exportCaptureBtn, visible);
+    return;
+  }
+  exportCaptureBtn.hidden = !visible;
+  exportCaptureBtn.disabled = !visible;
 }
 
 /** 成功提示自动消失定时器 */
@@ -226,7 +231,7 @@ async function createMock() {
 async function load() {
   setResult("");
   hideTable();
-  setExportEnabled(false);
+  setExportVisible(false);
 
   try {
     const res = await fetch(`${apiBase}/api/capture/list?limit=500`, {
@@ -236,16 +241,16 @@ async function load() {
     if (!res.ok || data?.code !== 0) {
       setResult(data);
       latestCaptureRows = [];
-      setExportEnabled(false);
+      setExportVisible(false);
       return;
     }
     latestCaptureRows = Array.isArray(data.data) ? data.data : [];
     renderCaptureTable(latestCaptureRows);
-    setExportEnabled(latestCaptureRows.length > 0);
+    setExportVisible(latestCaptureRows.length > 0);
   } catch (error) {
     setResult(`查询失败：${error.message}`);
     latestCaptureRows = [];
-    setExportEnabled(false);
+    setExportVisible(false);
   }
 }
 

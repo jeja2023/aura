@@ -6,6 +6,7 @@ const userListEl = document.getElementById("userList");
 const userListMetaEl = document.getElementById("userListMeta");
 const userPagerEl = document.getElementById("userPager");
 const userKeywordEl = document.getElementById("userKeyword");
+const exportUsersBtn = document.getElementById("exportUsers");
 const importFileEl = document.getElementById("importFile");
 const modalCreate = document.getElementById("userModalCreate");
 const modalResetPassword = document.getElementById("userModalResetPassword");
@@ -30,6 +31,16 @@ function showToast(message, isError = false) {
   if (window.aura && typeof window.aura.toast === "function") {
     window.aura.toast(text, isError);
   }
+}
+
+function setExportVisible(visible) {
+  if (!exportUsersBtn) return;
+  if (window.aura && typeof window.aura.setElementVisible === "function") {
+    window.aura.setElementVisible(exportUsersBtn, visible);
+    return;
+  }
+  exportUsersBtn.hidden = !visible;
+  exportUsersBtn.disabled = !visible;
 }
 
 /** 成功提示自动消失定时器（跨页面仅保留一个，最后一次触发的元素会自动消失） */
@@ -218,6 +229,7 @@ function setElResult(el, data) {
 
 async function load(options = {}) {
   hideElResult(queryResultEl);
+  setExportVisible(false);
   if (userListMetaEl) userListMetaEl.textContent = "正在加载用户列表…";
   if (userListEl) userListEl.innerHTML = "";
   try {
@@ -291,6 +303,7 @@ function renderUserList(payload) {
   const totalCount = rows.length;
   const filteredCount = filtered.length;
   const shownCount = pageData.rows.length;
+  setExportVisible(filteredCount > 0);
 
   if (userListMetaEl) {
     userListMetaEl.textContent = "";

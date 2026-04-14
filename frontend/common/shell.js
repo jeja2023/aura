@@ -330,6 +330,15 @@
     }
   }
 
+  function setElementVisible(element, visible) {
+    if (!element) return;
+    const shown = Boolean(visible);
+    element.hidden = !shown;
+    if ("disabled" in element) {
+      element.disabled = !shown;
+    }
+  }
+
   function bridgeStatusToToast() {
     const statusEls = Array.from(document.querySelectorAll(".aura-status"));
     if (statusEls.length === 0) return;
@@ -470,6 +479,7 @@
     },
     chooseExportFormat: () => chooseExportFormat(),
     exportDataset: (options) => exportDataset(options),
+    setElementVisible: (element, visible) => setElementVisible(element, visible),
     toast: (message, isError = false, durationMs = 2200) => showToast(message, isError, durationMs),
     animateNumber: (el, target, duration = 1000) => {
       let startTime = null;

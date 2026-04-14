@@ -150,6 +150,12 @@
   border: 1px solid transparent;
 }
 
+/* 统一保证 hidden 语义生效：避免被按钮 display 规则覆盖 */
+:is(.app-content, .box, .app-topbar, .panel, .actions, .bar, .toolbar, .user-card-controls)
+  :is(.btn-primary, .btn-secondary, .btn-danger, button:not([class]), button[type="submit"])[hidden] {
+  display: none !important;
+}
+
 /* 主要按钮风格 */
 .btn-primary,
 button:not([class]),

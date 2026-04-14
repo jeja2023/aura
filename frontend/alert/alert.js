@@ -7,9 +7,14 @@ const openCreateAlertModalBtn = document.getElementById("openCreateAlertModal");
 const exportAlertBtn = document.getElementById("exportAlert");
 let latestAlertRows = [];
 
-function setExportEnabled(enabled) {
+function setExportVisible(visible) {
   if (!exportAlertBtn) return;
-  exportAlertBtn.disabled = !enabled;
+  if (window.aura && typeof window.aura.setElementVisible === "function") {
+    window.aura.setElementVisible(exportAlertBtn, visible);
+    return;
+  }
+  exportAlertBtn.hidden = !visible;
+  exportAlertBtn.disabled = !visible;
 }
 
 /** 成功提示自动消失定时器 */
@@ -147,7 +152,7 @@ async function createAlert() {
 
 async function load(options = {}) {
   setResult("");
-  if (!options.keepExportState) setExportEnabled(false);
+  if (!options.keepExportState) setExportVisible(false);
 
   try {
     const res = await fetch(`${apiBase}/api/alert/list?limit=500`, {
@@ -155,14 +160,14 @@ async function load(options = {}) {
     });
     const data = await res.json();
     latestAlertRows = Array.isArray(data?.data) ? data.data : [];
-    setExportEnabled(latestAlertRows.length > 0);
+    setExportVisible(latestAlertRows.length > 0);
     if (!options.silentSuccessToast || !data || data.code !== 0) {
       setResult(data);
     }
   } catch (error) {
     setResult(`查询失败：${error.message}`);
     latestAlertRows = [];
-    setExportEnabled(false);
+    setExportVisible(false);
   }
 }
 
