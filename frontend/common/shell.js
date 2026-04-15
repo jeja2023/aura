@@ -264,7 +264,7 @@
     <h2 id="auraExportFormatTitle" class="aura-modal-title">选择导出格式</h2>
     <button type="button" class="btn-secondary aura-modal-close" data-export-format-cancel>取消</button>
   </div>
-  <p class="aura-status">请选择导出文件格式。将按当前筛选条件导出。</p>
+  <p class="aura-status" data-aura-status-inline>请选择导出文件格式。将按当前筛选条件导出。</p>
   <div class="aura-modal-actions">
     <button type="button" class="btn-secondary" data-export-format="csv">导出 CSV</button>
     <button type="button" class="btn-primary" data-export-format="xlsx">导出 XLSX</button>
@@ -343,7 +343,8 @@
 
   function bridgeStatusToToast() {
     const statusEls = Array.from(document.querySelectorAll(".aura-status")).filter(
-      (el) => !el.hasAttribute("data-aura-no-toast")
+      (el) =>
+        !el.hasAttribute("data-aura-status-inline") && !el.hasAttribute("data-aura-no-toast")
     );
     if (statusEls.length === 0) return;
 
@@ -355,8 +356,8 @@
       const lastMsg = el.dataset.toastLastMsg || "";
       if (lastMsg === msg) return;
       el.dataset.toastLastMsg = msg;
-      if (isError) return;
-      showToast(msg, false);
+      const durationMs = isError ? 3800 : 2200;
+      showToast(msg, isError, durationMs);
       el.hidden = true;
     };
 

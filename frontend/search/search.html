@@ -27,8 +27,69 @@
           <button id="runBtn" class="btn-primary" type="button">提特征并检索</button>
         </section>
         <pre id="result" class="aura-status aura-display-box" role="status" hidden aria-live="polite"></pre>
+        <div id="searchMainLayout" class="search-main-layout search-main-layout--no-preview">
+          <div id="searchPreviewColumn" class="search-col search-col-preview" hidden>
+            <section id="searchPreviewPanel" class="search-preview-panel">
+              <div class="search-preview-head">
+                <span class="search-preview-label">检索图预览</span>
+                <span id="searchPreviewFileName" class="search-preview-filename"></span>
+              </div>
+              <div class="search-preview-frame">
+                <img id="searchPreviewImg" alt="" />
+              </div>
+            </section>
+          </div>
+          <div class="search-col search-col-results">
+            <div id="searchResultHead" class="search-result-head" hidden>
+              <h2 class="search-result-title">检索结果</h2>
+              <p class="search-result-hint">相似度越高表示与上图特征越接近。可查看命中图片并与检索图对比，也可点击 VID 或「查看轨迹」打开轨迹回放。</p>
+            </div>
+            <div id="tableWrap" class="aura-data-table-wrap" hidden>
+              <table class="aura-data-table" aria-label="以图搜轨结果">
+                <thead>
+                  <tr>
+                    <th class="aura-col-id">序号</th>
+                    <th>人员VID</th>
+                    <th class="search-col-hit-image">命中图片</th>
+                    <th>相似度</th>
+                    <th class="aura-col-action-group">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="searchTableBody"></tbody>
+              </table>
+            </div>
+            <div id="searchPager" hidden></div>
+          </div>
+        </div>
       </div>
     </main>
+  </div>
+  <div id="searchCompareModal" class="aura-modal-root" hidden>
+    <div class="aura-modal-backdrop" tabindex="-1" aria-hidden="true"></div>
+    <div class="aura-modal-panel search-compare-modal" role="dialog" aria-modal="true" aria-labelledby="searchCompareModalTitle">
+      <div class="aura-modal-head">
+        <h2 id="searchCompareModalTitle" class="aura-modal-title">图片比对</h2>
+        <button type="button" class="btn-secondary aura-modal-close" data-aura-modal-dismiss aria-label="关闭对话框">关闭</button>
+      </div>
+      <div class="search-compare-grid">
+        <section class="search-compare-card">
+          <h3 class="search-compare-card-title">检索图</h3>
+          <div class="search-compare-frame">
+            <img id="searchCompareQueryImg" alt="检索图" />
+          </div>
+        </section>
+        <section class="search-compare-card">
+          <h3 class="search-compare-card-title">命中图</h3>
+          <div class="search-compare-frame">
+            <img id="searchCompareHitImg" alt="命中图" />
+          </div>
+        </section>
+      </div>
+      <p id="searchCompareMeta" class="aura-status" data-aura-status-inline></p>
+      <div class="aura-modal-actions">
+        <button type="button" class="btn-secondary" data-aura-modal-dismiss>关闭</button>
+      </div>
+    </div>
   </div>
   <script defer src="../common/shell.js"></script>
   <script defer src="./search.js"></script>

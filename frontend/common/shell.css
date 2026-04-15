@@ -1,8 +1,12 @@
 /* 文件：应用外壳布局（shell.css） | File: App Shell Layout */
 .app-body {
   display: flex;
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100vh;
+  max-height: 100dvh;
+  min-height: 0;
+  overflow-y: hidden;
 }
 
 .app-sidebar {
@@ -18,6 +22,7 @@
   align-self: flex-start;
   height: 100vh;
   height: 100dvh;
+  /* 主文档不纵向滚动；侧栏菜单过多时仅侧栏内部可滚 */
   overflow-y: auto;
   z-index: 40;
   transition: transform 0.22s ease;
@@ -180,7 +185,8 @@
 
 .app-content {
   flex: 1;
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: hidden;
   padding: 20px 24px 28px;
   min-height: 0;
 }
@@ -239,9 +245,9 @@
   line-height: 1.55;
 }
 
-/* 仅作用于未单独指定语义类的按钮；勿覆盖 .btn-secondary / 列表芯片等 */
+/* 仅作用于未单独指定语义类的按钮；勿覆盖 .btn-secondary / 列表芯片 / 事件筛选芯片等 */
 .app-content
-  button:not(.app-sidebar-toggle):not(.btn-primary):not(.btn-secondary) {
+  button:not(.app-sidebar-toggle):not(.btn-primary):not(.btn-secondary):not(.event-filter-chip) {
   color: var(--primary-text);
   font-weight: 600;
 }
@@ -297,20 +303,23 @@
   background: rgba(var(--primary-rgb), 0.06);
 }
 
-/* 成功/普通提示统一改为 Toast，不再占页面布局 */
-.aura-status:not(.is-error) {
+/* 动态提示统一走 Toast；须留在页面内的说明加 data-aura-status-inline 或 data-aura-no-toast */
+.aura-status:not([data-aura-status-inline]):not([data-aura-no-toast]) {
   display: none !important;
 }
 
 .aura-toast-host {
   position: fixed;
-  top: 72px;
-  right: 16px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   z-index: 1200;
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 10px;
   pointer-events: none;
+  max-width: calc(100vw - 32px);
 }
 
 .aura-toast {

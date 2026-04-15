@@ -210,6 +210,47 @@ internal sealed class PgSqlStore
         }
     }
 
+    public async Task<long?> GetCaptureCountAsync()
+    {
+        try
+        {
+            await using var conn = CreateConnection();
+            return await conn.ExecuteScalarAsync<long>("SELECT COUNT(1) FROM capture_record");
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "数据库统计抓拍总数失败。");
+            return null;
+        }
+    }
+
+    public async Task<List<DbCapture>> GetCapturesInRangeAsync(DateTimeOffset start, DateTimeOffset end, int maxRows = 200000)
+    {
+        try
+        {
+            var startUtc = start.ToUniversalTime();
+            var endUtc = end.ToUniversalTime();
+            await using var conn = CreateConnection();
+            var rows = await conn.QueryAsync<DbCapture>(
+                """
+                SELECT capture_id AS CaptureId, device_id AS DeviceId, channel_no AS ChannelNo,
+                       capture_time AS CaptureTime, COALESCE(CAST(metadata_json AS TEXT), '') AS MetadataJson,
+                       image_path AS ImagePath
+                FROM capture_record
+                WHERE capture_time >= @Start AND capture_time < @End
+                ORDER BY capture_time DESC, capture_id DESC
+                LIMIT @MaxRows
+                """,
+                new { Start = startUtc, End = endUtc, MaxRows = maxRows });
+            return rows.ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "数据库按时间范围查询抓拍失败。start={Start}, end={End}, maxRows={MaxRows}", start, end, maxRows);
+            return [];
+        }
+    }
+
     public async Task<long?> InsertAlertAsync(string alertType, string detail)
     {
         try
@@ -256,6 +297,53 @@ internal sealed class PgSqlStore
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库查询告警列表失败。limit={Limit}", limit);
+            return [];
+        }
+    }
+
+    public async Task<long?> GetAlertCountAsync()
+    {
+        try
+        {
+            await using var conn = CreateConnection();
+            return await conn.ExecuteScalarAsync<long>("SELECT COUNT(1) FROM alert_record");
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "数据库统计告警总数失败。");
+            return null;
+        }
+    }
+
+    public async Task<List<DbAlert>> GetAlertsInRangeAsync(DateTimeOffset start, DateTimeOffset end, int maxRows = 200000)
+    {
+        try
+        {
+            var startUtc = start.ToUniversalTime();
+            var endUtc = end.ToUniversalTime();
+            await using var conn = CreateConnection();
+            var rows = await conn.QueryAsync<DbAlert>(
+                """
+                SELECT alert_id AS AlertId, alert_type AS AlertType,
+                       COALESCE(
+                         CASE
+                           WHEN jsonb_typeof(detail_json) = 'string' THEN trim(both '"' from detail_json::text)
+                           ELSE CAST(detail_json AS TEXT)
+                         END,
+                         ''
+                       ) AS Detail,
+                       created_at AS CreatedAt
+                FROM alert_record
+                WHERE created_at >= @Start AND created_at < @End
+                ORDER BY created_at DESC, alert_id DESC
+                LIMIT @MaxRows
+                """,
+                new { Start = startUtc, End = endUtc, MaxRows = maxRows });
+            return rows.ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "数据库按时间范围查询告警失败。start={Start}, end={End}, maxRows={MaxRows}", start, end, maxRows);
             return [];
         }
     }
@@ -601,6 +689,97 @@ internal sealed class PgSqlStore
             _logger?.LogError(ex, "数据库查询轨迹失败。vid={Vid}, limit={Limit}", vid, limit);
             return [];
         }
+    }
+
+    /// <summary>
+    /// 按 VID 批量查询一张最合适的抓拍图（优先轨迹最近设备抓拍，其次 feature_id 回退）。
+    /// 返回键为 VID，值为可直接前端访问的图片 URL（通常为 /storage/...）。
+    /// </summary>
+    public async Task<Dictionary<string, string>> GetBestCaptureImageByVidsAsync(IReadOnlyCollection<string> vids)
+    {
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (vids is null || vids.Count == 0)
+        {
+            return result;
+        }
+
+        var normalized = vids
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (normalized.Length == 0)
+        {
+            return result;
+        }
+
+        try
+        {
+            await using var conn = CreateConnection();
+            var byTrack = await conn.QueryAsync<DbVidImage>(
+                """
+                SELECT t.vid AS Vid, c.image_path AS ImagePath
+                FROM (
+                  SELECT DISTINCT ON (te.vid) te.vid, te.camera_id, te.event_time, te.event_id
+                  FROM track_event te
+                  WHERE te.vid = ANY(@Vids)
+                  ORDER BY te.vid, te.event_time DESC, te.event_id DESC
+                ) t
+                JOIN map_camera mc ON mc.camera_id = t.camera_id
+                LEFT JOIN LATERAL (
+                  SELECT cr.image_path
+                  FROM capture_record cr
+                  WHERE cr.device_id = mc.device_id
+                    AND cr.image_path IS NOT NULL
+                    AND btrim(cr.image_path) <> ''
+                  ORDER BY ABS(EXTRACT(EPOCH FROM (cr.capture_time - t.event_time))) ASC,
+                           cr.capture_time DESC,
+                           cr.capture_id DESC
+                  LIMIT 1
+                ) c ON TRUE
+                WHERE c.image_path IS NOT NULL AND btrim(c.image_path) <> ''
+                """,
+                new { Vids = normalized });
+            foreach (var row in byTrack)
+            {
+                if (string.IsNullOrWhiteSpace(row.Vid) || string.IsNullOrWhiteSpace(row.ImagePath)) continue;
+                if (!result.ContainsKey(row.Vid))
+                {
+                    result[row.Vid] = row.ImagePath;
+                }
+            }
+
+            var missing = normalized.Where(v => !result.ContainsKey(v)).ToArray();
+            if (missing.Length == 0)
+            {
+                return result;
+            }
+
+            var byFeature = await conn.QueryAsync<DbVidImage>(
+                """
+                SELECT DISTINCT ON (cr.feature_id) cr.feature_id AS Vid, cr.image_path AS ImagePath
+                FROM capture_record cr
+                WHERE cr.feature_id = ANY(@Vids)
+                  AND cr.image_path IS NOT NULL
+                  AND btrim(cr.image_path) <> ''
+                ORDER BY cr.feature_id, cr.capture_time DESC, cr.capture_id DESC
+                """,
+                new { Vids = missing });
+            foreach (var row in byFeature)
+            {
+                if (string.IsNullOrWhiteSpace(row.Vid) || string.IsNullOrWhiteSpace(row.ImagePath)) continue;
+                if (!result.ContainsKey(row.Vid))
+                {
+                    result[row.Vid] = row.ImagePath;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "数据库按 VID 查询命中图片失败。vidCount={VidCount}", normalized.Length);
+        }
+
+        return result;
     }
 
     public async Task<long?> InsertJudgeResultAsync(string vid, long roomId, string judgeType, DateOnly judgeDate, string detailJson)
@@ -1137,3 +1316,4 @@ internal sealed record DbJudgeResult
     }
 }
 internal sealed record DbVirtualPerson(string Vid, DateTimeOffset FirstSeen, DateTimeOffset LastSeen, long DeviceId, int CaptureCount);
+internal sealed record DbVidImage(string Vid, string? ImagePath);

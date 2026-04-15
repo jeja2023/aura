@@ -21,17 +21,49 @@
     </header>
     <main class="app-content">
       <div class="page">
-        <section class="actions">
-          <label>日期 <input id="date" class="aura-input" type="date" /></label>
-          <label>截止小时 <input id="cutoffHour" class="aura-input" type="number" min="0" max="23" value="23" /></label>
-          <button id="load" class="btn-secondary" type="button">刷新研判</button>
-          <button id="runDaily" class="btn-primary" type="button">执行每日研判</button>
-          <button id="runHome" class="btn-secondary" type="button">仅归寝研判</button>
-          <button id="runAbnormal" class="btn-secondary" type="button">群租/滞留研判</button>
-          <button id="runNight" class="btn-secondary" type="button">夜不归宿研判</button>
-          <button id="exportJudge" class="btn-secondary" type="button" hidden>导出</button>
+        <section class="judge-controls">
+          <div class="judge-actions">
+            <label>日期 <input id="date" class="aura-input" type="date" /></label>
+            <label>截止小时 <input id="cutoffHour" class="aura-input" type="number" min="0" max="23" value="23" /></label>
+            <button id="load" class="btn-secondary" type="button">刷新研判</button>
+            <button id="runDaily" class="btn-primary" type="button">执行每日研判</button>
+            <button id="runHome" class="btn-secondary" type="button">仅归寝研判</button>
+            <button id="runAbnormal" class="btn-secondary" type="button">群租/滞留研判</button>
+            <button id="runNight" class="btn-secondary" type="button">夜不归宿研判</button>
+            <button id="exportJudge" class="btn-secondary" type="button" hidden>导出</button>
+          </div>
+          <div class="judge-filter">
+            <select id="judgeTypeFilter" class="aura-input">
+              <option value="">全部类型</option>
+              <option value="home_room">归寝研判</option>
+              <option value="group_rent">群租研判</option>
+              <option value="abnormal_stay">异常滞留</option>
+              <option value="night_absence">夜不归宿</option>
+            </select>
+            <input id="judgeVidKeyword" class="aura-search-input" placeholder="筛选人员VID" />
+            <input id="judgeRoomKeyword" class="aura-search-input" placeholder="筛选房间ID" />
+            <button id="applyJudgeFilter" class="btn-secondary" type="button">筛选</button>
+            <button id="clearJudgeFilter" class="btn-secondary" type="button">清空筛选</button>
+          </div>
+          <p id="judgeFilterSummary" class="judge-filter-summary" role="status" aria-live="polite" hidden></p>
         </section>
         <pre id="result" class="aura-status aura-display-box" role="status" hidden aria-live="polite"></pre>
+        <div id="tableWrap" class="aura-data-table-wrap" hidden>
+          <table class="aura-data-table" aria-label="研判结果列表">
+            <thead>
+              <tr>
+                <th>研判ID</th>
+                <th>人员VID</th>
+                <th>房间ID</th>
+                <th>研判类型</th>
+                <th>研判日期</th>
+                <th>创建时间</th>
+              </tr>
+            </thead>
+            <tbody id="judgeTableBody"></tbody>
+          </table>
+        </div>
+        <div id="judgePager" hidden></div>
       </div>
     </main>
   </div>

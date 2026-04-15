@@ -52,7 +52,7 @@ function isErrorPayload(data, message) {
     return data.code !== 0;
   }
   if (typeof message === "string") {
-    return /失败|错误|异常|请/.test(message);
+    return /失败|错误|异常|超时|拒绝|未授权|无权|禁止|非法|无效|无法|不能|不存在|已过期|已失效/.test(message);
   }
   return false;
 }

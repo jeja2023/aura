@@ -1,12 +1,32 @@
 /* 文件：三维态势页样式（scene.css） | File: Scene Styles */
+/* 三维态势：锁死视口高度，禁止整页纵向滚动（内部区域各自滚动） */
+html.scene-page {
+  height: 100dvh;
+  overflow: hidden;
+}
+
+html.scene-page body.app-body {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+html.scene-page .app-sidebar {
+  align-self: stretch;
+  height: auto;
+  max-height: 100dvh;
+}
+
 .page {
   display: grid;
   grid-template-columns: 1.6fr 1fr;
+  grid-template-rows: minmax(0, 1fr);
   gap: 14px;
   padding: 14px;
   min-height: 0;
   height: 100%;
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 .left,
@@ -21,6 +41,7 @@
 .left {
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   background:
     radial-gradient(circle at top right, rgba(var(--primary-rgb), 0.16), transparent 40%),
     linear-gradient(180deg, rgba(var(--ink-rgb), 0.03), rgba(var(--ink-rgb), 0.07));
@@ -57,7 +78,7 @@
 #stage3d {
   width: 100%;
   flex: 1;
-  min-height: 520px;
+  min-height: 0;
   border: 1px solid var(--line);
   border-radius: 18px;
   overflow: hidden;
@@ -184,6 +205,14 @@
   padding: 8px 10px;
 }
 
+/* forms.css 中 .app-content .panel 使用 align-items:flex-end，会使本页右侧卡片子块整体贴右；三维态势右侧需纵向满宽、左对齐 */
+.app-content.scene-mode .right > section.panel {
+  flex-direction: column;
+  align-items: stretch;
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+
 .panel-title-row {
   display: flex;
   justify-content: space-between;
@@ -197,8 +226,51 @@
   color: var(--text-subtle);
 }
 
+/* 楼层态势：整块卡片固定总高度；标题行始终单行（提示过长省略）；摘要区占满剩余高度，多行只在区内滚动 */
+.right > section.panel:nth-child(2) {
+  flex: 0 0 auto;
+  height: 9rem;
+  min-height: 9rem;
+  max-height: 9rem;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.right > section.panel:nth-child(2) .panel-title-row {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 4px;
+  margin-bottom: 6px;
+  flex-shrink: 0;
+  min-width: 0;
+  text-align: start;
+}
+
+.right > section.panel:nth-child(2) .panel-title-row h2 {
+  text-align: start;
+  align-self: flex-start;
+  width: 100%;
+}
+
+.right > section.panel:nth-child(2) .panel-hint {
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+  text-align: start;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .floor-summary {
-  min-height: 44px;
+  flex: 1 1 auto;
+  min-height: 0;
+  align-self: stretch;
+  text-align: start;
   border-radius: 10px;
   background: linear-gradient(
     135deg,
@@ -209,6 +281,9 @@
   color: var(--text-main);
   font-size: 13px;
   line-height: 1.45;
+  box-sizing: border-box;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 #slice2d {
@@ -225,6 +300,8 @@
 .right > section.panel:nth-child(4) {
   flex: 1;
   min-height: 0;
+  min-width: 0;
+  max-height: min(40vh, 420px);
   display: flex;
   flex-direction: column;
 }
@@ -241,7 +318,11 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  align-items: stretch;
+  gap: 6px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   max-height: 240px;
   overflow: auto;
 }
@@ -257,8 +338,9 @@
   border: 1px solid var(--line);
   border-radius: 999px;
   background: color-mix(in srgb, var(--bg-elevated) 95%, transparent);
-  color: var(--text-subtle);
+  color: var(--text-main);
   font-size: 12px;
+  font-weight: 600;
   line-height: 1;
   padding: 6px 10px;
   cursor: pointer;
@@ -279,15 +361,33 @@
 .event-feed li {
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 10px 12px;
+  padding: 8px 10px;
   background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
-  line-height: 1.45;
+  line-height: 1.35;
   color: var(--text-main);
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  align-self: stretch;
+  text-align: start;
 }
 
 .event-feed li strong {
   display: block;
-  margin-bottom: 2px;
+  margin-bottom: 1px;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.event-feed li span {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text-subtle);
+  word-break: break-word;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 /* 底部状态行：保留可读行高与内边距，避免为省高度导致裁切或字形观感压扁 */
@@ -319,12 +419,19 @@
 @media (max-width: 1100px) {
   .page {
     grid-template-columns: 1fr;
-    height: auto;
-    min-height: min(90vh, 900px);
+    grid-template-rows: minmax(200px, 38vh) minmax(0, 1fr);
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
   }
 
   #stage3d {
-    min-height: 400px;
+    min-height: 0;
+  }
+
+  .right {
+    overflow-x: hidden;
+    overflow-y: auto;
   }
 
   .scene-overlay {

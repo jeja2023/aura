@@ -69,7 +69,7 @@ var frontendRoot = string.IsNullOrWhiteSpace(frontendRootCfg)
     : Path.GetFullPath(frontendRootCfg);
 
 var cspPolicy = builder.Configuration["Security:CspPolicy"]
-    ?? "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ws: wss:;";
+    ?? "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ws: wss:;";
 
 // 使用自定义中间件设置安全头
 app.UseMiddleware<SecurityHeadersMiddleware>(cspPolicy);

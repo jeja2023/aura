@@ -1,6 +1,54 @@
 /* 文件：搜轨页样式（search.css） | File: Search Styles */
 .page {
   margin: 0;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+/* 与告警/研判等页一致：仅控制与上方文案的间距，不覆写 forms.css 中表格边框与行高 */
+.search-col-results .aura-data-table-wrap {
+  margin-top: 12px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.search-main-layout {
+  display: grid;
+  grid-template-columns: minmax(200px, 28%) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.search-main-layout--no-preview {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.search-col-results {
+  min-width: 0;
+}
+
+.search-col-preview {
+  min-width: 0;
+  max-width: 360px;
+}
+
+#searchPager {
+  margin-top: 12px;
+}
+
+@media (max-width: 900px) {
+  .search-main-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .search-col-preview {
+    max-width: none;
+  }
 }
 
 .card {
@@ -38,4 +86,146 @@
 .app-content .page .card.search-toolbar > label > #topk {
   width: 72px;
   min-width: 72px;
+}
+
+/* 左侧：检索图预览（控制高度，避免占满整屏） */
+.search-preview-panel {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  background: var(--bg-elevated);
+}
+
+.search-preview-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+  margin-bottom: 8px;
+}
+
+.search-preview-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.search-preview-filename {
+  font-size: 12px;
+  color: var(--text-muted);
+  word-break: break-all;
+  line-height: 1.35;
+}
+
+.search-preview-frame {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 72px;
+  max-height: 200px;
+  padding: 6px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-main) 92%, var(--line) 8%);
+  border: 1px dashed var(--line);
+}
+
+.search-preview-frame img {
+  max-width: 100%;
+  max-height: 180px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 6px;
+}
+
+.search-result-head {
+  margin: 4px 0 0;
+}
+
+.search-result-title {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.search-result-hint {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.search-col-hit-image {
+  width: 140px;
+}
+
+.search-hit-thumb {
+  display: block;
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+}
+
+.search-hit-empty {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.search-compare-modal.aura-modal-panel {
+  width: min(100%, 900px);
+}
+
+.search-compare-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.search-compare-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  background: var(--bg-elevated);
+}
+
+.search-compare-card-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--text-main);
+}
+
+.search-compare-frame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+  border-radius: 8px;
+  border: 1px dashed var(--line);
+  background: color-mix(in srgb, var(--bg-main) 92%, var(--line) 8%);
+  overflow: hidden;
+}
+
+.search-compare-frame img {
+  width: 100%;
+  max-height: 420px;
+  object-fit: contain;
+}
+
+#searchCompareMeta {
+  margin-bottom: 10px;
+}
+
+@media (max-width: 900px) {
+  .search-compare-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .search-compare-frame {
+    min-height: 180px;
+  }
 }
