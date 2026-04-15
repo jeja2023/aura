@@ -393,8 +393,8 @@ button[type="submit"]:active {
   max-height: min(42vh, 360px);
 }
 
-/* 导出页下载链接 */
-.app-content .page a[href] {
+/* 导出页等正文区链接（勿作用于带按钮语义类的 <a>，否则会覆盖表格内 .btn-secondary 等全局按钮样式） */
+.app-content .page a[href]:not(.btn-primary, .btn-secondary, .btn-danger) {
   display: inline-flex;
   align-items: center;
   min-height: 38px;
@@ -404,7 +404,23 @@ button[type="submit"]:active {
   text-decoration: none;
   font-weight: 500;
 }
-.app-content .page a[href]:hover {
+.app-content .page a[href]:not(.btn-primary, .btn-secondary, .btn-danger):hover {
+  text-decoration: underline;
+}
+
+/* 表格内文本链接（如 VID）：必须覆盖上方 .page a[href] 的 min-height/display，否则会撑破全局表体行高 */
+.app-content .page .aura-data-table a[href]:not(.btn-primary, .btn-secondary, .btn-danger) {
+  display: inline;
+  align-items: unset;
+  min-height: 0;
+  padding: 0;
+  font-size: inherit;
+  line-height: inherit;
+  font-weight: 500;
+  color: var(--primary);
+  text-decoration: none;
+}
+.app-content .page .aura-data-table a[href]:not(.btn-primary, .btn-secondary, .btn-danger):hover {
   text-decoration: underline;
 }
 
@@ -467,6 +483,7 @@ button[type="submit"]:active {
 
 .app-content .aura-data-table tbody td {
   border: 1px solid var(--line);
+  background: var(--card);
   color: var(--text);
   padding: 9px 12px; /* 以 NVR 设备页为基准 */
   vertical-align: middle;

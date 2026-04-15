@@ -2,7 +2,6 @@
 const apiBase = "";
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
-const resultEl = document.getElementById("result");
 const floorSwitchListEl = document.getElementById("floorSwitchList");
 const floorCountEl = document.getElementById("floorCount");
 const pointModal = document.getElementById("cameraPointModal");
@@ -35,26 +34,17 @@ function showToast(message, isError = false) {
 }
 
 function isErrorText(text) {
-  return /失败|错误|异常|请输入|无权限|超时|断开/.test(String(text ?? ""));
+  return /失败|错误|异常|无权限|超时|断开|拒绝|未授权|无权|禁止|非法|无效|无法|不能|不存在|已过期|已失效/.test(String(text ?? ""));
 }
 
 function setResult(data) {
-  if (!resultEl) return;
   if (typeof data === "string") {
-    if (isErrorText(data)) {
-      resultEl.textContent = data;
-      return;
-    }
-    showToast(data, false);
+    showToast(data, isErrorText(data));
     return;
   }
   if (data && typeof data === "object") {
     if (typeof data.msg === "string") {
-      if (isErrorText(data.msg)) {
-        resultEl.textContent = data.msg;
-      } else {
-        showToast(data.msg, false);
-      }
+      showToast(data.msg, isErrorText(data.msg));
       return;
     }
     if (Array.isArray(data.data)) {
@@ -65,11 +55,7 @@ function setResult(data) {
     return;
   }
   const text = String(data ?? "");
-  if (isErrorText(text)) {
-    resultEl.textContent = text;
-    return;
-  }
-  showToast(text, false);
+  showToast(text, isErrorText(text));
 }
 
 function setAddPointArmed(armed) {
@@ -184,7 +170,7 @@ function pickMostPopulatedFloor(rows) {
 }
 
 function loadBackgroundByUrl(url) {
-  const text = String(url ?? "").trim();
+  const text = normalizeFloorImagePathToUrl(url, apiBase);
   if (!text) return;
   bg.onload = () => {
     bgReady = true;
@@ -192,7 +178,7 @@ function loadBackgroundByUrl(url) {
     showToast("底图加载成功");
   };
   bg.onerror = () => setResult("底图加载失败");
-  bg.src = text.startsWith("http") ? text : `${apiBase}${text}`;
+  bg.src = text;
 }
 
 function draw() {

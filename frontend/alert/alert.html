@@ -21,12 +21,45 @@
     </header>
     <main class="app-content">
       <div class="page">
-        <div class="alert-toolbar">
-          <button id="load" class="btn-secondary" type="button">刷新告警</button>
-          <button id="openCreateAlertModal" class="btn-primary" type="button">新增告警</button>
-          <button id="exportAlert" class="btn-secondary" type="button" hidden>导出</button>
+        <div class="alert-controls">
+          <div class="alert-toolbar">
+            <button id="load" class="btn-secondary" type="button">刷新告警</button>
+            <button id="openCreateAlertModal" class="btn-primary" type="button">新增告警</button>
+            <button id="exportAlert" class="btn-secondary" type="button" hidden>导出</button>
+          </div>
+          <div class="alert-filter">
+            <input id="alertTypeKeyword" class="aura-search-input" placeholder="筛选告警类型" />
+            <input id="alertDetailKeyword" class="aura-search-input" placeholder="筛选详情关键字" />
+            <label class="alert-filter-time">
+              <span>开始时间</span>
+              <input id="alertStartTime" class="aura-input" type="datetime-local" />
+            </label>
+            <label class="alert-filter-time">
+              <span>结束时间</span>
+              <input id="alertEndTime" class="aura-input" type="datetime-local" />
+            </label>
+            <button id="alertQuick24h" class="btn-secondary" type="button">最近24小时</button>
+            <button id="alertQuick7d" class="btn-secondary" type="button">最近7天</button>
+            <button id="applyAlertFilter" class="btn-secondary" type="button">筛选</button>
+            <button id="clearAlertFilter" class="btn-secondary" type="button">清空筛选</button>
+          </div>
         </div>
+        <p id="alertFilterSummary" class="alert-filter-summary" role="status" aria-live="polite" hidden></p>
         <pre id="result" class="aura-status aura-display-box" role="status" hidden aria-live="polite"></pre>
+        <div id="tableWrap" class="aura-data-table-wrap" hidden>
+          <table class="aura-data-table" aria-label="告警列表">
+            <thead>
+              <tr>
+                <th>告警ID</th>
+                <th>告警类型</th>
+                <th>详情</th>
+                <th>创建时间</th>
+              </tr>
+            </thead>
+            <tbody id="alertTableBody"></tbody>
+          </table>
+        </div>
+        <div id="alertPager" hidden></div>
       </div>
     </main>
   </div>

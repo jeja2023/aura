@@ -1,16 +1,19 @@
 using Aura.Api.Ai;
+using Aura.Api.Data;
 using Aura.Api.Models;
 using Microsoft.AspNetCore.Http;
 
 internal sealed class VectorApplicationService
 {
     private readonly AiClient _aiClient;
+    private readonly PgSqlStore _db;
     private readonly int _maxImageBase64Chars;
     private readonly int _maxMetadataJsonChars;
 
-    public VectorApplicationService(AiClient aiClient, int maxImageBase64Chars, int maxMetadataJsonChars)
+    public VectorApplicationService(AiClient aiClient, PgSqlStore db, int maxImageBase64Chars, int maxMetadataJsonChars)
     {
         _aiClient = aiClient;
+        _db = db;
         _maxImageBase64Chars = maxImageBase64Chars;
         _maxMetadataJsonChars = maxMetadataJsonChars;
     }
@@ -51,6 +54,25 @@ internal sealed class VectorApplicationService
         }
 
         var rows = await _aiClient.SearchAsync(req.Feature, topK);
-        return Results.Ok(new { code = 0, msg = "查询成功", data = rows });
+        if (rows.Count == 0)
+        {
+            return Results.Ok(new { code = 0, msg = "查询成功", data = rows });
+        }
+
+        var vids = rows
+            .Select(x => x.vid)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var imageMap = vids.Count > 0
+            ? await _db.GetBestCaptureImageByVidsAsync(vids)
+            : new Dictionary<string, string>(StringComparer.Ordinal);
+        var data = rows.Select(x => new
+        {
+            x.vid,
+            x.score,
+            imageUrl = imageMap.TryGetValue(x.vid, out var imageUrl) ? imageUrl : null
+        });
+        return Results.Ok(new { code = 0, msg = "查询成功", data });
     }
 }

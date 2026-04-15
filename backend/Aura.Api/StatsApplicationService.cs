@@ -13,30 +13,46 @@ internal sealed class StatsApplicationService
 
     public async Task<object> GetOverviewAsync()
     {
-        var captures = await _db.GetCapturesAsync();
-        var alerts = await _db.GetAlertsAsync();
+        var totalCaptureDb = await _db.GetCaptureCountAsync();
+        var totalAlertDb = await _db.GetAlertCountAsync();
         var devices = await _db.GetDevicesAsync();
-        var sourceCaptures = captures.Count > 0
-            ? captures.Select(x => new { x.DeviceId, CaptureTime = new DateTimeOffset(x.CaptureTime) }).ToList()
-            : _store.Captures.Select(x => new { x.DeviceId, x.CaptureTime }).ToList();
-        var totalCapture = sourceCaptures.Count;
-        var totalAlert = alerts.Count > 0 ? alerts.Count : _store.Alerts.Count;
-        var onlineDevice = devices.Count > 0 ? devices.Count(x => x.Status == "online") : _store.Devices.Count(x => x.Status == "online");
+
+        var totalCapture = totalCaptureDb.HasValue && totalCaptureDb.Value >= 0
+            ? totalCaptureDb.Value
+            : _store.Captures.Count;
+        var totalAlert = totalAlertDb.HasValue && totalAlertDb.Value >= 0
+            ? totalAlertDb.Value
+            : _store.Alerts.Count;
+        var onlineDevice = devices.Count > 0
+            ? devices.Count(x => x.Status == "online")
+            : _store.Devices.Count(x => x.Status == "online");
         return new { totalCapture, totalAlert, onlineDevice };
     }
 
     public async Task<object> GetDashboardAsync()
     {
-        var captures = await _db.GetCapturesAsync();
-        var alerts = await _db.GetAlertsAsync();
+        var today = DateOnly.FromDateTime(DateTime.Now);
+        var start = today.AddDays(-6).ToDateTime(TimeOnly.MinValue);
+        var end = today.AddDays(1).ToDateTime(TimeOnly.MinValue);
+        var rangeStart = new DateTimeOffset(start);
+        var rangeEnd = new DateTimeOffset(end);
+
+        var captures = await _db.GetCapturesInRangeAsync(rangeStart, rangeEnd);
+        var alerts = await _db.GetAlertsInRangeAsync(rangeStart, rangeEnd);
+
         var sourceCaptures = captures.Count > 0
-            ? captures.Select(x => new { x.DeviceId, CaptureTime = new DateTimeOffset(x.CaptureTime) }).ToList()
-            : _store.Captures.Select(x => new { x.DeviceId, x.CaptureTime }).ToList();
+            ? captures.Select(x => new { x.DeviceId, CaptureTime = new DateTimeOffset(DateTime.SpecifyKind(x.CaptureTime, DateTimeKind.Utc)).ToLocalTime() }).ToList()
+            : _store.Captures
+                .Where(x => x.CaptureTime >= rangeStart && x.CaptureTime < rangeEnd)
+                .Select(x => new { x.DeviceId, x.CaptureTime })
+                .ToList();
         var sourceAlerts = alerts.Count > 0
             ? alerts.Select(x => new { x.AlertType, CreatedAt = new DateTimeOffset(x.CreatedAt) }).ToList()
-            : _store.Alerts.Select(x => new { x.AlertType, x.CreatedAt }).ToList();
+            : _store.Alerts
+                .Where(x => x.CreatedAt >= rangeStart && x.CreatedAt < rangeEnd)
+                .Select(x => new { x.AlertType, x.CreatedAt })
+                .ToList();
 
-        var today = DateOnly.FromDateTime(DateTime.Now);
         var daily = Enumerable.Range(0, 7)
             .Select(i => today.AddDays(-6 + i))
             .Select(d => new

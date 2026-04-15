@@ -29,8 +29,23 @@
   }
 }
 
-#canvas {
+/* 画布区域：随内容区宽度拉伸，保持与历史逻辑坐标系一致的比例（900×520） */
+.track-canvas-wrap {
+  width: 100%;
+  max-width: 100%;
+  aspect-ratio: 900 / 520;
+  max-height: min(72vh, 720px);
   border: 1px solid var(--line);
   border-radius: 10px;
+  overflow: hidden;
   background: var(--canvas-bg);
+}
+
+#canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: none;
+  border-radius: 0;
+  background: transparent;
 }

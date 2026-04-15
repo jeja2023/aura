@@ -19,6 +19,12 @@
   padding: 10px;
 }
 
+/* 覆盖 forms.css 的全局 .app-content .page .card{display:flex}
+   统计卡片需保持块布局，否则 .chart 会在 flex 下被压缩为 0 宽 */
+.app-content .page .grid .card {
+  display: block;
+}
+
 .card h2 {
   margin: 0 0 8px;
   font-size: 16px;
@@ -26,6 +32,7 @@
 }
 
 .chart {
+  width: 100%;
   height: 280px;
 }
 

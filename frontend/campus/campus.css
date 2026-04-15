@@ -168,9 +168,9 @@
 .tree-toggle {
   width: 20px;
   height: 20px;
-  border: 1px solid color-mix(in srgb, var(--line) 70%, var(--text-main) 30%);
+  border: 1px solid color-mix(in srgb, var(--text-main) 55%, var(--line) 45%);
   border-radius: 6px;
-  background: color-mix(in srgb, var(--card) 75%, var(--bg-elevated) 25%);
+  background: color-mix(in srgb, var(--card) 85%, var(--bg-elevated) 15%);
   color: var(--text-main);
   cursor: pointer;
   padding: 0;
@@ -181,6 +181,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--shadow-color) 20%, transparent);
 }
 
 .tree-toggle::before {
@@ -202,9 +203,19 @@
   transform: translateY(1px);
 }
 
+.tree-toggle.is-collapsed {
+  color: color-mix(in srgb, var(--text-main) 90%, var(--primary) 10%);
+}
+
+.tree-toggle.is-expanded {
+  color: var(--primary);
+  border-color: color-mix(in srgb, var(--primary) 60%, var(--line) 40%);
+  background: color-mix(in srgb, var(--primary) 10%, var(--card) 90%);
+}
+
 .tree-toggle:hover {
-  border-color: color-mix(in srgb, var(--primary) 55%, var(--line));
-  background: color-mix(in srgb, var(--primary) 14%, var(--card) 86%);
+  border-color: color-mix(in srgb, var(--primary) 65%, var(--line) 35%);
+  background: color-mix(in srgb, var(--primary) 18%, var(--card) 82%);
 }
 
 .tree-toggle:active {

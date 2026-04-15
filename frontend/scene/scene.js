@@ -41,6 +41,40 @@ camera.lookAt(0, 6, 0);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
+const FLOOR_SELECTED_EMISSIVE = 0x2f8cff;
+const FLOOR_FLASH_EMISSIVE = 0xff3b3b;
+const FLOOR_DEFAULT_EMISSIVE = 0x000000;
+
+function applySelectedFloorHighlight() {
+  for (const mesh of floorMeshes) {
+    const isSelected = currentFloorId != null && Number(mesh.userData.floorId) === Number(currentFloorId);
+    mesh.material.emissive.setHex(isSelected ? FLOOR_SELECTED_EMISSIVE : FLOOR_DEFAULT_EMISSIVE);
+  }
+}
+
+function focusCameraToFloorStack() {
+  if (!floorMeshes.length) {
+    camera.position.set(28, 24, 28);
+    camera.lookAt(0, 6, 0);
+    return;
+  }
+
+  const box = new THREE.Box3();
+  for (const m of floorMeshes) box.expandByObject(m);
+  const center = new THREE.Vector3();
+  const size = new THREE.Vector3();
+  box.getCenter(center);
+  box.getSize(size);
+
+  const maxDim = Math.max(size.x, size.y, size.z, 1);
+  const fov = (camera.fov * Math.PI) / 180;
+  const fitHeightDist = (maxDim / 2) / Math.tan(fov / 2);
+  const fitWidthDist = fitHeightDist / Math.max(0.8, camera.aspect || 1);
+  const dist = Math.max(fitHeightDist, fitWidthDist) * 1.2 + 6;
+
+  camera.position.set(center.x + dist, center.y + dist * 0.65, center.z + dist);
+  camera.lookAt(center);
+}
 
 function setResult(data) {
   if (!resultEl) return;
@@ -192,8 +226,8 @@ function renderFloorChips() {
     btn.addEventListener("click", () => {
       const floorId = Number(btn.getAttribute("data-floor-id"));
       if (!Number.isFinite(floorId)) return;
+      flashFloorByFloorId(floorId);
       draw2DSlice(floorId);
-      renderFloorChips();
     });
   });
 }
@@ -238,6 +272,14 @@ function buildFloors() {
   const list = (Array.isArray(floorData) ? floorData : []).filter(
     (f) => f && (f.floorId != null || f.FloorId != null)
   );
+  // 接口默认按 floor_id 倒序返回；3D 叠层需保持“底部为 1 层”，因此按楼层号升序建模
+  list.sort((a, b) => {
+    const fa = Number(a.floorId ?? a.FloorId);
+    const fb = Number(b.floorId ?? b.FloorId);
+    const na = Number.isFinite(fa) ? fa : Number.MAX_SAFE_INTEGER;
+    const nb = Number.isFinite(fb) ? fb : Number.MAX_SAFE_INTEGER;
+    return na - nb;
+  });
   for (let i = 0; i < list.length; i++) {
     const floor = list[i];
     const floorId = floor.floorId ?? floor.FloorId;
@@ -255,10 +297,13 @@ function buildFloors() {
     scene.add(mesh);
     floorMeshes.push(mesh);
   }
+  applySelectedFloorHighlight();
+  focusCameraToFloorStack();
 }
 
 function draw2DSlice(floorId) {
   currentFloorId = floorId;
+  applySelectedFloorHighlight();
   sctx.clearRect(0, 0, slice2d.width, slice2d.height);
   sctx.fillStyle = "#1a2435";
   sctx.fillRect(0, 0, slice2d.width, slice2d.height);
@@ -266,7 +311,7 @@ function draw2DSlice(floorId) {
   sctx.strokeRect(18, 18, slice2d.width - 36, slice2d.height - 36);
   sctx.fillStyle = "#dbeafe";
   sctx.font = "16px sans-serif";
-  sctx.fillText(`Floor #${floorId} 2D Slice`, 24, 42);
+  sctx.fillText(`第${floorId}层 2D 切片`, 24, 42);
 
   const cams = cameraData.filter((c) => Number(c.floorId) === Number(floorId));
   for (const c of cams) {
@@ -281,13 +326,15 @@ function draw2DSlice(floorId) {
     sctx.fillText(`C${c.cameraId}`, x + 8, y - 8);
   }
   setResult({ mode: "2d", floorId, cameraCount: cams.length });
+  // 统一由切片入口刷新楼层标签选中态，保证 3D 点击与标签点击一致
+  renderFloorChips();
   setMetrics();
 }
 
 function reset3DView() {
   currentFloorId = null;
-  camera.position.set(28, 24, 28);
-  camera.lookAt(0, 6, 0);
+  applySelectedFloorHighlight();
+  focusCameraToFloorStack();
   setResult("已返回3D总览");
   renderFloorChips();
   setMetrics();
@@ -302,6 +349,7 @@ function bindPicking() {
     const hits = raycaster.intersectObjects(floorMeshes, false);
     if (hits.length === 0) return;
     const floorId = hits[0].object.userData.floorId;
+    flashFloorByFloorId(floorId);
     draw2DSlice(floorId);
   });
 }
@@ -309,8 +357,33 @@ function bindPicking() {
 function flashFloorByFloorId(floorId) {
   const mesh = floorMeshes.find((m) => Number(m.userData.floorId) === Number(floorId));
   if (!mesh) return;
-  mesh.material.emissive.setHex(0xff2222);
-  setTimeout(() => mesh.material.emissive.setHex(0x000000), 1000);
+  const mat = mesh.material;
+  const stateKey = "__flashState";
+  const prev = mesh.userData[stateKey];
+  if (prev && Array.isArray(prev.timers)) {
+    prev.timers.forEach((id) => clearTimeout(id));
+  }
+
+  const flashOn = FLOOR_FLASH_EMISSIVE;
+  const flashOff = FLOOR_DEFAULT_EMISSIVE;
+  const cycles = 5;
+  const stepMs = 220;
+  const timers = [];
+  let count = 0;
+
+  const tick = () => {
+    const isOn = count % 2 === 0;
+    mat.emissive.setHex(isOn ? flashOn : flashOff);
+    count += 1;
+    if (count < cycles * 2) {
+      timers.push(setTimeout(tick, stepMs));
+      return;
+    }
+    applySelectedFloorHighlight();
+  };
+
+  mesh.userData[stateKey] = { timers };
+  tick();
 }
 
 function flashFloorByCameraId(cameraId) {

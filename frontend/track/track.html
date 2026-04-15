@@ -35,7 +35,9 @@
           <button id="play" class="btn-secondary" type="button">播放动画</button>
           <button id="pause" class="btn-secondary" type="button">暂停</button>
         </section>
-        <canvas id="canvas" width="900" height="520"></canvas>
+        <div class="track-canvas-wrap">
+          <canvas id="canvas" width="900" height="520" aria-label="轨迹平面图画布"></canvas>
+        </div>
         <pre id="result" class="aura-status aura-display-box" role="status" hidden aria-live="polite"></pre>
       </div>
     </main>

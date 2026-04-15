@@ -143,6 +143,7 @@ public static class ServiceExtensions
         services.AddScoped<OutputApplicationService>();
         services.AddScoped<VectorApplicationService>(sp => new VectorApplicationService(
             sp.GetRequiredService<AiClient>(),
+            sp.GetRequiredService<PgSqlStore>(),
             configuration.GetValue("Limits:MaxImageBase64Chars", 5_000_000),
             configuration.GetValue("Limits:MaxMetadataJsonChars", 200_000)));
         services.AddScoped<SpaceCollisionService>();

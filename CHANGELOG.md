@@ -2,6 +2,41 @@
 
 本文档记录仓库关键版本与阶段性改动，便于联调、回归与发布追踪。
 
+## 0.1.13（2026-04-15）
+
+### 本次说明
+
+- 本次为“统计驾驶舱 + 三维空间态势”联动修复版本，重点解决“统计图表空白”“3D 与楼层标签选中不同步”“楼层堆叠方向不符合自然楼层认知”“2D 切片英文文案未本地化”等问题。
+- 保持接口路径与权限策略不变，采用最小改动修复页面行为与展示一致性。
+
+### 统计驾驶舱（`frontend/stats` + `backend/Aura.Api`）
+
+- **后端统计取数修复**：
+  - `backend/Aura.Api/StatsApplicationService.cs`：概览统计改为总量统计逻辑，图表统计改为按近 7 日时间范围聚合，避免默认 `limit=500` 截断导致数据偏差。
+  - `backend/Aura.Api/Data/PgSqlStore.cs`：新增抓拍/告警总数统计与时间范围查询方法，支撑驾驶舱准确汇总。
+- **图表空白根因修复**：
+  - `frontend/stats/stats.css`：覆盖全局 `forms.css` 对 `.card` 的 flex 规则，恢复统计卡片块布局，并为 `.chart` 增加 `width: 100%`，修复图表容器宽度被压缩为 `0` 的问题。
+- **前端诊断与容错增强**：
+  - `frontend/stats/stats.js`：补充 ECharts 初始化/渲染错误提示、容器尺寸检测、渲染层检测、布局等待与重试机制，避免“有数据但图表不显示”时无定位信息。
+- **状态提示体验优化**：
+  - `frontend/stats/stats.js`：成功提示改为 Toast，底部状态栏仅保留错误信息，不再常驻成功文案。
+  - `frontend/stats/stats.html`：增加 `favicon` 占位，消除控制台 `favicon.ico 404` 噪音。
+
+### 三维空间态势（`frontend/scene`）
+
+- **3D 点击与楼层标签联动修复**：
+  - `frontend/scene/scene.js`：将楼层标签选中态刷新统一收敛到 `draw2DSlice`，修复“点击 3D 楼层后右上角楼层标签未同步选中”问题。
+- **楼层堆叠顺序修复**：
+  - `frontend/scene/scene.js`：建模前按 `floorId` 升序排序，确保 3D 场景中底部为 1 层、向上递增。
+- **2D 切片文案本地化**：
+  - `frontend/scene/scene.js`：画布左上角文案由英文 `Floor #x 2D Slice` 调整为中文 `第x层 2D 切片`。
+
+### 安全策略补充（后端）
+
+- `backend/Aura.Api/Program.cs`：默认 CSP `script-src` 增加 `'unsafe-eval'` 兼容项，确保本地 ECharts 运行时能力可用，避免策略拦截导致图表渲染失败。
+
+---
+
 ## 0.1.12（2026-04-14）
 
 ### 本次说明
@@ -638,4 +673,4 @@
 ## 版本规范
 
 - 版本号遵循 `MAJOR.MINOR.PATCH`
-- 当前版本：`0.1.11`
+- 当前版本：`0.1.13`
