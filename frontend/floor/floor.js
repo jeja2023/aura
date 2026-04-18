@@ -201,7 +201,7 @@ function openUploadModal() {
 }
 
 function normalizeFilePathToUrl(filePath) {
-  return normalizeFloorImagePathToUrl(filePath, apiBase);
+  return window.normalizeFloorImagePathToUrl(filePath, apiBase);
 }
 
 function getDynamicPreviewPlaceholderCandidates() {

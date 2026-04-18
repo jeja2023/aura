@@ -273,7 +273,7 @@ function probeImageLoadable(url) {
 function getDynamicBgPlaceholderCandidates() {
   const values = Array.from(floorBgPathMap.values());
   return values
-    .map((filePath) => normalizeFloorImagePathToUrl(filePath, apiBase))
+    .map((filePath) => window.normalizeFloorImagePathToUrl(filePath, apiBase))
     .filter(Boolean);
 }
 
@@ -318,7 +318,7 @@ function loadBackgroundFallback(loadSeq, failedUrl = "") {
 }
 
 function loadBackgroundByUrl(url, showMessage = true) {
-  const text = normalizeFloorImagePathToUrl(url, apiBase);
+  const text = window.normalizeFloorImagePathToUrl(url, apiBase);
   const loadSeq = ++bgLoadSeq;
   if (!text) {
     loadBackgroundFallback(loadSeq, text);
