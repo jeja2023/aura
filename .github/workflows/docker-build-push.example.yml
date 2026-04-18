@@ -40,27 +40,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Validate registry secrets
+      - name: Detect registry secrets
+        id: registry_secrets
         run: |
-          if [ -z "${{ secrets.REGISTRY_HOST }}" ]; then
-            echo "缺少 secrets.REGISTRY_HOST"
-            exit 1
-          fi
-          if [ -z "${{ secrets.REGISTRY_USER }}" ]; then
-            echo "缺少 secrets.REGISTRY_USER"
-            exit 1
-          fi
-          if [ -z "${{ secrets.REGISTRY_PASSWORD }}" ]; then
-            echo "缺少 secrets.REGISTRY_PASSWORD"
-            exit 1
+          if [ -n "${{ secrets.REGISTRY_HOST }}" ] && [ -n "${{ secrets.REGISTRY_USER }}" ] && [ -n "${{ secrets.REGISTRY_PASSWORD }}" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "镜像仓库 secrets 已配置，将执行登录、构建与推送。"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "镜像仓库 secrets 未配置，跳过登录、构建与推送。"
           fi
 
       - name: Docker login
+        if: steps.registry_secrets.outputs.enabled == 'true'
         run: |
           echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login "${{ secrets.REGISTRY_HOST }}" --username "${{ secrets.REGISTRY_USER }}" --password-stdin
 
       - name: Build images
+        if: steps.registry_secrets.outputs.enabled == 'true'
         run: sh ./docker/build-images.sh
 
       - name: Push images
+        if: steps.registry_secrets.outputs.enabled == 'true'
         run: sh ./docker/push-images.sh
