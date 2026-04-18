@@ -40,8 +40,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate registry secrets
+        run: |
+          if [ -z "${{ secrets.REGISTRY_HOST }}" ]; then
+            echo "缺少 secrets.REGISTRY_HOST"
+            exit 1
+          fi
+          if [ -z "${{ secrets.REGISTRY_USER }}" ]; then
+            echo "缺少 secrets.REGISTRY_USER"
+            exit 1
+          fi
+          if [ -z "${{ secrets.REGISTRY_PASSWORD }}" ]; then
+            echo "缺少 secrets.REGISTRY_PASSWORD"
+            exit 1
+          fi
+
       - name: Docker login
-        run: echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login "${{ secrets.REGISTRY_HOST }}" -u "${{ secrets.REGISTRY_USER }}" --password-stdin
+        run: |
+          echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login "${{ secrets.REGISTRY_HOST }}" --username "${{ secrets.REGISTRY_USER }}" --password-stdin
 
       - name: Build images
         run: sh ./docker/build-images.sh

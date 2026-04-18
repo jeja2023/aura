@@ -204,7 +204,7 @@ function pickMostPopulatedFloor(rows) {
 
 function getDynamicBgPlaceholderCandidates() {
   return Array.from(floorBgPathMap.values())
-    .map((filePath) => normalizeFloorImagePathToUrl(filePath, apiBase))
+    .map((filePath) => window.normalizeFloorImagePathToUrl(filePath, apiBase))
     .filter(Boolean);
 }
 
@@ -255,7 +255,7 @@ function loadBackgroundFallback(loadSeq, failedUrl = "") {
 }
 
 function loadBackgroundByUrl(url) {
-  const text = normalizeFloorImagePathToUrl(url, apiBase);
+  const text = window.normalizeFloorImagePathToUrl(url, apiBase);
   const loadSeq = ++bgLoadSeq;
   if (!text) {
     loadBackgroundFallback(loadSeq, text);

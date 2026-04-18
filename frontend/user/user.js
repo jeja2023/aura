@@ -186,17 +186,6 @@ function normalizeImportRoleNameToId(text) {
   return 2;
 }
 
-function formatExportDateTime(v) {
-  if (typeof window.formatDateTimeDisplay === "function") {
-    return window.formatDateTimeDisplay(v, "");
-  }
-  if (v == null || v === "") return "";
-  const d = new Date(v);
-  if (Number.isNaN(d.getTime())) return String(v).replace("T", " ");
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
-
 function setElResult(el, data) {
   if (!el) return;
 
@@ -302,7 +291,6 @@ function renderUserList(payload) {
   userPageSize = pageData.pageSize;
   const totalCount = rows.length;
   const filteredCount = filtered.length;
-  const shownCount = pageData.rows.length;
   setExportVisible(filteredCount > 0);
 
   if (userListMetaEl) {

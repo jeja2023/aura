@@ -25,3 +25,5 @@ function normalizeFloorImagePathToUrl(filePath, apiBase) {
   }
   return `${base}${p}`;
 }
+
+window.normalizeFloorImagePathToUrl = normalizeFloorImagePathToUrl;
