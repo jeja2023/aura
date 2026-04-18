@@ -2,6 +2,7 @@
 const apiBase = "";
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
+const resultEl = document.getElementById("result");
 const floorSwitchListEl = document.getElementById("floorSwitchList");
 const floorCountEl = document.getElementById("floorCount");
 const pointModal = document.getElementById("cameraPointModal");
@@ -16,21 +17,52 @@ const bg = new Image();
 const points = [];
 let dragIndex = -1;
 let bgReady = false;
+let bgLoadSeq = 0;
+const staticBgPlaceholderCandidates = [];
+const builtInBgPlaceholderUrl = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+    <defs>
+      <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#1f2937"/>
+        <stop offset="100%" stop-color="#0f172a"/>
+      </linearGradient>
+    </defs>
+    <rect width="1280" height="720" fill="url(#g)"/>
+    <g fill="none" stroke="#334155" stroke-width="2" opacity="0.6">
+      <path d="M0 120 H1280M0 240 H1280M0 360 H1280M0 480 H1280M0 600 H1280"/>
+      <path d="M160 0 V720M320 0 V720M480 0 V720M640 0 V720M800 0 V720M960 0 V720M1120 0 V720"/>
+    </g>
+    <g font-family="Arial, Microsoft YaHei, sans-serif" text-anchor="middle">
+      <text x="640" y="340" fill="#e2e8f0" font-size="40">底图加载失败</text>
+      <text x="640" y="390" fill="#94a3b8" font-size="24">已自动回退占位图</text>
+    </g>
+  </svg>`
+)}`;
+let resolvedBgPlaceholderUrl = "";
 let pendingPointPos = null;
 let selectedFloorId = null;
 let selectedFloorBgPath = "";
 let addPointArmed = false;
 let lastDeviceId = 1;
 let lastChannelNo = 1;
+let floorBgPathMap = new Map();
+const preferToast = Boolean(window.aura && typeof window.aura.toast === "function");
+
+function setResultText(message, isError = false) {
+  if (!resultEl) return;
+  resultEl.textContent = String(message ?? "");
+  resultEl.hidden = false;
+  resultEl.classList.toggle("is-error", Boolean(isError));
+}
 
 function showToast(message, isError = false) {
   const text = String(message ?? "").trim();
   if (!text) return;
-  if (window.aura && typeof window.aura.toast === "function") {
+  if (preferToast) {
     window.aura.toast(text, isError);
     return;
   }
-  setResult(text);
+  setResultText(text, isError);
 }
 
 function isErrorText(text) {
@@ -114,6 +146,7 @@ async function loadFloorBgMap() {
     if (!Number.isFinite(floorId) || !filePath) return;
     map.set(floorId, filePath);
   });
+  floorBgPathMap = map;
   return map;
 }
 
@@ -169,15 +202,75 @@ function pickMostPopulatedFloor(rows) {
   return bestFloorId;
 }
 
+function getDynamicBgPlaceholderCandidates() {
+  return Array.from(floorBgPathMap.values())
+    .map((filePath) => normalizeFloorImagePathToUrl(filePath, apiBase))
+    .filter(Boolean);
+}
+
+function probeImageLoadable(url) {
+  return new Promise((resolve) => {
+    const probe = new Image();
+    probe.onload = () => resolve(true);
+    probe.onerror = () => resolve(false);
+    probe.src = url;
+  });
+}
+
+async function resolveBackgroundPlaceholderUrl(extraCandidates = []) {
+  const candidates = [...extraCandidates, ...getDynamicBgPlaceholderCandidates(), ...staticBgPlaceholderCandidates];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    if (resolvedBgPlaceholderUrl && candidate === resolvedBgPlaceholderUrl) {
+      return resolvedBgPlaceholderUrl;
+    }
+    const ok = await probeImageLoadable(candidate);
+    if (ok) {
+      resolvedBgPlaceholderUrl = candidate;
+      return resolvedBgPlaceholderUrl;
+    }
+  }
+  resolvedBgPlaceholderUrl = builtInBgPlaceholderUrl;
+  return resolvedBgPlaceholderUrl;
+}
+
+function loadBackgroundFallback(loadSeq, failedUrl = "") {
+  const preferred = failedUrl ? [failedUrl] : [];
+  void resolveBackgroundPlaceholderUrl(preferred).then((fallbackUrl) => {
+    if (loadSeq !== bgLoadSeq) return;
+    bg.onload = () => {
+      if (loadSeq !== bgLoadSeq) return;
+      bgReady = true;
+      draw();
+      showToast("底图加载失败，已自动回退占位图", true);
+    };
+    bg.onerror = () => {
+      if (loadSeq !== bgLoadSeq) return;
+      bgReady = false;
+      draw();
+      setResult("底图加载失败，且占位图加载失败");
+    };
+    bg.src = fallbackUrl;
+  });
+}
+
 function loadBackgroundByUrl(url) {
   const text = normalizeFloorImagePathToUrl(url, apiBase);
-  if (!text) return;
+  const loadSeq = ++bgLoadSeq;
+  if (!text) {
+    loadBackgroundFallback(loadSeq, text);
+    return;
+  }
   bg.onload = () => {
+    if (loadSeq !== bgLoadSeq) return;
     bgReady = true;
     draw();
     showToast("底图加载成功");
   };
-  bg.onerror = () => setResult("底图加载失败");
+  bg.onerror = () => {
+    if (loadSeq !== bgLoadSeq) return;
+    loadBackgroundFallback(loadSeq, text);
+  };
   bg.src = text;
 }
 
@@ -336,7 +429,7 @@ async function loadPoints() {
           .map((x) => Number(x?.floorId ?? x?.FloorId))
           .filter((x) => Number.isFinite(x))
       )
-    ).sort((a, b) => a - b);
+    ).sort((a, b) => b - a);
     if (!Number.isFinite(floorId) && floorIds.length > 0) {
       const autoFloor = pickMostPopulatedFloor(rows);
       if (Number.isFinite(autoFloor)) {
@@ -414,3 +507,6 @@ window.addEventListener("keydown", (e) => {
 draw();
 setAddPointArmed(false);
 loadPoints();
+if (preferToast && resultEl) {
+  resultEl.hidden = true;
+}

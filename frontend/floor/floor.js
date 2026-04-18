@@ -8,9 +8,32 @@ const floorCountEl = document.getElementById("floorCount");
 const openPreviewBtn = document.getElementById("openPreviewBtn");
 const openUploadModalBtn = document.getElementById("openUploadModalBtn");
 const refreshBtnTop = document.getElementById("refreshBtnTop");
+const preferToast = Boolean(window.aura && typeof window.aura.toast === "function");
 let localPreviewUrl = "";
 let latestRows = [];
 let selectedFloorId = null;
+const staticPreviewPlaceholderCandidates = [];
+const builtInPreviewPlaceholderUrl = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+    <defs>
+      <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#1f2937"/>
+        <stop offset="100%" stop-color="#0f172a"/>
+      </linearGradient>
+    </defs>
+    <rect width="1280" height="720" fill="url(#g)"/>
+    <g fill="none" stroke="#334155" stroke-width="2" opacity="0.6">
+      <path d="M0 120 H1280M0 240 H1280M0 360 H1280M0 480 H1280M0 600 H1280"/>
+      <path d="M160 0 V720M320 0 V720M480 0 V720M640 0 V720M800 0 V720M960 0 V720M1120 0 V720"/>
+    </g>
+    <g font-family="Arial, Microsoft YaHei, sans-serif" text-anchor="middle">
+      <text x="640" y="340" fill="#e2e8f0" font-size="40">楼层图加载失败</text>
+      <text x="640" y="390" fill="#94a3b8" font-size="24">已自动回退占位图</text>
+    </g>
+  </svg>`
+)}`;
+let resolvedPreviewPlaceholderUrl = "";
+let previewFallbacking = false;
 
 /** 成功提示自动消失定时器 */
 let successStatusTimer = null;
@@ -51,12 +74,10 @@ function isErrorPayload(data, message) {
 }
 
 function setResult(data) {
-  if (!resultEl) return;
-
   const isEmpty = !data || (typeof data === "string" && data.trim() === "");
   if (isEmpty) {
     clearSuccessStatusTimer();
-    hideResult();
+    if (!preferToast) hideResult();
     return;
   }
 
@@ -64,14 +85,18 @@ function setResult(data) {
   const isError = isErrorPayload(data, message);
 
   clearSuccessStatusTimer();
-  resultEl.textContent = message;
-  resultEl.hidden = false;
-  resultEl.classList.toggle("is-error", isError);
+  if (preferToast) {
+    window.aura.toast(message, isError);
+  } else if (resultEl) {
+    resultEl.textContent = message;
+    resultEl.hidden = false;
+    resultEl.classList.toggle("is-error", isError);
+  }
 
   if (!isError) {
     successStatusTimer = window.setTimeout(() => {
       successStatusTimer = null;
-      hideResult();
+      if (!preferToast) hideResult();
     }, SUCCESS_STATUS_MS);
   }
 }
@@ -82,7 +107,7 @@ function clearLocalPreviewUrl() {
   localPreviewUrl = "";
 }
 
-function setPreviewSource(src, altText = "floor-preview") {
+function setPreviewSource(src, altText = "楼层图预览") {
   if (!previewEl) return;
   const safeSrc = String(src || "").trim();
   if (!safeSrc) {
@@ -158,7 +183,7 @@ function openUploadModal() {
     const file = fileInput.files?.[0];
     clearLocalPreviewUrl();
     if (!file) {
-      setPreviewSource("", "floor-preview");
+      setPreviewSource("", "楼层图预览");
       return;
     }
     localPreviewUrl = URL.createObjectURL(file);
@@ -177,6 +202,47 @@ function openUploadModal() {
 
 function normalizeFilePathToUrl(filePath) {
   return normalizeFloorImagePathToUrl(filePath, apiBase);
+}
+
+function getDynamicPreviewPlaceholderCandidates() {
+  return latestRows
+    .map((row) => normalizeFilePathToUrl(row?.filePath ?? row?.FilePath ?? ""))
+    .filter(Boolean);
+}
+
+function probeImageLoadable(url) {
+  return new Promise((resolve) => {
+    const probe = new Image();
+    probe.onload = () => resolve(true);
+    probe.onerror = () => resolve(false);
+    probe.src = url;
+  });
+}
+
+async function resolvePreviewPlaceholderUrl(extraCandidates = []) {
+  const candidates = [...extraCandidates, ...getDynamicPreviewPlaceholderCandidates(), ...staticPreviewPlaceholderCandidates];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    if (resolvedPreviewPlaceholderUrl && candidate === resolvedPreviewPlaceholderUrl) {
+      return resolvedPreviewPlaceholderUrl;
+    }
+    const ok = await probeImageLoadable(candidate);
+    if (ok) {
+      resolvedPreviewPlaceholderUrl = candidate;
+      return resolvedPreviewPlaceholderUrl;
+    }
+  }
+  resolvedPreviewPlaceholderUrl = builtInPreviewPlaceholderUrl;
+  return resolvedPreviewPlaceholderUrl;
+}
+
+function loadPreviewFallback(failedSrc = "") {
+  const preferred = failedSrc ? [failedSrc] : [];
+  void resolvePreviewPlaceholderUrl(preferred).then((fallbackUrl) => {
+    previewFallbacking = true;
+    setPreviewSource(fallbackUrl, "楼层图占位图");
+    setResult("楼层图加载失败，已自动回退占位图");
+  });
 }
 
 function normalizeSearchText(value) {
@@ -238,7 +304,7 @@ function renderFloorList() {
       const nodeId = row?.nodeId ?? row?.NodeId ?? "-";
       const previewUrl = normalizeFilePathToUrl(filePath);
       setPreviewSource(previewUrl, `楼层图 #${floorId}`);
-      setResult(`已切换楼层图：floorId=${floorId}，nodeId=${nodeId}`);
+      setResult(`已切换楼层图：楼层${floorId}，节点${nodeId}`);
       renderFloorList();
     });
   });
@@ -339,7 +405,7 @@ async function loadList() {
     const previewUrl = normalizeFilePathToUrl(filePath);
     setPreviewSource(previewUrl, `楼层图 #${floorId}`);
     renderFloorList();
-    setResult(`已加载最新楼层图：floorId=${floorId}，nodeId=${nodeId}`);
+    setResult(`已加载最新楼层图：楼层${floorId}，节点${nodeId}`);
   } catch (error) {
     setResult(`查询失败：${error.message}`);
   }
@@ -348,8 +414,17 @@ async function loadList() {
 if (previewEl) {
   previewEl.classList.add("is-empty");
   previewEl.addEventListener("error", () => {
-    setPreviewSource("", "楼层图加载失败");
-    setResult("预览加载失败，请检查上传返回路径是否可访问");
+    const failedSrc = String(previewEl.getAttribute("src") || "").trim();
+    if (previewFallbacking) {
+      previewFallbacking = false;
+      setPreviewSource("", "楼层图加载失败");
+      setResult("楼层图加载失败，且占位图加载失败");
+      return;
+    }
+    loadPreviewFallback(failedSrc);
+  });
+  previewEl.addEventListener("load", () => {
+    previewFallbacking = false;
   });
   previewEl.addEventListener("click", () => openPreviewInNewTab());
 }
@@ -359,3 +434,6 @@ openPreviewBtn?.addEventListener("click", () => openPreviewInNewTab());
 openUploadModalBtn?.addEventListener("click", () => openUploadModal());
 refreshBtnTop?.addEventListener("click", loadList);
 void loadList();
+if (preferToast && resultEl) {
+  resultEl.hidden = true;
+}

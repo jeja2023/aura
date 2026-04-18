@@ -13,6 +13,28 @@ const confirmRoiConfigBtn = document.getElementById("confirmRoiConfigBtn");
 const bg = new Image();
 const points = [];
 let bgReady = false;
+let bgLoadSeq = 0;
+const staticBgPlaceholderCandidates = [];
+const builtInBgPlaceholderUrl = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+    <defs>
+      <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#1f2937"/>
+        <stop offset="100%" stop-color="#0f172a"/>
+      </linearGradient>
+    </defs>
+    <rect width="1280" height="720" fill="url(#g)"/>
+    <g fill="none" stroke="#334155" stroke-width="2" opacity="0.6">
+      <path d="M0 120 H1280M0 240 H1280M0 360 H1280M0 480 H1280M0 600 H1280"/>
+      <path d="M160 0 V720M320 0 V720M480 0 V720M640 0 V720M800 0 V720M960 0 V720M1120 0 V720"/>
+    </g>
+    <g font-family="Arial, Microsoft YaHei, sans-serif" text-anchor="middle">
+      <text x="640" y="340" fill="#e2e8f0" font-size="40">底图加载失败</text>
+      <text x="640" y="390" fill="#94a3b8" font-size="24">已自动回退占位图</text>
+    </g>
+  </svg>`
+)}`;
+let resolvedBgPlaceholderUrl = "";
 let drawArmed = false;
 let latestRois = [];
 let selectedFloorId = null;
@@ -24,6 +46,7 @@ let currentRoomNodeId = 4;
 let successStatusTimer = null;
 const SUCCESS_STATUS_MS = 5000;
 const defaultPromptText = resultEl?.textContent ?? "";
+const preferToast = Boolean(window.aura && typeof window.aura.toast === "function");
 
 function clearSuccessStatusTimer() {
   if (successStatusTimer != null) {
@@ -33,6 +56,13 @@ function clearSuccessStatusTimer() {
 }
 
 function setResultText(message, isError) {
+  const text = String(message ?? "").trim();
+  if (preferToast) {
+    if (text) {
+      window.aura.toast(text, Boolean(isError));
+    }
+    return;
+  }
   if (!resultEl) return;
   resultEl.textContent = message;
   resultEl.classList.toggle("is-error", Boolean(isError));
@@ -60,12 +90,12 @@ function isErrorPayload(data, message) {
 }
 
 function setResult(data) {
-  if (!resultEl) return;
-
   const isEmpty = !data || (typeof data === "string" && data.trim() === "");
   if (isEmpty) {
     clearSuccessStatusTimer();
-    setResultText(defaultPromptText, false);
+    if (!preferToast) {
+      setResultText(defaultPromptText, false);
+    }
     return;
   }
 
@@ -78,7 +108,9 @@ function setResult(data) {
   if (!isError) {
     successStatusTimer = window.setTimeout(() => {
       successStatusTimer = null;
-      setResultText(defaultPromptText, false);
+      if (!preferToast) {
+        setResultText(defaultPromptText, false);
+      }
     }, SUCCESS_STATUS_MS);
   }
 }
@@ -229,19 +261,80 @@ function applyRoiToEditor(row) {
   draw();
 }
 
+function probeImageLoadable(url) {
+  return new Promise((resolve) => {
+    const probe = new Image();
+    probe.onload = () => resolve(true);
+    probe.onerror = () => resolve(false);
+    probe.src = url;
+  });
+}
+
+function getDynamicBgPlaceholderCandidates() {
+  const values = Array.from(floorBgPathMap.values());
+  return values
+    .map((filePath) => normalizeFloorImagePathToUrl(filePath, apiBase))
+    .filter(Boolean);
+}
+
+async function resolveBackgroundPlaceholderUrl(extraCandidates = []) {
+  const dynamicCandidates = getDynamicBgPlaceholderCandidates();
+  const candidates = [...extraCandidates, ...dynamicCandidates, ...staticBgPlaceholderCandidates];
+  for (const candidate of candidates) {
+    if (resolvedBgPlaceholderUrl && candidate === resolvedBgPlaceholderUrl) {
+      return resolvedBgPlaceholderUrl;
+    }
+    const ok = await probeImageLoadable(candidate);
+    if (ok) {
+      resolvedBgPlaceholderUrl = candidate;
+      return resolvedBgPlaceholderUrl;
+    }
+  }
+  resolvedBgPlaceholderUrl = builtInBgPlaceholderUrl;
+  return resolvedBgPlaceholderUrl;
+}
+
+function loadBackgroundFallback(loadSeq, failedUrl = "") {
+  const preferredCandidates = [];
+  if (failedUrl) {
+    preferredCandidates.push(failedUrl);
+  }
+  void resolveBackgroundPlaceholderUrl(preferredCandidates).then((fallbackUrl) => {
+    if (loadSeq !== bgLoadSeq) return;
+    bg.onload = () => {
+      if (loadSeq !== bgLoadSeq) return;
+      bgReady = true;
+      draw();
+      setResult("底图加载失败，已自动回退占位图");
+    };
+    bg.onerror = () => {
+      if (loadSeq !== bgLoadSeq) return;
+      bgReady = false;
+      draw();
+      setResult("底图加载失败，且占位图加载失败");
+    };
+    bg.src = fallbackUrl;
+  });
+}
+
 function loadBackgroundByUrl(url, showMessage = true) {
   const text = normalizeFloorImagePathToUrl(url, apiBase);
+  const loadSeq = ++bgLoadSeq;
   if (!text) {
-    bgReady = false;
-    draw();
+    loadBackgroundFallback(loadSeq, text);
     return;
   }
+  bgReady = false;
   bg.onload = () => {
+    if (loadSeq !== bgLoadSeq) return;
     bgReady = true;
     draw();
     if (showMessage) setResult("底图加载成功");
   };
-  bg.onerror = () => setResult("底图加载失败");
+  bg.onerror = () => {
+    if (loadSeq !== bgLoadSeq) return;
+    loadBackgroundFallback(loadSeq);
+  };
   bg.src = text;
 }
 
@@ -268,7 +361,7 @@ function renderFloorSwitchList() {
     if (!Number.isFinite(floorId)) return;
     floorCounts.set(floorId, (floorCounts.get(floorId) || 0) + 1);
   });
-  const floorIds = Array.from(floorCounts.keys()).sort((a, b) => a - b);
+  const floorIds = Array.from(floorCounts.keys()).sort((a, b) => b - a);
   if (floorCountEl) {
     floorCountEl.textContent = floorIds.length > 0 ? `共 ${floorIds.length} 层` : "暂无楼层";
   }
@@ -363,9 +456,11 @@ async function saveCurrentRoi() {
 
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  if (bgReady) {
+  const bgDrawable = bgReady && bg.complete && bg.naturalWidth > 0 && bg.naturalHeight > 0;
+  if (bgDrawable) {
     ctx.drawImage(bg, 0, 0, canvas.width, canvas.height);
   } else {
+    bgReady = false;
     ctx.fillStyle = "#1f2937";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
@@ -456,3 +551,6 @@ document.getElementById("loadBtn").addEventListener("click", load);
 void load();
 draw();
 setDrawArmed(false);
+if (preferToast && resultEl) {
+  resultEl.hidden = true;
+}
