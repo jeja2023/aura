@@ -64,7 +64,7 @@
     const cur = currentPath();
     const isSuperAdmin = role === "super_admin";
     let html =
-      '<div class="app-brand" title="寓瞳 · 智能集宿区视觉解析平台">寓瞳</div><nav class="app-nav" aria-label="业务模块导航">';
+      '<div class="app-brand" title="寓瞳 · 智能集宿区视觉解析平台"><img class="app-brand-icon" src="/common/favicon.svg" alt="寓瞳图标" /><span class="app-brand-text">寓瞳</span></div><nav class="app-nav" aria-label="业务模块导航">';
     for (const g of NAV_GROUPS) {
       const visibleItems = g.items.filter((it) => isSuperAdmin || !SUPER_ADMIN_ONLY_PATHS.has(it.href));
       if (visibleItems.length === 0) continue;

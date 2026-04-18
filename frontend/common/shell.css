@@ -30,11 +30,24 @@
 
 .app-brand {
   padding: 18px 18px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--sidebar-border);
+}
+
+.app-brand-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  box-shadow: 0 4px 10px rgba(var(--primary-rgb), 0.28);
+}
+
+.app-brand-text {
   font-size: 18px;
   font-weight: 700;
   letter-spacing: 2px;
   color: var(--sidebar-text);
-  border-bottom: 1px solid var(--sidebar-border);
 }
 
 .app-nav {
