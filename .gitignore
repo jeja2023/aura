@@ -43,6 +43,7 @@ build/
 .verify_build/
 coverage/
 .cache/
+*.lscache
 *.tmp
 *.temp
 
