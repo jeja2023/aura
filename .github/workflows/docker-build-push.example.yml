@@ -38,7 +38,7 @@ jobs:
       AURA_MODEL_PATH: ${{ secrets.AURA_MODEL_PATH }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Detect registry secrets
         id: registry_secrets
