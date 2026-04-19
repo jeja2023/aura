@@ -66,6 +66,8 @@ logs/
 
 # 仓库根本地存储目录（运行时生成；抓拍/导出/告警落盘等；不提交）
 /storage/
+# 仓库根目录本地模型权重（体积大；下载或自备，不提交）
+/models/
 # 禁止误提交 backend 下错误生成的 storage 目录
 backend/**/storage/
 
