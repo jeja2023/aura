@@ -51,8 +51,8 @@ coverage/
 *.log
 logs/
 
-# 第三方参考与官方 Demo 树（体积大，不提交到 GitHub）
-third-party/
+# 第三方参考与官方 Demo 树（体积大，不纳入版本库；仅忽略仓库根目录）
+/third-party/
 
 # 上传与导出的大文件目录（仅仓库根 storage/；勿在 backend 下另建）
 storage/uploads/
