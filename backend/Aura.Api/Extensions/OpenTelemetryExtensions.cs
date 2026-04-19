@@ -52,6 +52,7 @@ public static class OpenTelemetryExtensions
                     .SetResourceBuilder(
                         ResourceBuilder.CreateDefault()
                             .AddService(serviceName, serviceVersion: version))
+                    .AddSource("Aura.HikvisionIsapi")
                     .AddAspNetCoreInstrumentation(o =>
                     {
                         o.Filter = ctx =>

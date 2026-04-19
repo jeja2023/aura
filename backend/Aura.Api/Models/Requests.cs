@@ -4,6 +4,39 @@ namespace Aura.Api.Models;
 
 internal sealed record LoginReq(string UserName, string Password);
 internal sealed record DeviceRegisterReq(string Name, string Ip, int Port, string Brand, string Protocol);
+
+/// <summary>海康 ISAPI 调用：DeviceId 来自 nvr_device；账号密码可空，空则使用配置 Hikvision:Isapi。</summary>
+internal sealed record HikvisionIsapiDeviceOpReq(long DeviceId, string? UserName, string? Password);
+
+/// <summary>海康抓图：ChannelIndex 为摄像机序号（与 Demo 一致拼接 01/02/03）；StreamType 0 主码流 1 子码流 2 第三路。</summary>
+internal sealed record HikvisionIsapiSnapshotReq(long DeviceId, int ChannelIndex, int StreamType, string? UserName, string? Password);
+
+/// <summary>海康 ISAPI 通用网关：PathAndQuery 须以 /ISAPI/ 开头且落在白名单模块下。</summary>
+internal sealed record HikvisionIsapiGatewayReq(
+    long DeviceId,
+    string Method,
+    string PathAndQuery,
+    string? UserName,
+    string? Password,
+    string? Body,
+    string? BodyBase64,
+    string? ContentType,
+    bool PreferBinaryResponse);
+
+/// <summary>请求 I 帧，StreamingChannelId 如 101（与 Streaming 通道号一致）。</summary>
+internal sealed record HikvisionIsapiKeyFrameReq(long DeviceId, string StreamingChannelId, string? UserName, string? Password);
+
+/// <summary>SDT 图片上传（与 Demo <c>CommonMethod.UploadPic</c> 字段 <c>imageFile</c> 一致），用于人脸库等流程前置上传。</summary>
+internal sealed record HikvisionIsapiSdtPictureUploadReq(
+    long DeviceId,
+    string? UserName,
+    string? Password,
+    string FileName,
+    string ImageBase64,
+    string? PartContentType);
+
+/// <summary>解析设备返回的 ResponseStatus XML/JSON 片段。</summary>
+internal sealed record HikvisionIsapiAnalyzeReq(string? Raw);
 internal sealed record CaptureReq(long DeviceId, int ChannelNo, DateTimeOffset CaptureTime, string ImageBase64, string MetadataJson);
 internal sealed record CaptureMockReq(long DeviceId, int ChannelNo, string MetadataJson);
 internal sealed record RoiReq(long CameraId, long RoomNodeId, string VerticesJson);

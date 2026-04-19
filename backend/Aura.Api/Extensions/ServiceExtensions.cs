@@ -10,10 +10,14 @@ using Aura.Api.Data;
 using Aura.Api.Export;
 using Aura.Api.Ops;
 using Aura.Api.Services;
+using Aura.Api.Services.Hikvision;
 using Aura.Api.Internal;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Http.Resilience;
+using Microsoft.Extensions.Options;
+using System.Threading.RateLimiting;
 
 namespace Aura.Api.Extensions;
 
@@ -130,6 +134,102 @@ public static class ServiceExtensions
                 jwtIssuer,
                 jwtAudience,
                 jwtExpireMinutes));
+
+        services.AddOptions<HikvisionIsapiOptions>()
+            .Bind(configuration.GetSection(HikvisionIsapiOptions.SectionName))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<HikvisionIsapiOptions>, HikvisionIsapiOptionsValidator>();
+        services.PostConfigure<HikvisionIsapiOptions>(o =>
+        {
+            static string? ReadEnv(string? variableName)
+            {
+                if (string.IsNullOrWhiteSpace(variableName))
+                {
+                    return null;
+                }
+
+                return Environment.GetEnvironmentVariable(variableName.Trim());
+            }
+
+            if (string.IsNullOrWhiteSpace(o.DefaultUserName))
+            {
+                var v = ReadEnv(o.DefaultUserNameEnvironmentVariable);
+                if (!string.IsNullOrWhiteSpace(v))
+                {
+                    o.DefaultUserName = v.Trim();
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(o.DefaultPassword))
+            {
+                var v = ReadEnv(o.DefaultPasswordEnvironmentVariable);
+                if (!string.IsNullOrWhiteSpace(v))
+                {
+                    o.DefaultPassword = v;
+                }
+            }
+        });
+
+        services.AddHttpContextAccessor();
+        services.AddSingleton<HikvisionIsapiClient>();
+        services.AddScoped<HikvisionNvrIntegrationService>();
+        services.AddScoped<HikvisionIsapiGatewayService>();
+
+        services.AddRateLimiter(options =>
+        {
+            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+            options.OnRejected = async (context, token) =>
+            {
+                context.HttpContext.Response.ContentType = "application/json; charset=utf-8";
+                await context.HttpContext.Response.WriteAsJsonAsync(
+                    new { code = 42901, msg = "请求过于频繁，请稍后再试" },
+                    cancellationToken: token);
+            };
+            options.AddPolicy("HikvisionGateway", context =>
+            {
+                var config = context.RequestServices.GetRequiredService<IConfiguration>();
+                var rpm = config.GetValue("Hikvision:Isapi:GatewayMaxRequestsPerMinute", 0);
+                if (rpm <= 0)
+                {
+                    return RateLimitPartition.GetNoLimiter("hikvision_gateway_unlimited");
+                }
+
+                var key = context.User?.Identity?.Name
+                    ?? context.Connection.RemoteIpAddress?.ToString()
+                    ?? "anonymous";
+                return RateLimitPartition.GetFixedWindowLimiter(
+                    key,
+                    _ => new FixedWindowRateLimiterOptions
+                    {
+                        AutoReplenishment = true,
+                        PermitLimit = rpm,
+                        QueueLimit = 0,
+                        Window = TimeSpan.FromMinutes(1)
+                    });
+            });
+            options.AddPolicy("HikvisionDeviceApi", context =>
+            {
+                var config = context.RequestServices.GetRequiredService<IConfiguration>();
+                var rpm = config.GetValue("Hikvision:Isapi:DeviceApiMaxRequestsPerMinute", 0);
+                if (rpm <= 0)
+                {
+                    return RateLimitPartition.GetNoLimiter("hikvision_device_api_unlimited");
+                }
+
+                var key = context.User?.Identity?.Name
+                    ?? context.Connection.RemoteIpAddress?.ToString()
+                    ?? "anonymous";
+                return RateLimitPartition.GetFixedWindowLimiter(
+                    key,
+                    _ => new FixedWindowRateLimiterOptions
+                    {
+                        AutoReplenishment = true,
+                        PermitLimit = rpm,
+                        QueueLimit = 0,
+                        Window = TimeSpan.FromMinutes(1)
+                    });
+            });
+        });
 
         services.AddScoped<DeviceManagementService>();
         services.AddScoped<EventDispatchService>();

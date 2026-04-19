@@ -13,6 +13,7 @@ public static class EndpointExtensions
         AuraEndpointsAuth.Map(app, ctx);
         AuraEndpointsCampusFloor.Map(app, ctx);
         AuraEndpointsDeviceCapture.Map(app, ctx);
+        AuraEndpointsHikvisionIsapi.Map(app, ctx);
         AuraEndpointsDomain.Map(app, ctx);
         return app;
     }

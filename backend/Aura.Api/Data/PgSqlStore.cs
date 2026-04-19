@@ -123,6 +123,27 @@ internal sealed class PgSqlStore
         }
     }
 
+    public async Task<DbDevice?> GetDeviceByIdAsync(long deviceId)
+    {
+        try
+        {
+            await using var conn = CreateConnection();
+            return await conn.QueryFirstOrDefaultAsync<DbDevice>(
+                """
+                SELECT device_id AS DeviceId, name AS Name, ip AS Ip, port AS Port,
+                       brand AS Brand, protocol AS Protocol, status AS Status, created_at AS CreatedAt
+                FROM nvr_device
+                WHERE device_id=@DeviceId
+                """,
+                new { DeviceId = deviceId });
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "数据库按ID查询设备失败。deviceId={DeviceId}", deviceId);
+            return null;
+        }
+    }
+
     public async Task<long?> InsertDeviceAsync(string name, string ip, int port, string brand, string protocol, string status)
     {
         try

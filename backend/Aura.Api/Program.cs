@@ -113,6 +113,7 @@ app.UseStaticFiles(new StaticFileOptions
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 // 使用扩展方法映射路由
 app.MapAuraEndpoints(builder.Configuration, isDev);

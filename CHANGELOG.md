@@ -2,6 +2,51 @@
 
 本文档记录仓库关键版本与阶段性改动，便于联调、回归与发布追踪。
 
+## 0.1.16（2026-04-19）
+
+### 本次说明
+
+- 本次在后端新增**海康 NVR ISAPI 服务端代理与封装能力**：以已登记设备（`nvr_device`）为锚点发起到设备的 ISAPI 调用，提供常用能力封装、白名单网关、限流与可观测性补充；**生产环境凭据建议走环境变量或专用环境变量名映射，避免将真实密码写入仓库**。
+- 保持与既有鉴权模型一致：**楼栋管理员**可使用封装接口；**超级管理员**可使用通用 ISAPI 网关（可按配置关闭）。
+
+### 后端 · 海康 ISAPI（`backend/Aura.Api`）
+
+- **新增端点组**：`Extensions/AuraEndpointsHikvisionIsapi.cs`，路由前缀 **`/api/device/hikvision`**（OpenAPI 标签「海康ISAPI」）。
+  - 常用能力：`/device-info`、`/connectivity`、`/video-inputs/channels`、`/input-proxy/channels`、`/input-proxy/channels/status`、`/snapshot`、`/streaming/request-key-frame`、`/system/capabilities`、`/event/capabilities`、`/content-mgmt/zero-video-channels`、`/traffic/capabilities`、`/itc/capability`、`/sdt/picture-upload` 等。
+  - 辅助能力：`GET /demo-catalog`（Demo 对照目录/说明，便于联调对照）、`POST /analyze-response`（解析设备 `ResponseStatus` 片段）。
+  - 网关：`POST /gateway`（`PathAndQuery` 必须以 `/ISAPI/` 开头并受路径白名单约束；支持文本/二进制响应策略），默认仅**超级管理员**可用，且可由 `Hikvision:Isapi:GatewayEnabled` 关闭。
+- **新增服务实现目录**：`Services/Hikvision/`（HTTP 客户端、选项与校验、路径白名单、网关执行、审计/截断策略、响应状态解析、指标与 Activity 等）。
+- **请求模型**：`Models/Requests.cs` 增加海康相关 `record`（设备操作、抓图、网关、关键帧、SDT 图片上传、响应分析等），请求体可携带账号密码；为空时回落 `Hikvision:Isapi` 默认账号或**环境变量映射**（见 `ServiceExtensions` 中 `PostConfigure`）。
+- **数据访问**：`Data/PgSqlStore.cs` 新增 `GetDeviceByIdAsync`，按 `device_id` 查询 `nvr_device`，供 ISAPI 调用解析设备 IP/端口等信息。
+
+### 全局限流与请求体上限
+
+- **`Program.cs`**：启用 `app.UseRateLimiter()`，与既有认证授权管道配合。
+- **`ServiceExtensions.cs`**：注册 `AddRateLimiter`，策略 **`HikvisionGateway`** / **`HikvisionDeviceApi`**（按登录用户名或客户端 IP 做固定窗口；**`GatewayMaxRequestsPerMinute` / `DeviceApiMaxRequestsPerMinute` 为 0 时不限流**）；拒绝时返回 JSON：`code=42901`，`msg` 为中文“请求过于频繁，请稍后再试”。
+- **`appsettings.json` / `appsettings.Testing.json`**：增加 **`Kestrel:Limits:MaxRequestBodySize`（10MB）**，与网关/上传等业务上限对齐，避免 Kestrel 默认限制与业务校验不一致。
+
+### 可观测性
+
+- **`OpenTelemetryExtensions.cs`**：Tracing 增加活动源 **`Aura.HikvisionIsapi`**（与 `Hikvision:Isapi:TelemetryActivitiesEnabled` 等开关配合）。
+- **`Services/Hikvision/HikvisionIsapiMetrics.cs`** 等：补充 Prometheus 风格指标埋点（与现有 `/metrics` 体系一致）。
+
+### 工程与集成测试
+
+- **`Aura.Api.csproj`**：增加 **`InternalsVisibleTo`** 指向 `Aura.Api.Integration.Tests`，便于对内部类型做集成级测试。
+- **`Aura.Api.Integration.Tests`**：新增 **`HikvisionIsapiLogFormattingTests`**、**`HikvisionIsapiOptionsValidatorTests`**、**`HikvisionIsapiPathGuardTests`**，覆盖日志格式化、选项校验与路径守卫等关键安全边界。
+
+### 文档与第三方参考（本地/待纳入版本策略）
+
+- **`docs/海康NVR-AppsDemo_ISAPI快速审查清单.md`**：AppsDemo 与 ISAPI 快速审查条目整理，便于与本后端封装对照联调。
+- **`third-party/C#AppsDemo_ISAPI/`**（若纳入仓库）：海康官方 C# AppsDemo 与依赖树，作为接口与字段对照参考；体积较大，是否提交由团队仓库策略决定。
+
+### 兼容性与质量说明
+
+- 未改变既有抓拍/告警/资源树等核心业务路径；新增能力均为**独立路由组**，按需授权启用。
+- 默认配置下网关审计日志可开启（测试环境可关闭相关审计/遥测开关以降低噪声），**请勿在配置文件写入生产设备明文密码**。
+
+---
+
 ## 0.1.15（2026-04-18）
 
 ### 本次说明
@@ -737,4 +782,4 @@
 ## 版本规范
 
 - 版本号遵循 `MAJOR.MINOR.PATCH`
-- 当前版本：`0.1.14`
+- 当前版本：`0.1.16`
