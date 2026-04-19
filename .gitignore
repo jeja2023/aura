@@ -54,9 +54,9 @@ logs/
 # 第三方参考与官方 Demo 树（体积大，不纳入版本库；仅忽略仓库根目录）
 /third-party/
 
-# 上传与导出的大文件目录（仅仓库根 storage/；勿在 backend 下另建）
-storage/uploads/
-storage/outputs/
+# 仓库根本地存储目录（运行时生成；抓拍/导出/告警落盘等；不提交）
+/storage/
+# 禁止误提交 backend 下错误生成的 storage 目录
 backend/**/storage/
 
 # 数据与二进制大文件
