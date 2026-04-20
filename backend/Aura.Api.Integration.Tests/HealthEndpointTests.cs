@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http;
 using System.Text;
 using Aura.Api.Middleware;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
 
@@ -119,5 +120,49 @@ public sealed class HealthEndpointTests : IClassFixture<AuraApiFactory>
         request.Content = new StringContent("""{"pagePath":"/index/","pageTitle":"态势看板","eventType":"leave","stayMs":1234,"sessionId":"test-session"}""", Encoding.UTF8, "application/json");
         var response = await client.SendAsync(request);
         Assert.NotEqual(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Storage目录不存在时启动会自动创建目录()
+    {
+        var tempRepoRoot = Path.Combine(Path.GetTempPath(), $"aura-storage-it-{Guid.NewGuid():N}");
+        var tempContentRoot = Path.Combine(tempRepoRoot, "backend", "Aura.Api");
+        var tempStorageRoot = Path.Combine(tempRepoRoot, "storage");
+        Directory.CreateDirectory(tempContentRoot);
+        File.WriteAllText(Path.Combine(tempRepoRoot, "Aura.sln"), "");
+
+        var sourceApiRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Aura.Api"));
+        var sourceAppSettings = Path.Combine(sourceApiRoot, "appsettings.json");
+        var sourceTestingAppSettings = Path.Combine(sourceApiRoot, "appsettings.Testing.json");
+        if (File.Exists(sourceAppSettings))
+        {
+            File.Copy(sourceAppSettings, Path.Combine(tempContentRoot, "appsettings.json"), overwrite: true);
+        }
+        if (File.Exists(sourceTestingAppSettings))
+        {
+            File.Copy(sourceTestingAppSettings, Path.Combine(tempContentRoot, "appsettings.Testing.json"), overwrite: true);
+        }
+
+        try
+        {
+            Assert.False(Directory.Exists(tempStorageRoot));
+
+            using var isolatedFactory = _factory.WithWebHostBuilder(builder =>
+            {
+                builder.UseSetting(WebHostDefaults.ContentRootKey, tempContentRoot);
+            });
+
+            var client = isolatedFactory.CreateClient();
+            var response = await client.GetAsync("/api/health/live");
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.True(Directory.Exists(tempStorageRoot));
+        }
+        finally
+        {
+            if (Directory.Exists(tempRepoRoot))
+            {
+                Directory.Delete(tempRepoRoot, recursive: true);
+            }
+        }
     }
 }

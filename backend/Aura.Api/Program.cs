@@ -105,6 +105,11 @@ if (Directory.Exists(frontendRoot))
     });
 }
 
+if (!Directory.Exists(storageRoot))
+{
+    Directory.CreateDirectory(storageRoot);
+}
+
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider(storageRoot),
