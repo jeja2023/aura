@@ -210,11 +210,27 @@ def _find_process_ids_on_local_port(port: int) -> list[int]:
 
     pids: set[int] = set()
     for line in out.splitlines():
-        if f":{port}" not in line:
+        raw = line.strip()
+        if not raw:
             continue
-        parts = line.split()
+        # netstat 示例：
+        # TCP    127.0.0.1:8000     0.0.0.0:0      LISTENING       1234
+        # TCP    127.0.0.1:55199    127.0.0.1:8000 TIME_WAIT       0
+        # 仅将 LISTENING 视为“端口被占用”。TIME_WAIT / ESTABLISHED 等不应阻断启动。
+        if "LISTENING" not in raw.upper():
+            continue
+
+        parts = raw.split()
         if not parts:
             continue
+
+        # 兼容 IPv4/IPv6：本地地址通常位于第 2 列（如 127.0.0.1:8000 或 [::]:8000）
+        if len(parts) < 2:
+            continue
+        local = parts[1]
+        if f":{port}" not in local:
+            continue
+
         last = parts[-1]
         if last.isdigit():
             pids.add(int(last))
@@ -251,11 +267,13 @@ def main() -> int:
     _load_env_file(ROOT / ".env")
     _preflight_check()
 
+    # 经验：AI 服务（8000）更容易因上次调试/异常退出残留监听而阻塞一键启动。
+    # 因此默认“只对 8000 做一次安全清理”，避免误判或手动介入。
+    # 5001（.NET）仍保持谨慎策略：仅在显式 --kill-conflicts 时清理。
+    _kill_process_on_local_port(8000)
     if kill_conflicts:
-        _kill_process_on_local_port(8000)
         _kill_process_on_local_port(5001)
     else:
-        _ensure_local_port_available(8000)
         _ensure_local_port_available(5001)
 
     ai_python = _pick_ai_python()

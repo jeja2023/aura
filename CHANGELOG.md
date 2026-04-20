@@ -30,11 +30,12 @@
   - `backend/Aura.Api/appsettings.Production.json` 默认关闭 `Ops:Metrics:ExposePrometheus`，降低误暴露指标端点风险（生产建议按网络/反向代理策略显式开启）。
 - **默认 CSP 收紧**：`backend/Aura.Api/Program.cs` 默认 `Content-Security-Policy` 的 `script-src` 去掉 `'unsafe-eval'`，避免默认放开不必要的执行能力；如确有业务需要，可继续通过 `Security:CspPolicy` 显式覆盖。
 - **Testing 配置补齐**：`backend/Aura.Api/appsettings.Testing.json` 补齐 `Hikvision:Isapi:AlertStream` 段（默认关闭），保证测试环境配置结构与主配置一致。
-- **本机启动脚本行为调整**：`start_services.py` 默认不再自动杀端口占用进程，改为检测端口占用并提示；如确认可清理，需显式附加 `--kill-conflicts`。
+- **本机启动脚本（端口占用判定与清理策略）**：`start_services.py` 端口占用检测仅将 `LISTENING` 视为“端口被占用”，避免 `TIME_WAIT/ESTABLISHED` 等误判阻断一键启动；并默认对 **8000（AI）** 做一次安全清理以降低残留监听导致的启动失败概率；**5001（.NET）** 仍保持谨慎策略，仅在显式 `--kill-conflicts` 时清理。
 - **数据访问补充**：`PgSqlStore` 增加按设备查询摄像头列表 `GetCamerasByDeviceIdAsync`，便于后续设备联动场景复用。
 - **回归脚本修复**：`抓拍链路回归脚本.ps1` 修复 `$null` 比较告警（`if ($null -ne $Body)`），符合 PSScriptAnalyzer 推荐写法。
 - **工程配置**：`backend/Aura.Api/Aura.Api.csproj` 补充 `Microsoft.AspNetCore.OpenApi.Generated` 拦截命名空间配置，便于 OpenAPI 相关源生成/拦截器协同工作。
 - **补齐导出页目录**：新增 `frontend/export/export.html`、`export.js`、`export.css`，修复 `frontend/export/` 为空导致文档入口不可用的问题；页面复用 `window.aura.exportDataset()`（`frontend/common/shell.js`）执行导出。
+- **设备联调页按钮可辨识度增强**：`frontend/device-diag/device-diag.css` 为“执行型/说明型”操作按钮统一增加角标（“执/说”）与边框差异，降低仅靠颜色区分带来的误触风险。
 
 ### 海康告警流 · 图片入库与稳态增强
 

@@ -130,9 +130,48 @@ body[data-shell-title="设备联调"] .hik-isapi-actions .btn-secondary {
   border-radius: 7px;
 }
 
+/* 执行型/说明型：仅靠颜色不够明显，统一加角标与边框差异 */
+body[data-shell-title="设备联调"] .hik-isapi-actions .hik-action-exec,
 body[data-shell-title="设备联调"] .hik-isapi-actions .hik-action-info {
+  position: relative;
+  padding-left: 28px;
+}
+
+body[data-shell-title="设备联调"] .hik-isapi-actions .hik-action-exec::before,
+body[data-shell-title="设备联调"] .hik-isapi-actions .hik-action-info::before {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+body[data-shell-title="设备联调"] .hik-isapi-actions .hik-action-exec::before {
+  content: "执";
+  border-color: rgba(var(--primary-rgb), 0.45);
+  color: var(--text);
+}
+
+body[data-shell-title="设备联调"] .hik-isapi-actions .hik-action-info {
+  border-color: rgba(var(--primary-rgb), 0.18);
   border-style: dashed;
   opacity: 0.9;
+}
+
+body[data-shell-title="设备联调"] .hik-isapi-actions .hik-action-info::before {
+  content: "说";
+  border-style: dashed;
 }
 
 body[data-shell-title="设备联调"] .hik-isapi-subtitle {
