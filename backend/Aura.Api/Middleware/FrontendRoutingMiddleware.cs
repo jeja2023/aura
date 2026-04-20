@@ -26,6 +26,25 @@ public sealed class FrontendRoutingMiddleware
 
             if (!isReserved && !Path.HasExtension(path))
             {
+                var isDevicePath = path.Equals("/device", StringComparison.OrdinalIgnoreCase)
+                                   || path.Equals("/device/", StringComparison.OrdinalIgnoreCase);
+                if (isDevicePath)
+                {
+                    var tab = (context.Request.Query["tab"].ToString() ?? string.Empty).Trim();
+                    if (tab.Equals("diag", StringComparison.OrdinalIgnoreCase)
+                        || tab.Equals("hik", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var forwardQuery = context.Request.Query
+                            .Where(kv => !kv.Key.Equals("tab", StringComparison.OrdinalIgnoreCase))
+                            .SelectMany(
+                                kv => kv.Value,
+                                (kv, value) => new KeyValuePair<string, string?>(kv.Key, value));
+                        var queryString = QueryString.Create(forwardQuery);
+                        context.Response.Redirect($"/device-diag/{queryString}", false);
+                        return;
+                    }
+                }
+
                 var isLoginPath = path.Equals("/login", StringComparison.OrdinalIgnoreCase) || path.Equals("/login/", StringComparison.OrdinalIgnoreCase);
                 if (!isLoginPath)
                 {

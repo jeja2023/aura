@@ -206,15 +206,7 @@ internal sealed class HikvisionNvrIntegrationService
 
         var opt = _options.Value;
         var streamKind = (HikvisionDemoStreamType)Math.Clamp(req.StreamType, 0, 2);
-        var streamSuffix = streamKind switch
-        {
-            HikvisionDemoStreamType.Main => "01",
-            HikvisionDemoStreamType.Sub => "02",
-            HikvisionDemoStreamType.Other => "03",
-            _ => "01"
-        };
-
-        var streamingChannelId = req.ChannelIndex + streamSuffix;
+        var streamingChannelId = BuildStreamingChannelId(req.ChannelIndex, streamKind);
         var path = $"/ISAPI/Streaming/channels/{streamingChannelId}/picture?snapShotImageType={Uri.EscapeDataString(opt.SnapShotImageType)}";
 
         AuditDeviceCall("snapshot", req.DeviceId, path);
@@ -439,6 +431,61 @@ internal sealed class HikvisionNvrIntegrationService
     public async Task<IResult> GetItcCapabilityAsync(HikvisionIsapiDeviceOpReq req, CancellationToken cancellationToken)
     {
         return await GetRawPathAsync(req, "/ISAPI/ITC/capability", "智能交通能力", "itc_capability", cancellationToken);
+    }
+
+    /// <summary>
+    /// 返回海康典型 RTSP 路径提示（不含账号口令）；实况/回放仍由流媒体子系统或播放器直连设备。
+    /// </summary>
+    public Task<IResult> GetMediaStreamHintAsync(MediaStreamHintReq req, CancellationToken cancellationToken)
+    {
+        _ = cancellationToken;
+        return GetMediaStreamHintCoreAsync(req);
+    }
+
+    private async Task<IResult> GetMediaStreamHintCoreAsync(MediaStreamHintReq req)
+    {
+        var resolved = await ResolveEndpointAsync(req.DeviceId);
+        if (resolved is null)
+        {
+            return Results.NotFound(new { code = 40401, msg = "设备不存在或未在库中注册" });
+        }
+
+        if (req.ChannelIndex < 1 || req.ChannelIndex > 512)
+        {
+            return Results.BadRequest(new { code = 40003, msg = "通道序号 ChannelIndex 应在 1～512 之间" });
+        }
+
+        var streamKind = (HikvisionDemoStreamType)Math.Clamp(req.StreamType, 0, 2);
+        var streamingChannelId = BuildStreamingChannelId(req.ChannelIndex, streamKind);
+        return Results.Ok(new
+        {
+            code = 0,
+            msg = "成功",
+            data = new
+            {
+                deviceId = req.DeviceId,
+                host = resolved.Value.Ip,
+                httpPort = resolved.Value.Port,
+                rtspPort = 554,
+                streamingChannelId,
+                rtspPath = $"/Streaming/Channels/{streamingChannelId}",
+                rtspUrlTemplate = "rtsp://{host}:{rtspPort}{rtspPath}",
+                note = "请使用 VLC/流媒体服务等以设备凭据连接 RTSP；本平台 API 不转发音视频码流，录像回放需在媒体子系统对接设备回放或 NVR VOD。"
+            }
+        });
+    }
+
+    private static string BuildStreamingChannelId(int channelIndex, HikvisionDemoStreamType streamKind)
+    {
+        var streamSuffix = streamKind switch
+        {
+            HikvisionDemoStreamType.Main => "01",
+            HikvisionDemoStreamType.Sub => "02",
+            HikvisionDemoStreamType.Other => "03",
+            _ => "01"
+        };
+
+        return $"{channelIndex}{streamSuffix}";
     }
 
     /// <summary>POST <c>/ISAPI/SDT/pictureUpload</c>，表单字段 <c>imageFile</c>，与官方 Demo 一致。</summary>

@@ -2,6 +2,34 @@
 
 本文档记录仓库关键版本与阶段性改动，便于联调、回归与发布追踪。
 
+## 0.1.17（2026-04-20）
+
+### P2 能力扩展（事件长链与媒体分层）
+
+- **海康 alertStream 后台订阅**：配置 `Hikvision:Isapi:AlertStream.Enabled=true` 且具备默认设备凭据时，`HikvisionAlertStreamHostedService` 对登记的海康 ISAPI 设备维持 `GET /ISAPI/Event/notification/alertStream` 长读；按官方 Demo 语义解析 `multipart/mixed`，跳过 `eventState=inactive`，订阅应答与事件 XML 摘要经 SignalR **`hikvision.alertStream`** 推送给楼栋管理员/超级管理员分组。新增指标 **`aura_hikvision_alert_stream_parts_total`**（按部件类型聚合，不含设备维度）。
+- **媒体规划 API**（不代理码流）：`GET /api/media/capabilities`、`POST /api/media/hikvision/stream-hint`（与抓图相同的通道号/码流类型规则生成 `StreamingChannelId`，返回典型 RTSP 路径模板，**不返回口令**）。
+- **前端设备页**：经本地 `signalr-vendor-loader.js` 加载 SignalR，展示长连接推送；增加「媒体能力说明」「RTSP 路径提示」按钮。
+- **可观测性**：`HikvisionAlertStreamRegistry` 记录各设备阶段（connecting / streaming / reconnecting / error）与最近事件时间；**`GET /api/device/hikvision/alert-stream-status`**（楼栋管理员）返回当前配置与进程内状态。`start_services.py` 成功启动后打印启用提示。**Aura.Api.Tests** 增加 multipart 单段解析自检。
+
+### 前端 · 设备管理 / 海康联调 UI 与脚本结构
+
+- **独立联调页**：新增 `frontend/device-diag/`（`device-diag.html` / `device-diag.css` / `device-diag.js`），与设备列表分区并列展示；`frontend/common/shell.js`、`shell.css` 补充导航入口与壳层样式衔接。
+- **流媒体通道行布局**：`frontend/device/device.html` 与联调页中，「流媒体通道号（请求关键帧，可空）」使用 **`hik-isapi-field-grid-full`** 占满当前表单网格整行；「连通性探测」「设备信息」「ISAPI 抓图」「Demo 对照目录」经 **`hik-isapi-stream-input-row`** 排在输入框**右侧同一行**，**`hik-isapi-actions-inline`** 保持横向不换行。输入区域与按钮区域采用两列网格：**`minmax(min(100%, calc(var(--form-file-input-basis) + 2rem)), 1fr) max-content`**，并略收紧列间距，优先保证输入区宽度与占位提示可视性；输入框 **`title`** 与占位符文案一致，便于悬停查看全文。
+- **样式**：`frontend/device/device.css` 扩充海康诊断面板、网关与流媒体行等规则；`frontend/device-diag/device-diag.css` 对联调页使用更紧凑的间距，并为流媒体行内输入框统一高度与字号。
+- **脚本拆分**：`frontend/device/device.js` 重构；海康 / 大华 / ONVIF 及诊断厂商调度等逻辑迁至 `frontend/device/vendors/`（如 `hik-isapi-actions.js`、`diag-vendors.js` 等）。
+- **全局表单与周边页**：`frontend/common/forms.css` 表单与控件展示规则补充；`frontend/capture/capture.html`、`capture.js` 小步调整；`frontend/role/role.html`、`role.js` 微调。
+
+### 后端 · 媒体路由、ISAPI 与中间件（同日工作区合并）
+
+- **媒体能力路由**：新增 `backend/Aura.Api/Extensions/AuraEndpointsMedia.cs`，并在 `EndpointExtensions`、`ServiceExtensions` 中完成注册（与上文「媒体规划 API」一致）。
+- **告警长链实现文件**：`HikvisionAlertStreamHostedService`、`HikvisionAlertStreamMultipartParser`、`HikvisionAlertStreamRegistry`、`HikvisionAlertStreamXmlInterpreter` 等（与上文 alertStream 能力一致，落地于 `Services/Hikvision/`）。
+- **其它增量**：`HikvisionIsapiClient.cs` 能力扩展；`HikvisionNvrIntegrationService.cs`、`HikvisionIsapiDemoCatalog.cs`、`HikvisionIsapiMetrics.cs`、`HikvisionIsapiOptions.cs`、`HikvisionIsapiOptionsValidator.cs`、`AuraEndpointsHikvisionIsapi.cs`、`Requests.cs`、`appsettings.json` 等随联调与媒体能力迭代；`FrontendRoutingMiddleware.cs` 前端路由衔接；`Aura.Api.csproj`、`backend/Aura.Api.Tests/Program.cs` 随集成与自检更新。
+
+### 工程与文档
+
+- **`start_services.py`**：启动流程提示等与本地联调衔接（与上文启用提示一致时可视为同一批改动）。
+- **`开发计划.md`**：范围与进度更新。
+
 ## 0.1.16（2026-04-19）
 
 ### 本次说明

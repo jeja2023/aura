@@ -51,6 +51,7 @@ build/
 .tmp_db_verify/
 .verify_build_custom/
 .verify_build/
+_build_test_out/
 coverage/
 .cache/
 *.lscache

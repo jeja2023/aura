@@ -24,6 +24,7 @@
         <div class="capture-toolbar">
           <button id="load" class="btn-secondary" type="button">刷新抓拍</button>
           <button id="openCreateCaptureModal" class="btn-primary" type="button">新增模拟抓拍</button>
+          <button id="openCaptureOnboardModal" class="btn-secondary" type="button">设备抓拍推送（HTTP）</button>
           <button id="exportCapture" class="btn-secondary" type="button" hidden>导出</button>
         </div>
         <pre id="result" class="aura-status aura-display-box" role="status" hidden aria-live="polite"></pre>
@@ -57,6 +58,21 @@
         <button id="create" type="button" class="btn-primary">新增抓拍</button>
       </div>
       <pre id="createCaptureResult" class="aura-status aura-display-box" role="status" hidden aria-live="polite"></pre>
+    </div>
+  </div>
+  <div id="captureOnboardModal" class="aura-modal-root" hidden>
+    <div class="aura-modal-backdrop" tabindex="-1" aria-hidden="true"></div>
+    <div class="aura-modal-panel aura-modal-panel-doc-wide" role="dialog" aria-modal="true" aria-labelledby="captureOnboardModalTitle">
+      <div class="aura-modal-head">
+        <h2 id="captureOnboardModalTitle" class="aura-modal-title">设备抓拍推送（HTTP）</h2>
+      </div>
+      <div class="aura-modal-doc">
+        <p class="aura-modal-doc-intro">业务抓拍使用 <code class="hik-isapi-code">POST</code> <code class="hik-isapi-code" id="capturePushUrlDoc"></code>，JSON 含 <code class="hik-isapi-code">deviceId</code>、<code class="hik-isapi-code">channelNo</code>、<code class="hik-isapi-code">captureTime</code>（与签名一致）、<code class="hik-isapi-code">imageBase64</code>；请求头 <code class="hik-isapi-code">X-Signature</code> 为 <code class="hik-isapi-code">deviceId|channelNo|captureTime</code> 的 HMAC-SHA256（小写十六进制），密钥为设备库中 <code class="hik-isapi-code">hmac_secret</code>。</p>
+        <p class="aura-modal-doc-intro">完整步骤与字段说明请前往 <a href="../device-diag/">设备联调</a> 页「设备接入说明」。</p>
+      </div>
+      <div class="aura-modal-actions">
+        <button type="button" class="btn-secondary" data-capture-onboard-dismiss>关闭</button>
+      </div>
     </div>
   </div>
   <script defer src="../common/shell.js"></script>

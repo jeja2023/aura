@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Options;
 
 namespace Aura.Api.Extensions;
 
@@ -15,6 +16,9 @@ internal static class AuraEndpointsHikvisionIsapi
         _ = ctx;
         var g = app.MapGroup("/api/device/hikvision").WithTags("海康ISAPI");
         g.MapGet("/demo-catalog", () => Results.Ok(HikvisionIsapiDemoCatalog.Build())).RequireAuthorization("楼栋管理员");
+        g.MapGet("/alert-stream-status", (HikvisionAlertStreamRegistry reg, IOptions<HikvisionIsapiOptions> opt) =>
+            Results.Ok(new { code = 0, msg = "成功", data = reg.BuildSnapshot(opt.Value), time = DateTimeOffset.Now }))
+            .RequireAuthorization("楼栋管理员").RequireRateLimiting("HikvisionDeviceApi");
         g.MapPost("/analyze-response", (HikvisionIsapiAnalyzeReq req) =>
         {
             var summary = HikvisionIsapiResponseStatusHelper.Analyze(req.Raw ?? string.Empty);

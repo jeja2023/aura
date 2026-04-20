@@ -16,6 +16,7 @@
       title: "接入与抓拍",
       items: [
         { href: "/device/", label: "NVR 设备" },
+        { href: "/device-diag/", label: "设备联调" },
         { href: "/capture/", label: "抓拍记录" }
       ]
     },
@@ -46,6 +47,9 @@
     { title: "审计与运维", items: [{ href: "/log/", label: "操作日志" }] }
   ];
   const SUPER_ADMIN_ONLY_PATHS = new Set(["/role/", "/user/", "/log/"]);
+  const ROLE_SCOPED_HREFS = Object.freeze({
+    "/device-diag/": new Set(["super_admin", "building_admin"])
+  });
   const PAGE_SESSION_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const PAGE_ENTER_MS = Date.now();
   let pageLeaveReported = false;
@@ -60,17 +64,31 @@
     return normPath(window.location.pathname);
   }
 
+  function currentPathWithQuery() {
+    return `${normPath(window.location.pathname)}${window.location.search || ""}`;
+  }
+
+  function canAccessNavItemByRole(itemHref, role) {
+    const requiredRoles = ROLE_SCOPED_HREFS[itemHref];
+    if (!requiredRoles) return true;
+    return requiredRoles.has(String(role || "").trim().toLowerCase());
+  }
+
   function renderSidebar(container, role) {
     const cur = currentPath();
+    const curWithQuery = currentPathWithQuery();
     const isSuperAdmin = role === "super_admin";
     let html =
       '<div class="app-brand" title="寓瞳 · 智能集宿区视觉解析平台"><img class="app-brand-icon" src="/common/favicon.svg" alt="寓瞳图标" /><span class="app-brand-text">寓瞳</span></div><nav class="app-nav" aria-label="业务模块导航">';
     for (const g of NAV_GROUPS) {
-      const visibleItems = g.items.filter((it) => isSuperAdmin || !SUPER_ADMIN_ONLY_PATHS.has(it.href));
+      const visibleItems = g.items.filter((it) => {
+        if (!isSuperAdmin && SUPER_ADMIN_ONLY_PATHS.has(it.href)) return false;
+        return canAccessNavItemByRole(it.href, role);
+      });
       if (visibleItems.length === 0) continue;
       html += `<section class="nav-group"><div class="nav-group-title">${g.title}</div><ul class="nav-group-items">`;
       for (const it of visibleItems) {
-        const active = normPath(it.href) === cur;
+        const active = it.href.includes("?") ? it.href === curWithQuery : normPath(it.href) === cur;
         const cls = active ? "nav-link is-active" : "nav-link";
         const ac = active ? ' aria-current="page"' : "";
         html += `<li><a class="${cls}" href="${it.href}"${ac}>${it.label}</a></li>`;

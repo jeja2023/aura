@@ -37,6 +37,9 @@ internal sealed record HikvisionIsapiSdtPictureUploadReq(
 
 /// <summary>解析设备返回的 ResponseStatus XML/JSON 片段。</summary>
 internal sealed record HikvisionIsapiAnalyzeReq(string? Raw);
+
+/// <summary>媒体取流提示：按抓图相同规则拼接 <c>StreamingChannelId</c>，供 RTSP 客户端自行拉流（网关不代理码流）。</summary>
+internal sealed record MediaStreamHintReq(long DeviceId, int ChannelIndex, int StreamType);
 internal sealed record CaptureReq(long DeviceId, int ChannelNo, DateTimeOffset CaptureTime, string ImageBase64, string MetadataJson);
 internal sealed record CaptureMockReq(long DeviceId, int ChannelNo, string MetadataJson);
 internal sealed record RoiReq(long CameraId, long RoomNodeId, string VerticesJson);

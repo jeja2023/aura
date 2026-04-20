@@ -124,6 +124,7 @@ const PERMISSION_CN_MAP = Object.freeze({
   camera: "摄像头布点",
   roi: "重点防区",
   device: "NVR 设备",
+  device_diag: "设备联调",
   capture: "抓拍记录",
   scene: "三维空间态势",
   alert: "告警中心",

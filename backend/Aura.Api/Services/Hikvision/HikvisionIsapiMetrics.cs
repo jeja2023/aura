@@ -25,6 +25,11 @@ internal static class HikvisionIsapiMetrics
         "海康封装设备接口出站结果（按操作名聚合）",
         new CounterConfiguration { LabelNames = new[] { "operation", "result" } });
 
+    private static readonly Counter AlertStreamPartTotal = Metrics.CreateCounter(
+        "aura_hikvision_alert_stream_parts_total",
+        "海康 alertStream multipart 已解析部件（按类型聚合，不含设备维度以降低基数）",
+        new CounterConfiguration { LabelNames = new[] { "part_kind" } });
+
     public static void ObserveOutbound(string operation, bool success, double elapsedSeconds)
     {
         var op = string.IsNullOrWhiteSpace(operation) ? "unknown" : operation.Trim();
@@ -42,5 +47,11 @@ internal static class HikvisionIsapiMetrics
     {
         var op = string.IsNullOrWhiteSpace(operation) ? "unknown" : operation.Trim();
         DeviceApiTotal.WithLabels(op, upstreamSuccess ? "success" : "failure").Inc();
+    }
+
+    public static void RecordAlertStreamPart(string partKind)
+    {
+        var k = string.IsNullOrWhiteSpace(partKind) ? "unknown" : partKind.Trim();
+        AlertStreamPartTotal.WithLabels(k).Inc();
     }
 }

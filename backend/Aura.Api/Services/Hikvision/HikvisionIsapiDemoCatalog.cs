@@ -36,7 +36,9 @@ internal static class HikvisionIsapiDemoCatalog
                 longRunning = new
                 {
                     alertStream = "/ISAPI/Event/notification/alertStream 等为设备长连接/订阅流，对应 Demo 中 StartHttpLongLink；服务端若需对浏览器推送，应单独做后台任务或 SSE，本批未纳入同步 HTTP 封装。",
-                    rtspAndNative = "RTSP 预览、FFmpeg、TINYXMLTRANS 等属设备侧或桌面端工程，仍通过设备/客户端直连；网关仅覆盖已文档化的单次 ISAPI HTTP。"
+                    eventSubscriptionService = "P2：设备事件订阅/长链建议独立「设备事件接入」服务（或后台 Worker）：维护 Digest 长连接、解析 alertStream、落库/去重；与 Aura.Api 同步 HTTP 封装进程分离，经消息队列或内部 API 向业务投递；浏览器侧可用现有 SignalR 二次分发，须单独做订阅鉴权与背压。",
+                    rtspAndNative = "RTSP 预览、FFmpeg、TINYXMLTRANS 等属设备侧或桌面端工程，仍通过设备/客户端直连；网关仅覆盖已文档化的单次 ISAPI HTTP。",
+                    liveAndPlayback = "P2：实况播放与录像回放属流媒体/回放子系统（取流 URL 与能力探测可经 ISAPI，转封装、分发、时移、多客户端播控与 ISAPI 命令式封装不同层），须单独规划进程与端口策略，不宜并入当前 ISAPI 网关宿主。"
                 },
                 faceLibUpload = new
                 {
@@ -60,7 +62,9 @@ internal static class HikvisionIsapiDemoCatalog
                 auraEndpoints = new
                 {
                     device = "/api/device/hikvision/*",
-                    gateway = "POST /api/device/hikvision/gateway（仅超级管理员）"
+                    gateway = "POST /api/device/hikvision/gateway（仅超级管理员）",
+                    media = "/api/media/*（取流规划与 RTSP 路径提示，不代理码流）",
+                    alertStreamWorker = "Hikvision:Isapi:AlertStream.Enabled=true 时由后台 HostedService 拉取 alertStream，事件摘要经 SignalR hikvision.alertStream 推送；GET /api/device/hikvision/alert-stream-status 查看进程内连接阶段与最近错误（非持久化）。"
                 }
             }
         };

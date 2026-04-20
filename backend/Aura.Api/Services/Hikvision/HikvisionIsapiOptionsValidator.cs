@@ -90,6 +90,32 @@ internal sealed class HikvisionIsapiOptionsValidator : IValidateOptions<Hikvisio
             errors.Add("生产环境启用 SkipSslCertificateValidation 时必须同时将 AllowInsecureDeviceTls 设为 true（显式承担风险）。");
         }
 
+        var alert = options.AlertStream;
+        if (alert.ReconnectSeconds is < 1 or > 600)
+        {
+            errors.Add("AlertStream.ReconnectSeconds 应在 1～600 之间。");
+        }
+
+        if (alert.SupervisorRefreshSeconds is < 5 or > 3600)
+        {
+            errors.Add("AlertStream.SupervisorRefreshSeconds 应在 5～3600 之间。");
+        }
+
+        if (alert.MaxBufferBytes is < 65536 or > 512 * 1024 * 1024)
+        {
+            errors.Add("AlertStream.MaxBufferBytes 超出合理范围。");
+        }
+
+        if (alert.XmlPreviewMaxChars is < 256 or > 500_000)
+        {
+            errors.Add("AlertStream.XmlPreviewMaxChars 应在 256～500000 之间。");
+        }
+
+        if (!string.IsNullOrWhiteSpace(alert.PathAndQuery) && !alert.PathAndQuery.TrimStart().StartsWith('/'))
+        {
+            errors.Add("AlertStream.PathAndQuery 须以 / 开头。");
+        }
+
         return errors.Count == 0
             ? ValidateOptionsResult.Success
             : ValidateOptionsResult.Fail(errors);

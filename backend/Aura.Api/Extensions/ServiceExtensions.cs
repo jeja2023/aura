@@ -95,6 +95,7 @@ public static class ServiceExtensions
 
         services.AddSingleton<DailyJudgeScheduleState>();
         services.AddHostedService<DailyJudgeHostedService>();
+        services.AddHostedService<HikvisionAlertStreamHostedService>();
         services.AddSingleton<AppStore>();
         services.AddHttpClient(AuraHttpClientNames.AiService)
             .ConfigureHttpClient((sp, c) =>
@@ -172,6 +173,7 @@ public static class ServiceExtensions
 
         services.AddHttpContextAccessor();
         services.AddSingleton<HikvisionIsapiClient>();
+        services.AddSingleton<HikvisionAlertStreamRegistry>();
         services.AddScoped<HikvisionNvrIntegrationService>();
         services.AddScoped<HikvisionIsapiGatewayService>();
 

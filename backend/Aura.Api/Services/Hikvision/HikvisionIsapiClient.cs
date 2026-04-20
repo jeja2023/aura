@@ -383,6 +383,176 @@ internal sealed class HikvisionIsapiClient
         HikvisionIsapiMetrics.ObserveOutbound("send", result.Success, sw.Elapsed.TotalSeconds);
         return result;
     }
+
+    /// <summary>
+    /// 订阅设备 <c>alertStream</c>（长连接）。使用独立 <see cref="SocketsHttpHandler"/>，避免连接池生命周期截断长读。
+    /// </summary>
+    public async Task RunAlertStreamAsync(
+        Uri baseUri,
+        string pathAndQuery,
+        string userName,
+        string password,
+        bool skipSslValidation,
+        int maxBufferBytes,
+        Func<string, byte[], Task> onPartAsync,
+        ILogger logger,
+        CancellationToken cancellationToken,
+        Action? onStreamEstablished = null)
+    {
+        if (!pathAndQuery.StartsWith('/'))
+        {
+            pathAndQuery = "/" + pathAndQuery;
+        }
+
+        var opt = _options.Value;
+        var sw = Stopwatch.StartNew();
+        using var activity = opt.TelemetryActivitiesEnabled
+            ? HikvisionIsapiActivity.StartOutbound("isapi.alert_stream", baseUri, pathAndQuery)
+            : null;
+        _ = activity;
+
+        var requestUri = new Uri(baseUri, pathAndQuery);
+        using var handler = CreateLongLivedHandler(baseUri, userName, password, skipSslValidation);
+        using var client = new HttpClient(handler, disposeHandler: true)
+        {
+            Timeout = Timeout.InfiniteTimeSpan
+        };
+
+        var streamCompleted = false;
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
+            using var response = await client
+                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var err = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                logger.LogWarning(
+                    "海康告警长连接返回非成功状态。状态码={Status}, 路径={Path}, 正文预览={Preview}",
+                    (int)response.StatusCode,
+                    pathAndQuery,
+                    HikvisionIsapiLogFormatting.TruncateForLog(err, 256));
+                return;
+            }
+
+            var contentTypeHeader = response.Content.Headers.ContentType?.ToString() ?? "";
+            var boundary = ExtractMultipartBoundary(contentTypeHeader);
+            if (string.IsNullOrEmpty(boundary))
+            {
+                logger.LogWarning("海康告警长连接响应缺少 multipart boundary。Content-Type={ContentType}", contentTypeHeader);
+                return;
+            }
+
+            onStreamEstablished?.Invoke();
+
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            var buffer = new List<byte>(65536);
+            var chunk = new byte[65536];
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                var read = await stream.ReadAsync(chunk.AsMemory(0, chunk.Length), cancellationToken).ConfigureAwait(false);
+                if (read == 0)
+                {
+                    logger.LogInformation("海康告警长连接对端关闭。路径={Path}", pathAndQuery);
+                    streamCompleted = true;
+                    break;
+                }
+
+                buffer.AddRange(chunk.AsSpan(0, read));
+                if (buffer.Count > maxBufferBytes)
+                {
+                    logger.LogWarning(
+                        "海康告警流缓冲区超过上限已清空。上限={Max} 字节，路径={Path}",
+                        maxBufferBytes,
+                        pathAndQuery);
+                    buffer.Clear();
+                }
+
+                await HikvisionAlertStreamMultipartParser.DrainBufferAsync(
+                        buffer,
+                        boundary,
+                        onPartAsync,
+                        logger,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            if (!cancellationToken.IsCancellationRequested && !streamCompleted)
+            {
+                streamCompleted = true;
+            }
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogWarning("海康告警长连接在建立阶段超时。路径={Path}", pathAndQuery);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "海康告警长连接异常。路径={Path}", pathAndQuery);
+        }
+        finally
+        {
+            HikvisionIsapiMetrics.ObserveOutbound("alert_stream", streamCompleted, sw.Elapsed.TotalSeconds);
+        }
+    }
+
+    private static SocketsHttpHandler CreateLongLivedHandler(Uri baseUri, string userName, string password, bool skipSslValidation)
+    {
+        var cache = new CredentialCache();
+        cache.Add(baseUri, "Digest", new NetworkCredential(userName, password));
+
+        var handler = new SocketsHttpHandler
+        {
+            Credentials = cache,
+            AutomaticDecompression = DecompressionMethods.None,
+            PooledConnectionLifetime = Timeout.InfiniteTimeSpan,
+            ConnectTimeout = TimeSpan.FromSeconds(30)
+        };
+
+        if (skipSslValidation && string.Equals(baseUri.Scheme, "https", StringComparison.OrdinalIgnoreCase))
+        {
+            handler.SslOptions.RemoteCertificateValidationCallback = static (
+                _,
+                _,
+                _,
+                _) => true;
+        }
+
+        return handler;
+    }
+
+    private static string? ExtractMultipartBoundary(string contentType)
+    {
+        if (string.IsNullOrWhiteSpace(contentType))
+        {
+            return null;
+        }
+
+        var idx = contentType.IndexOf("boundary=", StringComparison.OrdinalIgnoreCase);
+        if (idx < 0)
+        {
+            return null;
+        }
+
+        var v = contentType[(idx + "boundary=".Length)..].Trim();
+        if (v.Length >= 2 && v[0] == '"' && v[^1] == '"')
+        {
+            v = v[1..^1];
+        }
+
+        var semi = v.IndexOf(';');
+        if (semi >= 0)
+        {
+            v = v[..semi].Trim();
+        }
+
+        return string.IsNullOrEmpty(v) ? null : v;
+    }
 }
 
 internal readonly record struct IsapiTransportResult<T>(bool Success, int? HttpStatus, T? Data, string? ErrorBody, string? Message)

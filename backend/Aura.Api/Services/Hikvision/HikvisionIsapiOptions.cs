@@ -83,4 +83,38 @@ internal sealed class HikvisionIsapiOptions
 
     /// <summary>连通性探测专用超时（秒），0 表示使用 <see cref="RequestTimeoutSeconds"/>。</summary>
     public int ConnectivityProbeTimeoutSeconds { get; set; }
+
+    /// <summary>设备 <c>alertStream</c> 长连接订阅（独立后台任务，与同步 ISAPI 封装解耦）。</summary>
+    public HikvisionAlertStreamOptions AlertStream { get; set; } = new();
+}
+
+/// <summary>海康事件告警长连接（<c>/ISAPI/Event/notification/alertStream</c>）Worker 配置。</summary>
+public sealed class HikvisionAlertStreamOptions
+{
+    /// <summary>是否启用后台长连接；启用后需配置有效默认凭据。</summary>
+    public bool Enabled { get; set; }
+
+    /// <summary>仅订阅这些设备；为空则自动选择协议含 ISAPI 且品牌含海康/HIK 的登记设备。</summary>
+    public long[] DeviceIds { get; set; } = [];
+
+    /// <summary>长连接路径（含查询串）。</summary>
+    public string PathAndQuery { get; set; } = "/ISAPI/Event/notification/alertStream";
+
+    /// <summary>断线后重连间隔（秒）。</summary>
+    public int ReconnectSeconds { get; set; } = 10;
+
+    /// <summary>监管循环刷新设备列表间隔（秒）。</summary>
+    public int SupervisorRefreshSeconds { get; set; } = 30;
+
+    /// <summary>multipart 重组缓冲区上限（字节），超出则丢弃缓冲并记警告。</summary>
+    public int MaxBufferBytes { get; set; } = 16 * 1024 * 1024;
+
+    /// <summary>是否经 SignalR 向楼栋管理员/超级管理员组推送解析摘要。</summary>
+    public bool PushSignalR { get; set; } = true;
+
+    /// <summary>推送与日志中 XML 预览最大字符数。</summary>
+    public int XmlPreviewMaxChars { get; set; } = 4096;
+
+    /// <summary>是否将心跳类 JSON 以 Information 级别写入日志（默认仅 Debug）。</summary>
+    public bool LogHeartbeats { get; set; }
 }

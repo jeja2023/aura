@@ -4,12 +4,12 @@
 
 ## 项目状态
 
-- 当前版本：`0.1.12`
+- 当前版本：`0.1.17`（细目见 **`CHANGELOG.md`**）
 - 阶段状态：第一至第五阶段均已验收通过
 - 交付结论：计划项已全部完成并在 `开发计划.md` 归档勾选
 - 工程状态：后端可构建（推荐打开根目录 **`Aura.sln`** 或 `dotnet build backend/Aura.Api/Aura.Api.csproj`）、前端页面可访问、核心链路可联调
 - 运维状态：已提供回归脚本、联调压测脚本、部署与上线检查文档
-- 变更记录：见根目录 **`CHANGELOG.md`**（`0.1.2` 起补充后端模块化、DI 与编码修复等说明）
+- 变更记录：见根目录 **`CHANGELOG.md`**（`0.1.2` 起补充后端模块化、DI 与编码修复等说明；**`0.1.17`** 起补充海康 alertStream、媒体规划 API、设备/联调前端与海康表单布局等）
 
 ## 目录结构
 
@@ -20,7 +20,7 @@
 - `backend/Aura.Api.Integration.Tests`：xUnit 集成测试（`WebApplicationFactory`，环境为 `Testing`）。**维护提示**：若修改 `backend/Aura.Api/appsettings.Testing.json` 中的 **`Jwt:Key` / `Jwt:Issuer` / `Jwt:Audience`**，必须同步修改 **`backend/Aura.Api.Integration.Tests/TestingJwt.cs`** 内同名常量，否则 `dotnet test` 会失败。
 - `ai`：Python FastAPI AI 服务（特征提取/检索）
 - `database/schema.pgsql.sql`：PostgreSQL 表结构
-- `frontend`：Vanilla JS 前端页面（根目录含 **`package.json`**，维护者可执行 **`npm ci`** 与 **`npm run lint`** 做 ESLint 检查）
+- `frontend`：Vanilla JS 前端页面（根目录含 **`package.json`**，维护者可执行 **`npm ci`** 与 **`npm run lint`** 做 ESLint 检查）。**NVR 设备**与**海康 ISAPI 联调**分别对应 `frontend/device/` 与 `frontend/device-diag/`（入口见下文「关键页面入口」）
 - `deploy/k8s`：Kubernetes 示例（Ingress 拒绝公网 **`/metrics`**、NetworkPolicy 入站基线）与说明文档
 - `抓拍链路端到端测试清单.md`：抓拍链路测试清单
 - `抓拍链路回归脚本.ps1`：抓拍链路回归脚本
@@ -132,6 +132,8 @@ python start_services.py
 ## 关键页面入口
 
 - 首页看板：`frontend/index/index.html`
+- NVR 设备管理（含海康 ISAPI 诊断面板）：`frontend/device/device.html`
+- 设备联调（独立海康 ISAPI 联调页）：`frontend/device-diag/device-diag.html`
 - 三维态势：`frontend/scene/scene.html`
 - 统计驾驶舱：`frontend/stats/stats.html`
 - 报表导出：`frontend/export/export.html`
@@ -145,6 +147,8 @@ python start_services.py
 - OpenTelemetry 链路追踪（可选）：配置 **`Ops:Telemetry:EnableTracing`** 为 **`true`** 且设置 **`Ops:Telemetry:OtlpEndpoint`**（或环境变量 **`OTEL_EXPORTER_OTLP_ENDPOINT`**）；默认关闭。协议 **`Ops:Telemetry:OtlpProtocol`** 支持 **`Grpc`**（默认）与 **`HttpProtobuf`**。
 - AI 服务访问控制（可选）：AI 进程读取 **`AURA_API_KEY`** 时，除根路径健康检查与 OpenAPI 文档外须在请求头携带 **`X-Aura-Ai-Key`**；.NET 侧配置 **`Ai:ApiKey`** 后由命名 **`HttpClient` 自动附加同名请求头。
 - 登录：`POST /api/auth/login`
+- 媒体规划（不代理音视频，仅能力/路径模板）：`GET /api/media/capabilities`、`POST /api/media/hikvision/stream-hint`
+- 海康告警长连接状态（联调用）：`GET /api/device/hikvision/alert-stream-status`
 - 抓拍接入：`POST /api/capture/push|sdk|onvif`
 - 空间碰撞：`POST /api/space/collision/check`
 - 研判执行：`POST /api/judge/run/daily`

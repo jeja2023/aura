@@ -1,0 +1,321 @@
+<!-- 文件：设备联调页（device-diag.html） | File: Device Diagnostics Page -->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>设备联调</title>
+  <script src="../common/theme-pref.js"></script>
+  <link rel="stylesheet" href="../common/theme.css" />
+  <link rel="stylesheet" href="../common/shell.css" />
+  <link rel="stylesheet" href="../common/forms.css" />
+  <link rel="stylesheet" href="./device-diag.css" />
+</head>
+<body class="app-body" data-shell-title="设备联调">
+  <aside class="app-sidebar" id="auraSidebar" aria-label="主导航"></aside>
+  <div class="app-frame">
+    <header class="app-topbar">
+      <button type="button" class="app-sidebar-toggle" id="auraSidebarToggle" aria-label="展开或收起导航">菜单</button>
+      <h1 class="app-page-title"></h1>
+      <div class="app-topbar-actions"></div>
+    </header>
+    <main class="app-content">
+      <div class="page">
+        <section id="deviceManagePanel" class="device-tab-panel" role="region" aria-label="设备管理">
+          <div class="device-toolbar">
+            <button id="load" class="btn-secondary" type="button">刷新设备</button>
+            <button id="openDeviceRegisterModal" class="btn-primary" type="button" hidden>注册新设备</button>
+          </div>
+          <pre id="result" class="aura-status aura-display-box" role="status" hidden aria-live="polite"></pre>
+          <div id="deviceTableWrap" class="device-table-wrap" hidden>
+            <div class="aura-data-table-wrap">
+              <table class="aura-data-table" aria-label="设备列表">
+                <thead id="deviceTableHead"></thead>
+                <tbody id="deviceTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div id="devicePager" hidden></div>
+        </section>
+
+        <section id="deviceHikIsapiPanel" class="device-tab-panel" role="region" aria-label="设备诊断联调" hidden>
+        <div class="hik-isapi-panel" aria-labelledby="hikIsapiHeading">
+          <div class="hik-isapi-head">
+            <h2 id="hikIsapiHeading" class="hik-isapi-title">设备诊断/联调（当前：海康 ISAPI）</h2>
+            <div class="hik-isapi-head-actions">
+              <button type="button" id="openDeviceOnboardModal" class="btn-secondary">海康接入说明</button>
+              <div data-hik-gateway-super-admin hidden>
+                <button type="button" id="openHikGatewayModal" class="btn-secondary">高级工具：ISAPI 通用网关</button>
+              </div>
+            </div>
+          </div>
+          <p class="hik-action-legend" role="note">
+            <span class="hik-action-tag hik-action-tag-exec">执行型</span>
+            <span class="hik-action-tag hik-action-tag-info">说明型</span>
+          </p>
+          <div class="hik-vendor-strip" role="group" aria-label="诊断品牌与协议">
+            <label class="hik-isapi-field hik-vendor-select-field">
+              <span>厂商/协议</span>
+              <select id="diagVendorSelect" class="aura-input" aria-label="选择诊断厂商协议">
+                <option value="">加载中…</option>
+              </select>
+            </label>
+            <p class="hik-vendor-hint">当前仅开放“海康威视 · ISAPI”，后续品牌会在此扩展，不影响既有设备管理流程。</p>
+          </div>
+          <div class="hik-isapi-grid">
+            <label class="hik-isapi-field">
+              <span>已登记设备</span>
+              <select id="hikDeviceSelect" class="aura-input" aria-label="选择设备">
+                <option value="">请先刷新设备列表后选择</option>
+              </select>
+            </label>
+            <label class="hik-isapi-field">
+              <span>或填写设备 ID</span>
+              <input id="hikDeviceIdManual" class="aura-input" type="number" min="1" step="1" inputmode="numeric" placeholder="与列表二选一" />
+            </label>
+            <label class="hik-isapi-field">
+              <span>ISAPI 用户名（可选）</span>
+              <input id="hikUserName" class="aura-input" type="text" autocomplete="username" placeholder="留空用服务端配置" />
+            </label>
+            <label class="hik-isapi-field">
+              <span>ISAPI 密码（可选）</span>
+              <input id="hikPassword" class="aura-input" type="password" autocomplete="current-password" placeholder="留空用服务端配置" />
+            </label>
+            <p class="hik-cred-warning hik-isapi-field-span2" role="note">
+              安全提示：在浏览器中填写设备密码会进入本机内存与 HTTPS 请求体。生产环境请<strong>优先仅使用服务端默认凭据</strong>（不在此填写），并避免在共享电脑上操作。
+            </p>
+            <label class="hik-isapi-field">
+              <span>抓图通道序号</span>
+              <input id="hikChannelIndex" class="aura-input" type="number" min="1" max="512" step="1" value="1" inputmode="numeric" />
+            </label>
+            <label class="hik-isapi-field">
+              <span>码流类型</span>
+              <select id="hikStreamType" class="aura-input" aria-label="码流类型">
+                <option value="0">主码流</option>
+                <option value="1">子码流</option>
+                <option value="2">第三路</option>
+              </select>
+            </label>
+            <label class="hik-isapi-field hik-isapi-field-grid-full">
+              <span>流媒体通道号（请求关键帧，可空）</span>
+              <div class="hik-isapi-stream-input-row">
+                <input id="hikStreamingChannelId" class="aura-input" type="text" inputmode="numeric" maxlength="16" placeholder="留空则按「通道序号 + 码流」生成，如 101" title="留空则按「通道序号 + 码流」生成，如 101" />
+                <div class="hik-isapi-actions hik-isapi-actions-inline">
+                  <button type="button" id="hikConnectivity" class="btn-primary hik-action-exec">连通性探测</button>
+                  <button type="button" id="hikDeviceInfo" class="btn-secondary hik-action-exec">设备信息</button>
+                  <button type="button" id="hikSnapshot" class="btn-secondary hik-action-exec">ISAPI 抓图</button>
+                  <button type="button" id="hikDemoCatalog" class="btn-secondary hik-action-info">Demo 对照目录</button>
+                </div>
+              </div>
+            </label>
+          </div>
+          <div class="hik-isapi-three-col" role="group" aria-label="媒体取流与通道能力分栏">
+            <section class="hik-isapi-col" aria-labelledby="hikMediaPlanTitle">
+              <h3 id="hikMediaPlanTitle" class="hik-isapi-subtitle">媒体取流（规划）</h3>
+              <p class="hik-isapi-hint">
+                下方接口仅返回典型 <code class="hik-isapi-code">RTSP</code> 路径模板，<strong>不在平台内代理音视频</strong>。后台若启用
+                <code class="hik-isapi-code">Hikvision:Isapi:AlertStream.Enabled</code>，设备告警长连接摘要会经 SignalR 事件
+                <code class="hik-isapi-code">hikvision.alertStream</code> 推送到本页（需保持登录会话）。
+              </p>
+              <div class="hik-isapi-actions">
+                <button type="button" id="hikMediaCapabilities" class="btn-secondary hik-action-info">媒体能力说明</button>
+                <button type="button" id="hikStreamHint" class="btn-secondary hik-action-info">RTSP 路径提示</button>
+                <button type="button" id="hikAlertStreamStatus" class="btn-secondary hik-action-info">告警长连接状态</button>
+              </div>
+            </section>
+            <section class="hik-isapi-col" aria-labelledby="hikChannelDirTitle">
+              <h3 id="hikChannelDirTitle" class="hik-isapi-subtitle">通道与目录</h3>
+              <div class="hik-isapi-actions">
+                <button type="button" id="hikVideoInputsChannels" class="btn-secondary hik-action-exec">模拟通道列表</button>
+                <button type="button" id="hikInputProxyChannels" class="btn-secondary hik-action-exec">代理通道</button>
+                <button type="button" id="hikInputProxyChannelsStatus" class="btn-secondary hik-action-exec">代理通道状态</button>
+                <button type="button" id="hikRequestKeyFrame" class="btn-secondary hik-action-exec">请求关键帧</button>
+              </div>
+            </section>
+            <section class="hik-isapi-col" aria-labelledby="hikCapZeroTitle">
+              <h3 id="hikCapZeroTitle" class="hik-isapi-subtitle">能力与零通道</h3>
+              <div class="hik-isapi-actions">
+                <button type="button" id="hikSystemCapabilities" class="btn-secondary hik-action-exec">系统能力（JSON）</button>
+                <button type="button" id="hikEventCapabilities" class="btn-secondary hik-action-exec">事件能力</button>
+                <button type="button" id="hikZeroVideoChannels" class="btn-secondary hik-action-exec">零通道列表</button>
+                <button type="button" id="hikTrafficCapabilities" class="btn-secondary hik-action-exec">交通能力</button>
+                <button type="button" id="hikItcCapability" class="btn-secondary hik-action-exec">ITC 能力</button>
+              </div>
+            </section>
+          </div>
+          <h3 class="hik-isapi-subtitle">解析与 SDT</h3>
+          <div class="hik-analyze-block">
+            <label class="hik-isapi-field hik-isapi-field-grow">
+              <span>粘贴设备返回片段，解析 ResponseStatus</span>
+              <textarea id="hikAnalyzeRaw" class="aura-input hik-textarea" rows="4" placeholder="可粘贴 XML/JSON 片段"></textarea>
+            </label>
+            <button type="button" id="hikAnalyzeResponse" class="btn-secondary hik-analyze-btn hik-action-exec">解析</button>
+          </div>
+          <div class="hik-sdt-block">
+            <label class="hik-isapi-field hik-sdt-file">
+              <span>SDT 图片上传（imageFile，与 Demo 一致）</span>
+              <input id="hikSdtFile" class="aura-input" type="file" accept="image/*" />
+            </label>
+            <button type="button" id="hikSdtUpload" class="btn-secondary hik-action-exec">上传</button>
+          </div>
+
+          <pre id="hikIsapiResult" class="aura-display-box hik-isapi-result" role="status" hidden aria-live="polite"></pre>
+          <div id="hikSnapshotWrap" class="hik-snapshot-wrap" hidden>
+            <p class="hik-snapshot-caption">抓图预览（设备返回的 JPEG/PNG 以图片展示）</p>
+            <img id="hikSnapshotImg" class="hik-snapshot-img" alt="海康 ISAPI 抓图预览" />
+          </div>
+        </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div id="deviceOnboardModal" class="aura-modal-root" hidden>
+    <div class="aura-modal-backdrop" tabindex="-1" aria-hidden="true"></div>
+    <div class="aura-modal-panel aura-modal-panel-doc-wide" role="dialog" aria-modal="true" aria-labelledby="deviceOnboardModalTitle">
+      <div class="aura-modal-head">
+        <h2 id="deviceOnboardModalTitle" class="aura-modal-title">海康设备接入与抓拍推送说明</h2>
+      </div>
+      <div class="aura-modal-doc">
+        <p class="aura-modal-doc-intro">本页聚焦<strong>运维 ISAPI 联调</strong>（浏览器经后端访问 NVR）。如需业务抓拍入库说明，请前往导航「NVR 设备」页（<code class="hik-isapi-code">/device/</code>）。</p>
+        <ol class="aura-modal-doc-list">
+          <li>在平台<strong>登记 NVR</strong>：超级管理员在「NVR 设备管理」页使用「注册新设备」填写名称、IP、端口、品牌与协议；成功后得到 <code class="hik-isapi-code">deviceId</code>。</li>
+          <li>在库中为该设备配置 <code class="hik-isapi-code">hmac_secret</code>（生产环境必须配置；开发环境可按后端策略回退）。抓拍接口将校验 <code class="hik-isapi-code">X-Signature</code>。</li>
+          <li>将海康或网关的 HTTP 推送地址指向：<code class="hik-isapi-code" id="capturePushUrlInline"></code></li>
+          <li>请求：<code class="hik-isapi-code">POST</code>，<code class="hik-isapi-code">Content-Type: application/json</code>。请求体字段与适配器一致：<code class="hik-isapi-code">deviceId</code>（数字）、<code class="hik-isapi-code">channelNo</code>（与布点一致）、<code class="hik-isapi-code">captureTime</code>（ISO 8601，建议带时区）、<code class="hik-isapi-code">imageBase64</code>（纯 Base64，无 data: 前缀）、其它元数据可一并放入 JSON（勿重复塞大图）。</li>
+          <li>请求头 <code class="hik-isapi-code">X-Signature</code>：对字符串 <code class="hik-isapi-code">deviceId|channelNo|captureTime</code>（其中 <code class="hik-isapi-code">captureTime</code> 与 JSON 内值<strong>字节一致</strong>，采用 .NET 默认 <code class="hik-isapi-code">O</code> 格式）做 <strong>HMAC-SHA256</strong>，密钥为设备 <code class="hik-isapi-code">hmac_secret</code>，输出<strong>小写十六进制</strong>字符串。</li>
+          <li>若启用抓拍 IP 白名单，仅允许名单内地址调用 <code class="hik-isapi-code">/api/capture/push</code>。</li>
+          <li>通道号与 ISAPI「抓图通道序号」对应关系请用下方「模拟通道列表 / 代理通道」对照 NVR 实际配置，再与「摄像头布点」中的 <code class="hik-isapi-code">channelNo</code> 对齐。</li>
+        </ol>
+      </div>
+      <div class="aura-modal-actions">
+        <button type="button" class="btn-secondary" data-device-onboard-dismiss>关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="hikGatewayModal" class="aura-modal-root" hidden>
+    <div class="aura-modal-backdrop" tabindex="-1" aria-hidden="true"></div>
+    <div class="aura-modal-panel hik-gateway-modal" role="dialog" aria-modal="true" aria-labelledby="hikGatewayModalTitle">
+      <div class="aura-modal-head">
+        <h2 id="hikGatewayModalTitle" class="aura-modal-title">ISAPI 通用网关（仅超级管理员）</h2>
+      </div>
+      <div class="aura-modal-fields">
+        <p class="hik-gateway-hint">
+          对应 <code class="hik-isapi-code">POST /api/device/hikvision/gateway</code>。路径须以 <code class="hik-isapi-code">/ISAPI/</code> 开头且在服务端白名单内；配置项 <code class="hik-isapi-code">Hikvision:Isapi:GatewayEnabled</code> 为 false 时会返回 <code class="hik-isapi-code">40301</code>。
+          非超级管理员将收到 <strong>HTTP 403</strong>，属预期权限限制。
+        </p>
+        <div class="hik-gateway-grid">
+          <label class="hik-isapi-field">
+            <span>HTTP 方法</span>
+            <select id="hikGwMethod" class="aura-input" aria-label="网关 HTTP 方法">
+              <option value="GET">GET</option>
+              <option value="PUT">PUT</option>
+              <option value="POST">POST</option>
+              <option value="DELETE">DELETE</option>
+            </select>
+          </label>
+          <label class="hik-isapi-field hik-isapi-field-span2">
+            <span>PathAndQuery</span>
+            <input id="hikGwPath" class="aura-input" type="text" spellcheck="false" placeholder="/ISAPI/System/deviceInfo" />
+          </label>
+          <label class="hik-isapi-field hik-isapi-field-span2">
+            <span>Content-Type（可选）</span>
+            <input id="hikGwContentType" class="aura-input" type="text" spellcheck="false" placeholder="如 application/xml，无请求体可留空" />
+          </label>
+          <label class="hik-isapi-field hik-gateway-check">
+            <input id="hikGwPreferBinary" type="checkbox" />
+            <span>PreferBinaryResponse（设备返回二进制时勾选）</span>
+          </label>
+        </div>
+        <label class="hik-isapi-field hik-gateway-body-label">
+          <span>请求体 Body（UTF-8 文本，与下方 Base64 二选一）</span>
+          <textarea id="hikGwBody" class="aura-input hik-textarea hik-gateway-body" rows="5" spellcheck="false" placeholder="GET/DELETE 通常留空"></textarea>
+        </label>
+        <label class="hik-isapi-field">
+          <span>BodyBase64（可选，优先于 Body）</span>
+          <textarea id="hikGwBodyB64" class="aura-input hik-textarea" rows="3" spellcheck="false" placeholder="原始字节 Base64，填写后忽略上方 Body"></textarea>
+        </label>
+      </div>
+      <div class="aura-modal-actions">
+        <button type="button" class="btn-secondary" data-hik-gateway-dismiss>关闭</button>
+        <button type="button" id="hikGatewaySend" class="btn-primary">通过网关转发</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="hikResultModal" class="aura-modal-root" hidden>
+    <div class="aura-modal-backdrop" tabindex="-1" aria-hidden="true"></div>
+    <div class="aura-modal-panel hik-result-modal" role="dialog" aria-modal="true" aria-labelledby="hikResultModalTitle">
+      <div class="aura-modal-head">
+        <h2 id="hikResultModalTitle" class="aura-modal-title">联调结果</h2>
+      </div>
+      <div class="hik-result-modal-body">
+        <p id="hikResultModalMeta" class="hik-result-modal-meta" hidden></p>
+        <div id="hikResultModalImageWrap" class="hik-result-modal-image-wrap" hidden>
+          <img id="hikResultModalImage" class="hik-result-modal-image" alt="联调结果图片预览" />
+        </div>
+        <pre id="hikResultModalContent" class="aura-display-box hik-result-modal-content"></pre>
+      </div>
+      <div class="aura-modal-actions">
+        <button type="button" class="btn-secondary" data-hik-result-dismiss>关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="deviceRegisterModal" class="aura-modal-root" hidden>
+    <div class="aura-modal-backdrop" tabindex="-1" aria-hidden="true"></div>
+    <div class="aura-modal-panel device-register-modal" role="dialog" aria-modal="true" aria-labelledby="deviceRegisterModalTitle">
+      <div class="aura-modal-head">
+        <h2 id="deviceRegisterModalTitle" class="aura-modal-title">注册 NVR 设备</h2>
+        <button type="button" class="btn-secondary aura-modal-close" data-aura-modal-dismiss aria-label="关闭对话框">关闭</button>
+      </div>
+      <p class="device-register-hint">仅<strong>超级管理员</strong>可见此入口。提交后写入 <code class="hik-isapi-code">nvr_device</code> 表并刷新列表。</p>
+      <div class="device-register-fields aura-modal-fields">
+        <label class="hik-isapi-field">
+          <span>设备名称</span>
+          <input id="regName" class="aura-input" type="text" required maxlength="128" placeholder="例如：1号楼 NVR" autocomplete="off" />
+        </label>
+        <label class="hik-isapi-field">
+          <span>IP 地址</span>
+          <input id="regIp" class="aura-input" type="text" required inputmode="decimal" placeholder="192.168.1.64" autocomplete="off" />
+        </label>
+        <label class="hik-isapi-field">
+          <span>端口</span>
+          <input id="regPort" class="aura-input" type="number" min="1" max="65535" value="80" required />
+        </label>
+        <label class="hik-isapi-field">
+          <span>品牌</span>
+          <input id="regBrand" class="aura-input" type="text" maxlength="64" value="海康威视" />
+        </label>
+        <label class="hik-isapi-field">
+          <span>协议</span>
+          <select id="regProtocol" class="aura-input" aria-label="设备协议">
+            <option value="HIK-ISAPI">HIK-ISAPI</option>
+            <option value="ONVIF">ONVIF</option>
+            <option value="HTTP">HTTP</option>
+          </select>
+        </label>
+      </div>
+      <div class="aura-modal-actions">
+        <button type="button" class="btn-secondary" data-aura-modal-dismiss>取消</button>
+        <button id="deviceRegisterSubmit" type="button" class="btn-primary">提交注册</button>
+      </div>
+      <pre id="deviceRegisterResult" class="aura-status aura-display-box" role="status" hidden aria-live="polite"></pre>
+    </div>
+  </div>
+
+  <script defer src="../common/shell.js"></script>
+  <script defer src="./device-diag.js"></script>
+  <script defer src="../device/vendors/diag-vendors.js"></script>
+  <script defer src="../device/vendors/hik-isapi-actions.js"></script>
+  <script defer src="../device/vendors/dahua-isapi-actions.js"></script>
+  <script defer src="../device/vendors/onvif-common-actions.js"></script>
+  <script
+    defer
+    id="auraSignalrVendorLoader"
+    data-aura-page-js="../device/device.js"
+    src="../common/signalr-vendor-loader.js"
+  ></script>
+</body>
+</html>

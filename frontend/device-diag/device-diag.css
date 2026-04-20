@@ -1,0 +1,287 @@
+/* 文件：设备联调页样式（device-diag.css） | File: Device Diagnostics Page Style */
+@import url("../device/device.css");
+
+/* 仅设备联调页使用紧凑布局，避免在常见窗口高度下出现滚动条 */
+body[data-shell-title="设备联调"] .app-topbar {
+  padding: 6px 14px;
+}
+
+body[data-shell-title="设备联调"] .app-page-title {
+  font-size: 16px;
+}
+
+body[data-shell-title="设备联调"] .app-content {
+  padding: 8px 12px 10px;
+}
+
+body[data-shell-title="设备联调"] .page {
+  padding: 8px 10px;
+}
+
+body[data-shell-title="设备联调"] .hik-isapi-panel {
+  margin-top: 8px;
+  padding-top: 8px;
+}
+
+body[data-shell-title="设备联调"] .hik-isapi-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+body[data-shell-title="设备联调"] .hik-isapi-head-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+body[data-shell-title="设备联调"] .hik-isapi-title {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+body[data-shell-title="设备联调"] .hik-action-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+body[data-shell-title="设备联调"] .hik-action-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+}
+
+body[data-shell-title="设备联调"] .hik-action-tag-exec {
+  border-color: rgba(var(--primary-rgb), 0.45);
+  color: var(--text);
+}
+
+body[data-shell-title="设备联调"] .hik-action-tag-info {
+  border-style: dashed;
+}
+
+body[data-shell-title="设备联调"] .hik-vendor-strip {
+  margin-bottom: 6px;
+  padding: 6px 8px;
+  gap: 6px 10px;
+}
+
+body[data-shell-title="设备联调"] .hik-vendor-hint,
+body[data-shell-title="设备联调"] .hik-isapi-hint {
+  font-size: 0.78rem;
+  line-height: 1.3;
+}
+
+body[data-shell-title="设备联调"] .hik-isapi-grid {
+  margin-bottom: 6px;
+  gap: 6px 10px;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+}
+
+body[data-shell-title="设备联调"] .hik-isapi-field {
+  gap: 4px;
+  font-size: 0.8rem;
+}
+
+body[data-shell-title="设备联调"] .hik-isapi-field > .aura-input,
+body[data-shell-title="设备联调"] .hik-isapi-stream-input-row .aura-input {
+  min-height: 32px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+  font-size: 12px;
+}
+
+body[data-shell-title="设备联调"] .hik-isapi-stream-input-row {
+  gap: 6px 6px;
+}
+
+body[data-shell-title="设备联调"] .hik-isapi-stream-input-row .hik-isapi-actions.hik-isapi-actions-inline {
+  margin-bottom: 0;
+  gap: 5px;
+}
+
+body[data-shell-title="设备联调"] .hik-cred-warning {
+  padding: 5px 7px;
+  font-size: 0.76rem;
+  line-height: 1.28;
+}
+
+body[data-shell-title="设备联调"] .hik-isapi-actions {
+  margin-bottom: 6px;
+  gap: 5px;
+}
+
+body[data-shell-title="设备联调"] .hik-isapi-actions .btn-primary,
+body[data-shell-title="设备联调"] .hik-isapi-actions .btn-secondary {
+  min-height: 30px;
+  padding: 5px 8px;
+  font-size: 11px;
+  border-radius: 7px;
+}
+
+body[data-shell-title="设备联调"] .hik-isapi-actions .hik-action-info {
+  border-style: dashed;
+  opacity: 0.9;
+}
+
+body[data-shell-title="设备联调"] .hik-isapi-subtitle {
+  margin: 8px 0 4px;
+  font-size: 0.84rem;
+}
+
+body[data-shell-title="设备联调"] .hik-isapi-three-col {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-auto-rows: 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+body[data-shell-title="设备联调"] .hik-isapi-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  height: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+}
+
+body[data-shell-title="设备联调"] .hik-isapi-col .hik-isapi-subtitle {
+  margin: 0;
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+body[data-shell-title="设备联调"] .hik-isapi-col .hik-isapi-hint {
+  margin: 0;
+  min-height: 72px;
+}
+
+body[data-shell-title="设备联调"] .hik-isapi-col .hik-isapi-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  align-content: start;
+  margin: 0;
+}
+
+body[data-shell-title="设备联调"] .hik-isapi-col .hik-isapi-actions .btn-primary,
+body[data-shell-title="设备联调"] .hik-isapi-col .hik-isapi-actions .btn-secondary {
+  width: 100%;
+  min-height: 32px;
+  justify-content: center;
+}
+
+body[data-shell-title="设备联调"] #hikMediaPlanTitle::before,
+body[data-shell-title="设备联调"] #hikChannelDirTitle::before,
+body[data-shell-title="设备联调"] #hikCapZeroTitle::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--primary);
+  box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.2);
+}
+
+@media (max-width: 1180px) {
+  body[data-shell-title="设备联调"] .hik-isapi-col .hik-isapi-hint {
+    min-height: 56px;
+  }
+}
+
+@media (max-width: 820px) {
+  body[data-shell-title="设备联调"] .hik-isapi-col .hik-isapi-hint {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 1180px) {
+  body[data-shell-title="设备联调"] .hik-isapi-three-col {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 820px) {
+  body[data-shell-title="设备联调"] .hik-isapi-three-col {
+    grid-template-columns: 1fr;
+  }
+}
+
+body[data-shell-title="设备联调"] .hik-analyze-block,
+body[data-shell-title="设备联调"] .hik-sdt-block {
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+body[data-shell-title="设备联调"] .hik-textarea {
+  min-height: 52px;
+}
+
+body[data-shell-title="设备联调"] .hik-gateway-hint {
+  margin: 4px 0 6px;
+  font-size: 0.78rem;
+  line-height: 1.3;
+}
+
+body[data-shell-title="设备联调"] .hik-gateway-grid {
+  margin-bottom: 6px;
+  gap: 6px 10px;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+}
+
+body[data-shell-title="设备联调"] .hik-gateway-body {
+  min-height: 70px;
+}
+
+body[data-shell-title="设备联调"] .hik-result-modal.aura-modal-panel {
+  width: min(100%, 980px);
+}
+
+body[data-shell-title="设备联调"] .hik-result-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+body[data-shell-title="设备联调"] .hik-result-modal-meta {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+body[data-shell-title="设备联调"] .hik-result-modal-image-wrap {
+  margin: 0;
+}
+
+body[data-shell-title="设备联调"] .hik-result-modal-image {
+  display: block;
+  max-width: 100%;
+  max-height: min(30vh, 280px);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-card);
+}
+
+body[data-shell-title="设备联调"] .hik-result-modal-content {
+  margin: 0;
+  max-height: min(48vh, 480px);
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+

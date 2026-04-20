@@ -374,6 +374,10 @@ def main() -> int:
         print(f"[打开] 前端页面：{FRONTEND_URL}")
         webbrowser.open(FRONTEND_URL)
         print("[完成] 服务已启动。按 Ctrl+C 停止两个服务。")
+        print(
+            "[提示] 海康 NVR 告警长连接（alertStream）默认关闭；若需启用，请在配置中设置 "
+            "Hikvision:Isapi:AlertStream:Enabled 与设备默认凭据。联调状态：GET /api/device/hikvision/alert-stream-status"
+        )
 
         while True:
             if ai_proc.poll() is not None:

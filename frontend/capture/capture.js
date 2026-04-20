@@ -1,9 +1,18 @@
 /* 文件：抓拍页脚本（capture.js） | File: Capture Script */
 const apiBase = "";
+
+function fillCapturePushUrlDoc() {
+  const el = document.getElementById("capturePushUrlDoc");
+  if (!el) return;
+  const origin = (window.location.origin || "").replace(/\/$/, "");
+  el.textContent = `${origin}/api/capture/push`;
+}
 const resultEl = document.getElementById("result");
 const createCaptureResultEl = document.getElementById("createCaptureResult");
 const captureCreateModalEl = document.getElementById("captureCreateModal");
+const captureOnboardModalEl = document.getElementById("captureOnboardModal");
 const openCreateCaptureModalBtn = document.getElementById("openCreateCaptureModal");
+const openCaptureOnboardModalBtn = document.getElementById("openCaptureOnboardModal");
 const captureTableWrapEl = document.getElementById("captureTableWrap");
 const capturePagerEl = document.getElementById("capturePager");
 const captureTableHeadEl = document.getElementById("captureTableHead");
@@ -75,6 +84,19 @@ function openCaptureCreateModal() {
   hideCreateCaptureResult();
   const deviceIdEl = document.getElementById("deviceId");
   if (deviceIdEl instanceof HTMLInputElement) deviceIdEl.focus();
+}
+
+function closeCaptureOnboardModal() {
+  if (!captureOnboardModalEl) return;
+  captureOnboardModalEl.hidden = true;
+  document.body.style.overflow = "";
+}
+
+function openCaptureOnboardModal() {
+  if (!captureOnboardModalEl) return;
+  fillCapturePushUrlDoc();
+  captureOnboardModalEl.hidden = false;
+  document.body.style.overflow = "hidden";
 }
 
 function hideTable() {
@@ -255,8 +277,12 @@ async function load() {
 }
 
 openCreateCaptureModalBtn?.addEventListener("click", openCaptureCreateModal);
+openCaptureOnboardModalBtn?.addEventListener("click", openCaptureOnboardModal);
 captureCreateModalEl?.querySelectorAll("[data-aura-modal-dismiss]").forEach((el) => {
   el.addEventListener("click", () => closeCaptureCreateModal());
+});
+captureOnboardModalEl?.querySelectorAll("[data-capture-onboard-dismiss]").forEach((el) => {
+  el.addEventListener("click", () => closeCaptureOnboardModal());
 });
 
 document.getElementById("load").addEventListener("click", load);
@@ -274,4 +300,5 @@ exportCaptureBtn?.addEventListener("click", async (event) => {
   }
   setResult("导出失败：缺少全局导出能力");
 });
+fillCapturePushUrlDoc();
 void load();

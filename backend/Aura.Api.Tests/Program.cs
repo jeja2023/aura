@@ -2,12 +2,15 @@ using System.IO.Compression;
 using System.Text;
 using Aura.Api.Clustering;
 using Aura.Api.Export;
+using Aura.Api.Services.Hikvision;
+using Microsoft.Extensions.Logging.Abstractions;
 
 var failures = new List<string>();
 
 Run("Feature DBSCAN clusters similar captures together", failures, TestFeatureClustering);
 Run("Temporal fallback keeps per-device buckets", failures, TestTemporalFallback);
 Run("Standard XLSX writer produces an OpenXML workbook", failures, TestXlsxWriter);
+Run("AlertStream multipart extracts one XML part", failures, TestAlertStreamMultipartOneXml);
 
 if (failures.Count > 0)
 {
@@ -71,6 +74,34 @@ static void TestTemporalFallback()
 
     var result = service.ClusterByTemporalWindow(captures, gapMinutes: 30);
     Assert(result.ClusterCount == 2, $"Expected 2 temporal buckets but got {result.ClusterCount}.");
+}
+
+static void TestAlertStreamMultipartOneXml()
+{
+    var boundary = "sampleBoundary123";
+    var body = Encoding.UTF8.GetBytes("<e n=\"1\"/>");
+    var headers = $"Content-Type: application/xml\r\nContent-Length: {body.Length}\r\n";
+    var prefix = Encoding.UTF8.GetBytes("--" + boundary + "\r\n" + headers + "\r\n");
+    var buffer = new List<byte>();
+    buffer.AddRange(prefix);
+    buffer.AddRange(body);
+
+    var logger = NullLogger.Instance;
+    var parsed = new List<string>();
+    HikvisionAlertStreamMultipartParser.DrainBufferAsync(
+        buffer,
+        boundary,
+        async (_, data) =>
+        {
+            parsed.Add(Encoding.UTF8.GetString(data));
+            await Task.CompletedTask;
+        },
+        logger,
+        CancellationToken.None).GetAwaiter().GetResult();
+
+    Assert(parsed.Count == 1, $"Expected 1 part, got {parsed.Count}");
+    Assert(buffer.Count == 0, "Buffer should be drained.");
+    Assert(parsed[0].Contains("<e", StringComparison.Ordinal), "XML body mismatch.");
 }
 
 static void TestXlsxWriter()

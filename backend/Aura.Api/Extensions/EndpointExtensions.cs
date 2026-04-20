@@ -14,6 +14,7 @@ public static class EndpointExtensions
         AuraEndpointsCampusFloor.Map(app, ctx);
         AuraEndpointsDeviceCapture.Map(app, ctx);
         AuraEndpointsHikvisionIsapi.Map(app, ctx);
+        AuraEndpointsMedia.Map(app, ctx);
         AuraEndpointsDomain.Map(app, ctx);
         return app;
     }
