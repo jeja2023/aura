@@ -106,6 +106,25 @@ internal sealed class HikvisionIsapiOptionsValidator : IValidateOptions<Hikvisio
             errors.Add("AlertStream.MaxBufferBytes 超出合理范围。");
         }
 
+        if (alert.MaxImageBytes is < 1024 or > 200 * 1024 * 1024)
+        {
+            errors.Add("AlertStream.MaxImageBytes 超出合理范围。");
+        }
+
+        if (alert.DedupWindowSeconds is < 0 or > 600)
+        {
+            errors.Add("AlertStream.DedupWindowSeconds 应在 0～600 之间（0 表示不去重）。");
+        }
+
+        if (!string.IsNullOrWhiteSpace(alert.CameraChannelFallbackStrategy))
+        {
+            var s = alert.CameraChannelFallbackStrategy.Trim().ToLowerInvariant();
+            if (s is not ("first" or "latest"))
+            {
+                errors.Add("AlertStream.CameraChannelFallbackStrategy 仅支持 first 或 latest。");
+            }
+        }
+
         if (alert.XmlPreviewMaxChars is < 256 or > 500_000)
         {
             errors.Add("AlertStream.XmlPreviewMaxChars 应在 256～500000 之间。");

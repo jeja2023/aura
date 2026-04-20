@@ -14,8 +14,9 @@ function getReturnUrl() {
   }
 }
 
-function saveLoginState(token) {
-  void token;
+function buildPasswordRedirect(returnUrl) {
+  const query = new URLSearchParams({ returnUrl });
+  return `/password/?${query.toString()}`;
 }
 
 async function login() {
@@ -29,14 +30,16 @@ async function login() {
     const res = await fetch(`${apiBase}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ userName: user, password: pass })
     });
     const data = await res.json();
-    if (data?.code === 0 && data?.data?.token) {
-      saveLoginState(data.data.token);
-      result.textContent = "登录成功，正在跳转...";
+    if (data?.code === 0) {
+      const returnUrl = getReturnUrl();
+      const mustChangePassword = data?.data?.mustChangePassword === true;
+      result.textContent = mustChangePassword ? "登录成功，正在前往修改密码页面..." : "登录成功，正在跳转...";
       result.hidden = true;
-      window.location.href = getReturnUrl();
+      window.location.href = mustChangePassword ? buildPasswordRedirect(returnUrl) : returnUrl;
       return;
     }
     result.textContent = data?.msg || "登录失败";

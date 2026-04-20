@@ -1,0 +1,64 @@
+<!-- 文件：报表导出页（export.html） | File: Export Page -->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>报表导出</title>
+  <script src="../common/theme-pref.js"></script>
+  <link rel="stylesheet" href="../common/theme.css" />
+  <link rel="stylesheet" href="../common/forms.css" />
+  <link rel="stylesheet" href="../common/shell.css" />
+  <link rel="stylesheet" href="./export.css" />
+</head>
+<body data-shell-title="报表导出">
+  <div class="app-shell">
+    <aside id="auraSidebar" class="app-sidebar"></aside>
+    <div class="app-main">
+      <header class="app-topbar">
+        <button id="auraSidebarToggle" class="aura-sidebar-toggle" type="button" aria-label="打开导航" title="打开导航">☰</button>
+        <div class="app-page-title"></div>
+        <div class="app-topbar-actions"></div>
+      </header>
+
+      <main class="app-content">
+        <section class="card export-card">
+          <div class="card-title-row">
+            <h2 class="card-title">按当前条件导出数据集</h2>
+          </div>
+          <p class="export-lead aura-status" data-aura-status-inline>
+            说明：此页面用于快速导出抓拍/告警/研判数据。导出格式将在弹窗中选择（CSV / XLSX）。
+          </p>
+
+          <div class="export-form">
+            <label class="aura-field">
+              <span class="aura-label">数据集</span>
+              <select id="dataset" class="aura-select">
+                <option value="capture">抓拍记录（capture）</option>
+                <option value="alert">告警记录（alert）</option>
+                <option value="judge">研判结果（judge）</option>
+                <option value="user">用户列表（user）</option>
+              </select>
+            </label>
+
+            <label class="aura-field">
+              <span class="aura-label">关键词（可选）</span>
+              <input id="keyword" class="aura-input" placeholder="例如：用户名/昵称/告警类型/设备名…" />
+            </label>
+
+            <div class="export-actions">
+              <button id="exportBtn" type="button" class="btn-primary">开始导出</button>
+              <button id="clearBtn" type="button" class="btn-secondary">清空条件</button>
+            </div>
+          </div>
+
+          <pre id="result" class="aura-display-box" hidden></pre>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script src="../common/shell.js"></script>
+  <script src="./export.js"></script>
+</body>
+</html>

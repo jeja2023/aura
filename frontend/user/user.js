@@ -337,6 +337,8 @@ function renderUserList(payload) {
       const isOn = Number(row.status ?? row.Status ?? -1) === 1;
       const statusLabel = isOn ? "启用" : "禁用";
       const statusClass = isOn ? "user-status is-on" : "user-status is-off";
+      const mustChangePassword = row.mustChangePassword === true || row.MustChangePassword === true || row.must_change_password === true;
+      const passwordState = mustChangePassword ? '<span class="user-security-tag">需改密</span>' : "";
       const nextStatus = isOn ? 0 : 1;
       const nextStatusLabel = nextStatus === 1 ? "启用" : "禁用";
       if (!userId || !Number.isFinite(userId)) return "";
@@ -346,7 +348,7 @@ function renderUserList(payload) {
         <td class="aura-col-id">${userId}</td>
         <td>${userName}</td>
         <td>${displayName}</td>
-        <td>${roleName}</td>
+        <td>${roleName}${passwordState}</td>
         <td class="aura-col-status"><span class="${statusClass}">${statusLabel}</span></td>
         <td class="aura-col-time">${createdCell}</td>
         <td class="aura-col-time">${lastLoginCell}</td>
@@ -445,7 +447,7 @@ async function createUser() {
 
 function downloadUserImportTemplate() {
   const header = ["用户名", "昵称", "密码", "角色"];
-  const example = ["示例用户名", "示例昵称", "Aura@123456", "普通用户"];
+  const example = ["示例用户名", "示例昵称", "TempPass#2026", "普通用户"];
   const csvRows = [header.join(","), example.map(toCsvCell).join(",")];
   const blob = new Blob([`\uFEFF${csvRows.join("\r\n")}`], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
@@ -588,8 +590,8 @@ async function resetUserPassword() {
       return;
     }
 
-    const defaultPwd = payload?.data?.defaultPassword ? `（默认密钥：${payload.data.defaultPassword}）` : "";
-    showToast(`${deriveElMessage(payload) || "密码已重置"}${defaultPwd}`, false);
+    const temporaryPassword = payload?.data?.temporaryPassword ? `（临时密码：${payload.data.temporaryPassword}）` : "";
+    showToast(`${deriveElMessage(payload) || "密码已重置"}${temporaryPassword}`, false, temporaryPassword ? 5200 : 2600);
     hideElResult(resetPasswordResultEl);
     closeModal(modalResetPassword);
     void load();

@@ -220,6 +220,19 @@
   border-color: rgba(var(--primary-rgb), 0.35);
 }
 
+.user-security-tag {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  color: rgb(146, 64, 14);
+  background: rgba(251, 191, 36, 0.18);
+  border: 1px solid rgba(217, 119, 6, 0.24);
+}
+
 .user-status.is-off {
   color: var(--muted);
   background: var(--card);

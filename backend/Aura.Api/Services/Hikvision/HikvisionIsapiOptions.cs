@@ -112,8 +112,49 @@ public sealed class HikvisionAlertStreamOptions
     /// <summary>是否经 SignalR 向楼栋管理员/超级管理员组推送解析摘要。</summary>
     public bool PushSignalR { get; set; } = true;
 
+    /// <summary>
+    /// 是否将告警流中的图片部件作为“抓拍”写入现有抓拍处理链路（入库、AI、向量、告警、重试等）。
+    /// 仅在 <see cref="Enabled"/> 为 true 时生效。
+    /// </summary>
+    public bool IngestCaptureEnabled { get; set; } = true;
+
+    /// <summary>告警流图片部件最大字节数（超出则丢弃并计数），避免异常大包占用内存。</summary>
+    public int MaxImageBytes { get; set; } = 10 * 1024 * 1024;
+
+    /// <summary>
+    /// 当无法从 XML 提取通道号时，是否允许按 deviceId 从摄像头布点表回退选择一个通道写入抓拍。
+    /// 建议联调阶段开启，生产阶段如通道映射稳定可继续保持开启。
+    /// </summary>
+    public bool AllowCameraChannelFallback { get; set; } = true;
+
+    /// <summary>回退选择通道时的策略：first（最小通道号） / latest（最新布点）</summary>
+    public string CameraChannelFallbackStrategy { get; set; } = "first";
+
+    /// <summary>
+    /// 告警图片入库去重窗口（秒）。同设备同通道在窗口内若图片哈希相同则丢弃，避免重复风暴。
+    /// 0 表示不去重。
+    /// </summary>
+    public int DedupWindowSeconds { get; set; } = 3;
+
     /// <summary>推送与日志中 XML 预览最大字符数。</summary>
     public int XmlPreviewMaxChars { get; set; } = 4096;
+
+    /// <summary>
+    /// 告警流 XML 事件在内存中缓存的最近条数（用于 image 先到/乱序到达时回填）。
+    /// 仅在进程内生效，进程重启会清空。
+    /// </summary>
+    public int XmlRecentCacheSize { get; set; } = 32;
+
+    /// <summary>
+    /// 告警流 XML 事件缓存的最大保留时长（秒）。超过该时长的 XML 事件会被淘汰，避免内存无限增长与过期回填。
+    /// </summary>
+    public int XmlRecentCacheTtlSeconds { get; set; } = 15;
+
+    /// <summary>
+    /// 当收到 image 部件但暂时没有可用 XML（或 XML 缺少通道号）时，最多等待多少毫秒以等待“最近事件”到达后回填。
+    /// 设为 0 表示不等待（维持旧行为）。
+    /// </summary>
+    public int ImageWaitForRecentXmlMs { get; set; } = 250;
 
     /// <summary>是否将心跳类 JSON 以 Information 级别写入日志（默认仅 Debug）。</summary>
     public bool LogHeartbeats { get; set; }

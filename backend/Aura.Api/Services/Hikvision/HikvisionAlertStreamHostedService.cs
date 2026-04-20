@@ -2,9 +2,13 @@
 using System.Collections.Concurrent;
 using System.Text;
 using Aura.Api.Data;
+using Aura.Api.Capture;
+using Aura.Api.Serialization;
 using Aura.Api.Ops;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using System.Text.Json;
+using System.Security.Cryptography;
 
 namespace Aura.Api.Services.Hikvision;
 
@@ -133,6 +137,7 @@ internal sealed class HikvisionAlertStreamHostedService : BackgroundService
                     var cfg = scope.ServiceProvider.GetRequiredService<IConfiguration>();
                     var store = scope.ServiceProvider.GetRequiredService<AppStore>();
                     var dispatch = scope.ServiceProvider.GetRequiredService<EventDispatchService>();
+                    var captureProcessingService = scope.ServiceProvider.GetRequiredService<CaptureProcessingService>();
 
                     var endpoint = await ResolveDeviceEndpointAsync(db, cfg, store, deviceId, deviceStoppingToken).ConfigureAwait(false);
                     if (endpoint is null)
@@ -167,6 +172,7 @@ internal sealed class HikvisionAlertStreamHostedService : BackgroundService
                                     body,
                                     stream,
                                     dispatch,
+                                    captureProcessingService,
                                     previewMax,
                                     deviceStoppingToken)
                                 .ConfigureAwait(false);
@@ -210,6 +216,7 @@ internal sealed class HikvisionAlertStreamHostedService : BackgroundService
         byte[] body,
         HikvisionAlertStreamOptions stream,
         EventDispatchService dispatch,
+        CaptureProcessingService captureProcessingService,
         int previewMax,
         CancellationToken cancellationToken)
     {
@@ -253,13 +260,18 @@ internal sealed class HikvisionAlertStreamHostedService : BackgroundService
 
             HikvisionIsapiMetrics.RecordAlertStreamPart("event_xml");
             _registry.TouchEvent(deviceId);
+            var xmlPreview = Encoding.UTF8.GetString(body);
+            xmlPreview = HikvisionIsapiLogFormatting.TruncateForLog(xmlPreview, previewMax);
+            var channelNo = HikvisionAlertStreamXmlInterpreter.TryExtractChannelNo(body);
+            var eventTime = HikvisionAlertStreamXmlInterpreter.TryExtractEventTime(body);
+            var receivedAt = DateTimeOffset.UtcNow;
+            // 若 XML 自带事件时间可解析，则优先保存为“事件发生时间”，后续图片入库用它作为 captureTime 的优先来源
+            _registry.SetLastEvent(deviceId, new HikvisionAlertStreamEventSnap(root, eventType, eventState, channelNo, xmlPreview, eventTime ?? receivedAt));
             if (!stream.PushSignalR)
             {
                 return;
             }
 
-            var xmlPreview = Encoding.UTF8.GetString(body);
-            xmlPreview = HikvisionIsapiLogFormatting.TruncateForLog(xmlPreview, previewMax);
             await dispatch.BroadcastRoleEventAsync(
                 "hikvision.alertStream",
                 new
@@ -269,8 +281,10 @@ internal sealed class HikvisionAlertStreamHostedService : BackgroundService
                     root,
                     eventType,
                     eventState,
+                    channelNo,
+                    eventTime,
                     xmlPreview,
-                    receivedAt = DateTimeOffset.Now
+                    receivedAt = receivedAt
                 }).ConfigureAwait(false);
             return;
         }
@@ -294,11 +308,154 @@ internal sealed class HikvisionAlertStreamHostedService : BackgroundService
         if (ct.Contains("image", StringComparison.Ordinal))
         {
             HikvisionIsapiMetrics.RecordAlertStreamPart("image");
+            if (!stream.IngestCaptureEnabled)
+            {
+                return;
+            }
+
+            var maxImageBytes = Math.Clamp(stream.MaxImageBytes, 1024, 200 * 1024 * 1024);
+            if (body.Length <= 0 || body.Length > maxImageBytes)
+            {
+                HikvisionIsapiMetrics.RecordAlertStreamPart("image_drop_oversize");
+                _logger.LogWarning(
+                    "海康告警流图片部件超出上限已丢弃。deviceId={DeviceId}, length={Length}, max={Max}",
+                    deviceId,
+                    body.Length,
+                    maxImageBytes);
+                return;
+            }
+
+            var nowUtc = DateTimeOffset.UtcNow;
+
+            var recentTtlSeconds = Math.Clamp(stream.XmlRecentCacheTtlSeconds, 1, 600);
+            var recentCacheSize = Math.Clamp(stream.XmlRecentCacheSize, 1, 2048);
+
+            HikvisionAlertStreamEventSnap? picked = _registry.TryFindRecentEvent(
+                deviceId,
+                nowUtc,
+                recentTtlSeconds,
+                recentCacheSize,
+                requireChannelNo: true);
+
+            // 极端乱序：image 可能先于 XML 到达，短暂等待“最近事件”以回填
+            var waitMs = Math.Clamp(stream.ImageWaitForRecentXmlMs, 0, 5000);
+            if (picked is null && waitMs > 0)
+            {
+                var step = waitMs <= 200 ? 50 : 100;
+                var deadline = nowUtc.AddMilliseconds(waitMs);
+                while (DateTimeOffset.UtcNow < deadline)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    await Task.Delay(TimeSpan.FromMilliseconds(step), cancellationToken).ConfigureAwait(false);
+                    picked = _registry.TryFindRecentEvent(
+                        deviceId,
+                        DateTimeOffset.UtcNow,
+                        recentTtlSeconds,
+                        recentCacheSize,
+                        requireChannelNo: true);
+                    if (picked is not null)
+                    {
+                        HikvisionIsapiMetrics.RecordAlertStreamPart("image_wait_recent_xml_hit");
+                        break;
+                    }
+                }
+
+                if (picked is null)
+                {
+                    HikvisionIsapiMetrics.RecordAlertStreamPart("image_wait_recent_xml_miss");
+                }
+            }
+
+            // 若仍未找到带通道号的 XML，则退化为最近一条事件（仅用于补全元数据/时间），通道号继续走回退策略
+            picked ??= _registry.TryFindRecentEvent(
+                deviceId,
+                DateTimeOffset.UtcNow,
+                recentTtlSeconds,
+                recentCacheSize,
+                requireChannelNo: false);
+
+            var channelNo = picked?.ChannelNo ?? 0;
+
+            if (channelNo <= 0 && stream.AllowCameraChannelFallback)
+            {
+                var cameras = await ResolveCamerasByDeviceAsync(deviceId).ConfigureAwait(false);
+                channelNo = ChooseFallbackChannelNo(cameras, stream.CameraChannelFallbackStrategy);
+            }
+
+            if (channelNo <= 0)
+            {
+                HikvisionIsapiMetrics.RecordAlertStreamPart("image_drop_no_channel");
+                _logger.LogWarning("海康告警流图片部件缺少通道号，已跳过写入抓拍闭环。deviceId={DeviceId}", deviceId);
+                return;
+            }
+
+            var hash = ComputeSha256Hex(body);
+            if (_registry.ShouldDropDuplicateCapture(deviceId, channelNo, hash, nowUtc, stream.DedupWindowSeconds))
+            {
+                HikvisionIsapiMetrics.RecordAlertStreamPart("image_drop_duplicate");
+                return;
+            }
+
+            var captureTime = picked?.ReceivedAt ?? nowUtc;
+            var meta = JsonSerializer.Serialize(new
+            {
+                source = "hikvision.alertStream",
+                deviceId,
+                channelNo,
+                contentType = contentTypeLine,
+                imageBytes = body.Length,
+                imageSha256 = hash,
+                eventRoot = picked?.Root,
+                eventType = picked?.EventType,
+                eventState = picked?.EventState,
+                eventReceivedAt = picked?.ReceivedAt,
+                xmlPreview = picked?.XmlPreview ?? "",
+                receivedAt = nowUtc
+            }, AuraJsonSerializerOptions.Default);
+
+            var payload = new CapturePayload
+            {
+                DeviceId = deviceId,
+                ChannelNo = channelNo,
+                CaptureTime = captureTime,
+                ImageBase64 = Convert.ToBase64String(body),
+                MetadataJson = meta
+            };
+
+            // 直接复用现有抓拍处理闭环（入库→AI→向量→告警→重试→事件推送）
+            await captureProcessingService.ProcessAsync(payload, "海康告警流抓拍").ConfigureAwait(false);
         }
         else
         {
             HikvisionIsapiMetrics.RecordAlertStreamPart("other");
         }
+    }
+
+    private async Task<List<DbCamera>> ResolveCamerasByDeviceAsync(long deviceId)
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<PgSqlStore>();
+        return await db.GetCamerasByDeviceIdAsync(deviceId).ConfigureAwait(false);
+    }
+
+    private static int ChooseFallbackChannelNo(List<DbCamera> cameras, string? strategy)
+    {
+        if (cameras.Count == 0) return 0;
+        var s = (strategy ?? "first").Trim().ToLowerInvariant();
+        if (s == "latest")
+        {
+            // GetCamerasByDeviceIdAsync 已按 camera_id DESC 排序
+            return cameras.FirstOrDefault()?.ChannelNo ?? 0;
+        }
+        // first: 选择最小有效通道号
+        var min = cameras.Where(c => c.ChannelNo > 0).Select(c => c.ChannelNo).DefaultIfEmpty(0).Min();
+        return min;
+    }
+
+    private static string ComputeSha256Hex(byte[] bytes)
+    {
+        var hash = SHA256.HashData(bytes);
+        return Convert.ToHexString(hash);
     }
 
     private static bool IsHikvisionIsapiDevice(DbDevice d)

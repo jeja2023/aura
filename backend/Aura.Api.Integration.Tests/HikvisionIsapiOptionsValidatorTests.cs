@@ -61,6 +61,22 @@ public sealed class HikvisionIsapiOptionsValidatorTests
         Assert.False(r.Succeeded);
     }
 
+    [Fact]
+    public void Validate_AlertStream_MaxImageBytes_越界_失败()
+    {
+        var v = new HikvisionIsapiOptionsValidator(new StubHostEnvironment(Environments.Development));
+        var o = new HikvisionIsapiOptions
+        {
+            AlertStream = new HikvisionAlertStreamOptions
+            {
+                Enabled = true,
+                MaxImageBytes = 0
+            }
+        };
+        var r = v.Validate(null, o);
+        Assert.False(r.Succeeded);
+    }
+
     private sealed class StubHostEnvironment : IHostEnvironment
     {
         public StubHostEnvironment(string environmentName)

@@ -12,6 +12,7 @@ internal sealed class PgSqlStore
     private volatile bool _systemLogTableEnsured;
     private volatile bool _userDisplayNameColumnEnsured;
     private volatile bool _userLastLoginColumnEnsured;
+    private volatile bool _userMustChangePasswordColumnEnsured;
 
     public PgSqlStore(string connectionString, ILogger<PgSqlStore>? logger = null)
     {
@@ -65,6 +66,17 @@ internal sealed class PgSqlStore
         _userLastLoginColumnEnsured = true;
     }
 
+    private async Task EnsureUserMustChangePasswordColumnAsync(NpgsqlConnection conn)
+    {
+        if (_userMustChangePasswordColumnEnsured) return;
+        await conn.ExecuteAsync(
+            """
+            ALTER TABLE sys_user
+            ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT FALSE;
+            """);
+        _userMustChangePasswordColumnEnsured = true;
+    }
+
     private static async Task EnsureIdentitySequenceSyncedAsync(NpgsqlConnection conn, string tableName, string idColumnName)
     {
         await conn.ExecuteAsync(
@@ -85,9 +97,11 @@ internal sealed class PgSqlStore
             await using var conn = CreateConnection();
             await EnsureUserDisplayNameColumnAsync(conn);
             await EnsureUserLastLoginColumnAsync(conn);
+            await EnsureUserMustChangePasswordColumnAsync(conn);
             return await conn.QueryFirstOrDefaultAsync<DbUser>(
                 """
-                SELECT u.user_name AS UserName, u.password_hash AS PasswordHash, r.role_name AS RoleName
+                SELECT u.user_name AS UserName, u.password_hash AS PasswordHash, r.role_name AS RoleName,
+                       u.must_change_password AS MustChangePassword
                 FROM sys_user u
                 LEFT JOIN sys_role r ON u.role_id = r.role_id
                 WHERE u.user_name = @userName AND u.status = 1
@@ -602,6 +616,29 @@ internal sealed class PgSqlStore
         }
     }
 
+    public async Task<List<DbCamera>> GetCamerasByDeviceIdAsync(long deviceId)
+    {
+        try
+        {
+            await using var conn = CreateConnection();
+            var rows = await conn.QueryAsync<DbCamera>(
+                """
+                SELECT camera_id AS CameraId, floor_id AS FloorId, device_id AS DeviceId, channel_no AS ChannelNo,
+                       pos_x AS PosX, pos_y AS PosY
+                FROM map_camera
+                WHERE device_id = @DeviceId
+                ORDER BY camera_id DESC
+                """,
+                new { DeviceId = deviceId });
+            return rows.ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "数据库按设备查询摄像头列表失败。deviceId={DeviceId}", deviceId);
+            return [];
+        }
+    }
+
     public async Task<long?> InsertCameraAsync(long floorId, long deviceId, int channelNo, decimal posX, decimal posY)
     {
         try
@@ -924,11 +961,13 @@ internal sealed class PgSqlStore
             await using var conn = CreateConnection();
             await EnsureUserDisplayNameColumnAsync(conn);
             await EnsureUserLastLoginColumnAsync(conn);
+            await EnsureUserMustChangePasswordColumnAsync(conn);
             var rows = await conn.QueryAsync<DbUserListItem>(
                 """
                 SELECT u.user_id AS UserId, u.user_name AS UserName, CAST(u.status AS BIGINT) AS Status,
                        COALESCE(NULLIF(u.display_name, ''), u.user_name) AS DisplayName,
-                       r.role_name AS RoleName, u.role_id AS RoleId, u.created_at AS CreatedAt, u.last_login_at AS LastLoginAt
+                       r.role_name AS RoleName, u.role_id AS RoleId, u.created_at AS CreatedAt,
+                       u.last_login_at AS LastLoginAt, u.must_change_password AS MustChangePassword
                 FROM sys_user u
                 LEFT JOIN sys_role r ON u.role_id = r.role_id
                 ORDER BY u.user_id DESC
@@ -950,10 +989,11 @@ internal sealed class PgSqlStore
             await EnsureIdentitySequenceSyncedAsync(conn, "sys_user", "user_id");
             await EnsureUserDisplayNameColumnAsync(conn);
             await EnsureUserLastLoginColumnAsync(conn);
+            await EnsureUserMustChangePasswordColumnAsync(conn);
             return await conn.ExecuteScalarAsync<long>(
                 """
-                INSERT INTO sys_user(user_name, display_name, password_hash, role_id, status, created_at, last_login_at)
-                VALUES(@UserName, @DisplayName, @PasswordHash, @RoleId, 1, NOW(), NULL)
+                INSERT INTO sys_user(user_name, display_name, password_hash, role_id, status, created_at, last_login_at, must_change_password)
+                VALUES(@UserName, @DisplayName, @PasswordHash, @RoleId, 1, NOW(), NULL, FALSE)
                 RETURNING user_id
                 """,
                 new { UserName = userName, DisplayName = displayName, PasswordHash = passwordHash, RoleId = roleId });
@@ -965,18 +1005,21 @@ internal sealed class PgSqlStore
         }
     }
 
-    public async Task<bool> UpdateUserPasswordByUserNameAsync(string userName, string passwordHash)
+    public async Task<bool> UpdateUserPasswordByUserNameAsync(string userName, string passwordHash, bool mustChangePassword)
     {
         try
         {
             await using var conn = CreateConnection();
+            await EnsureUserDisplayNameColumnAsync(conn);
+            await EnsureUserLastLoginColumnAsync(conn);
+            await EnsureUserMustChangePasswordColumnAsync(conn);
             var affected = await conn.ExecuteAsync(
                 """
                 UPDATE sys_user
-                SET password_hash=@PasswordHash
+                SET password_hash=@PasswordHash, must_change_password=@MustChangePassword
                 WHERE user_name=@UserName
                 """,
-                new { UserName = userName, PasswordHash = passwordHash });
+                new { UserName = userName, PasswordHash = passwordHash, MustChangePassword = mustChangePassword });
             return affected > 0;
         }
         catch (Exception ex)
@@ -993,6 +1036,7 @@ internal sealed class PgSqlStore
             await using var conn = CreateConnection();
             await EnsureUserDisplayNameColumnAsync(conn);
             await EnsureUserLastLoginColumnAsync(conn);
+            await EnsureUserMustChangePasswordColumnAsync(conn);
             var affected = await conn.ExecuteAsync(
                 "UPDATE sys_user SET status=@Status WHERE user_id=@UserId",
                 new { Status = status, UserId = userId });
@@ -1013,6 +1057,7 @@ internal sealed class PgSqlStore
             await using var conn = CreateConnection();
             await EnsureUserDisplayNameColumnAsync(conn);
             await EnsureUserLastLoginColumnAsync(conn);
+            await EnsureUserMustChangePasswordColumnAsync(conn);
             return await conn.ExecuteAsync(
                 """
                 UPDATE sys_user
@@ -1028,20 +1073,21 @@ internal sealed class PgSqlStore
         }
     }
 
-    public async Task<bool> UpdateUserPasswordByUserIdAsync(long userId, string passwordHash)
+    public async Task<bool> UpdateUserPasswordByUserIdAsync(long userId, string passwordHash, bool mustChangePassword)
     {
         try
         {
             await using var conn = CreateConnection();
             await EnsureUserDisplayNameColumnAsync(conn);
             await EnsureUserLastLoginColumnAsync(conn);
+            await EnsureUserMustChangePasswordColumnAsync(conn);
             var affected = await conn.ExecuteAsync(
                 """
                 UPDATE sys_user
-                SET password_hash=@PasswordHash
+                SET password_hash=@PasswordHash, must_change_password=@MustChangePassword
                 WHERE user_id=@UserId
                 """,
-                new { PasswordHash = passwordHash, UserId = userId });
+                new { PasswordHash = passwordHash, UserId = userId, MustChangePassword = mustChangePassword });
             return affected > 0;
         }
         catch (Exception ex)
@@ -1058,6 +1104,7 @@ internal sealed class PgSqlStore
             await using var conn = CreateConnection();
             await EnsureUserDisplayNameColumnAsync(conn);
             await EnsureUserLastLoginColumnAsync(conn);
+            await EnsureUserMustChangePasswordColumnAsync(conn);
             var affected = await conn.ExecuteAsync(
                 "DELETE FROM sys_user WHERE user_id=@UserId",
                 new { UserId = userId });
@@ -1078,6 +1125,7 @@ internal sealed class PgSqlStore
             await using var conn = CreateConnection();
             await EnsureUserDisplayNameColumnAsync(conn);
             await EnsureUserLastLoginColumnAsync(conn);
+            await EnsureUserMustChangePasswordColumnAsync(conn);
             var affected = await conn.ExecuteAsync(
                 """
                 UPDATE sys_user
@@ -1260,14 +1308,14 @@ internal sealed class PgSqlStore
     }
 }
 
-internal sealed record DbUser(string UserName, string PasswordHash, string? RoleName);
+internal sealed record DbUser(string UserName, string PasswordHash, string? RoleName, bool MustChangePassword);
 internal sealed record DbDevice(long DeviceId, string Name, string Ip, int Port, string Brand, string Protocol, string Status, DateTime CreatedAt);
 internal sealed record DbCapture(long CaptureId, long DeviceId, int ChannelNo, DateTime CaptureTime, string MetadataJson, string? ImagePath = null);
 internal sealed record DbAlert(long AlertId, string AlertType, string Detail, DateTime CreatedAt);
 internal sealed record DbOperation(long OperationId, string OperatorName, string Action, string Detail, DateTime CreatedAt);
 internal sealed record DbSystemLog(long SystemLogId, string Level, string Source, string Message, DateTime CreatedAt);
 internal sealed record DbRole(long RoleId, string RoleName, string PermissionJson);
-internal sealed record DbUserListItem(long UserId, string UserName, long Status, string DisplayName, string? RoleName, long RoleId, DateTime CreatedAt, DateTime? LastLoginAt);
+internal sealed record DbUserListItem(long UserId, string UserName, long Status, string DisplayName, string? RoleName, long RoleId, DateTime CreatedAt, DateTime? LastLoginAt, bool MustChangePassword);
 internal sealed record DbCampusNode(long NodeId, long? ParentId, string LevelType, string NodeName);
 internal sealed record DbFloor(long FloorId, long NodeId, string FilePath, decimal ScaleRatio);
 internal sealed record DbCamera(long CameraId, long FloorId, long DeviceId, int ChannelNo, decimal PosX, decimal PosY);

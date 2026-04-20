@@ -24,7 +24,19 @@ internal static class AuraEndpointsAuth
             return await svc.LoginAsync(http, req);
         });
         auth.MapPost("/logout", (HttpContext http, IdentityAdminService svc) => svc.Logout(http));
-        auth.MapGet("/me", (ClaimsPrincipal user) => Results.Ok(new { code = 0, msg = "查询成功", data = new { userName = user.Identity?.Name, role = user.FindFirst(ClaimTypes.Role)?.Value } })).RequireAuthorization();
+        auth.MapGet("/me", (ClaimsPrincipal user) => Results.Ok(new
+        {
+            code = 0,
+            msg = "查询成功",
+            data = new
+            {
+                userName = user.Identity?.Name,
+                role = user.FindFirst(ClaimTypes.Role)?.Value,
+                mustChangePassword = string.Equals(user.FindFirst(AuraHelpers.MustChangePasswordClaimType)?.Value, "true", StringComparison.OrdinalIgnoreCase)
+            }
+        })).RequireAuthorization();
+        auth.MapPost("/change-password", async (HttpContext http, ChangePasswordReq req, IdentityAdminService svc) =>
+            await svc.ChangePasswordAsync(http, req)).RequireAuthorization();
 
         var roleGroup = app.MapGroup("/api/role");
         roleGroup.MapGet("/list", async (IdentityAdminService svc) => await svc.GetRolesAsync()).RequireAuthorization("超级管理员");

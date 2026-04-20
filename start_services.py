@@ -1,24 +1,23 @@
 #!/usr/bin/env python3
 # 文件：一键启动脚本（start_services.py） | File: Service Launcher
 #
-# 适用范围：本机全栈联调（AI + .NET + PostgreSQL + Redis）。要求 appsettings.Development.json
-# 与 .env 中连接串已配置；与「仅跑集成测试」的 ASPNETCORE_ENVIRONMENT=Testing（可无 Redis/PG）不是同一套场景。
-
+# 适用范围：本机全栈联调（AI + .NET + PostgreSQL + Redis）。
+# 默认不会强制清理占用端口的进程；如确认可清理，请附加 --kill-conflicts。
+import json
 import os
+import re
 import signal
+import ssl
 import subprocess
 import sys
+import threading
 import time
-import json
-import urllib.request
 import urllib.error
-import ssl
+import urllib.request
 import webbrowser
+from http.cookiejar import CookieJar
 from pathlib import Path
 from typing import Any, Callable, Optional
-import threading
-import re
-from http.cookiejar import CookieJar
 
 
 ROOT = Path(__file__).resolve().parent
@@ -48,7 +47,6 @@ def _wait_http_json_probe(
     progress_label: Optional[str] = None,
     progress_interval_sec: int = 15,
 ) -> bool:
-    """轮询 URL，要求 HTTP 状态码为 2xx，且响应体为 JSON 且满足 predicate(data)。"""
     start_ts = time.time()
     deadline = start_ts + timeout_sec
     next_progress_ts = start_ts + progress_interval_sec
@@ -57,13 +55,12 @@ def _wait_http_json_probe(
         now = time.time()
         if progress_label and now >= next_progress_ts:
             print(
-                f"[检查] {progress_label} 仍在等待，已耗时约 {int(now - start_ts)} 秒（上限 {timeout_sec} 秒）…"
+                f"[检查] {progress_label} 仍在等待，已耗时约 {int(now - start_ts)} 秒（上限 {timeout_sec} 秒）..."
             )
             next_progress_ts = now + progress_interval_sec
         try:
             with urllib.request.urlopen(url, timeout=2, context=context) as resp:
-                status = resp.status
-                if not (200 <= status <= 299):
+                if not (200 <= resp.status <= 299):
                     time.sleep(1)
                     continue
                 raw = resp.read()
@@ -88,10 +85,6 @@ def _start_process(cmd: list[str], cwd: Path, name: str) -> subprocess.Popen:
 
 
 def _load_env_file(env_path: Path) -> None:
-    """轻量加载根目录 .env（不依赖 python-dotenv）。
-
-    支持 KEY=VALUE，忽略空行与以 # 开头的注释行；VALUE 支持去掉首尾引号。
-    """
     if not env_path.exists():
         return
 
@@ -112,15 +105,14 @@ def _load_env_file(env_path: Path) -> None:
 
 
 def _get_or_default_env(name: str, default: Optional[str]) -> Optional[str]:
-    v = os.environ.get(name)
-    if v is None:
+    value = os.environ.get(name)
+    if value is None:
         return default
-    v = str(v).strip()
-    return v if v else default
+    value = str(value).strip()
+    return value if value else default
 
 
 def _env_key_pgsql() -> str:
-    # .NET: ConnectionStrings:PgSql -> ConnectionStrings__PgSql
     return "ConnectionStrings__PgSql"
 
 
@@ -129,7 +121,6 @@ def _env_key_redis() -> str:
 
 
 def _env_key_ai_base_url() -> str:
-    # .NET: Ai:BaseUrl -> Ai__BaseUrl
     return "Ai__BaseUrl"
 
 
@@ -146,11 +137,11 @@ def _preflight_check() -> None:
     redis_conn_from_cfg = str(((cfg.get("ConnectionStrings") or {}).get("Redis") or "")).strip()
     ai_base_url_from_cfg = str(((cfg.get("Ai") or {}).get("BaseUrl") or "")).strip()
 
-    # 优先读取根目录 .env（用于本机直跑统一配置；键名须与 .env.example 一致）
     jwt_key = (_get_or_default_env("Jwt__Key", jwt_key) or "").strip()
     pgsql_conn = _get_or_default_env(_env_key_pgsql(), pgsql_conn_from_cfg) or ""
     redis_conn = _get_or_default_env(_env_key_redis(), redis_conn_from_cfg) or ""
     ai_base_url = _get_or_default_env(_env_key_ai_base_url(), ai_base_url_from_cfg) or ""
+
     if not jwt_key:
         raise RuntimeError("开发配置缺少 Jwt:Key")
     if "PLEASE_" in pgsql_conn.upper() or not pgsql_conn:
@@ -163,30 +154,20 @@ def _preflight_check() -> None:
 
 
 def _extract_dev_admin_password_from_log_line(line: str) -> Optional[str]:
-    """从 .NET 控制台行解析开发环境 admin 口令（与 DevInitializer 日志格式一致）。
-
-    当前 DevInitializer 在首次建号或 ResetAdminPasswordOnce 后，固定将 admin 密码设为 123456，
-    日志形如：开发环境管理员已配置：用户名=admin, 密码=123456
-    若将来日志格式变更，请同步调整正则。
-    """
-    m = re.search(r"新密码=([A-Za-z0-9\-_]+)", line)
-    if m:
-        return m.group(1)
-    m = re.search(r"密码=([A-Za-z0-9\-_]+)", line)
-    if m:
-        return m.group(1)
+    match = re.search(r"(?:临时密码|新密码|密码)\s*[=:：]\s*([A-Za-z0-9!@#$%^&*\-_=+]+)", line)
+    if match:
+        return match.group(1)
     return None
 
 
-def _parse_json_bytes(data: bytes) -> dict:
+def _parse_json_bytes(data: bytes) -> dict[str, Any]:
     try:
         return json.loads(data.decode("utf-8", errors="ignore"))
     except Exception:
         return {"raw": data[:200].decode("utf-8", errors="ignore")}
 
 
-def _login_and_call_readiness(admin_user: str, admin_password: str) -> dict:
-    # 用 CookieJar 自动保存 aura_token HttpOnly Cookie
+def _login_and_call_readiness(admin_user: str, admin_password: str) -> dict[str, Any]:
     ctx = ssl._create_unverified_context()
     jar = CookieJar()
     opener = urllib.request.build_opener(
@@ -205,37 +186,29 @@ def _login_and_call_readiness(admin_user: str, admin_password: str) -> dict:
     try:
         with opener.open(req, timeout=10) as resp:
             _ = resp.read()
-    except urllib.error.HTTPError as e:
-        body = e.read() if hasattr(e, "read") else b""
-        raise RuntimeError(
-            f"登录失败 HTTP={e.code}, body={_parse_json_bytes(body)}"
-        ) from e
+    except urllib.error.HTTPError as ex:
+        body = ex.read() if hasattr(ex, "read") else b""
+        raise RuntimeError(f"登录失败 HTTP={ex.code}, body={_parse_json_bytes(body)}") from ex
 
     ready_req = urllib.request.Request(API_READINESS_URL, method="GET")
     try:
         with opener.open(ready_req, timeout=10) as resp:
-            body = resp.read()
-            return _parse_json_bytes(body)
-    except urllib.error.HTTPError as e:
-        body = e.read() if hasattr(e, "read") else b""
-        raise RuntimeError(
-            f"readiness 调用失败 HTTP={e.code}, body={_parse_json_bytes(body)}"
-        ) from e
+            return _parse_json_bytes(resp.read())
+    except urllib.error.HTTPError as ex:
+        body = ex.read() if hasattr(ex, "read") else b""
+        raise RuntimeError(f"readiness 调用失败 HTTP={ex.code}, body={_parse_json_bytes(body)}") from ex
 
 
-def _kill_process_on_local_port(port: int) -> None:
-    """Windows: 强制杀掉占用本机端口的进程，避免重复启动时报 'address already in use'。"""
+def _find_process_ids_on_local_port(port: int) -> list[int]:
     if os.name != "nt":
-        return
+        return []
 
     try:
         out = subprocess.check_output(["netstat", "-ano"], text=True, encoding="utf-8", errors="ignore")
     except Exception:
-        return
+        return []
 
     pids: set[int] = set()
-    # netstat -ano 输出格式: Proto LocalAddress ... State PID
-    # 兼容不同语言下 State 字段，直接从末尾提取 PID。
     for line in out.splitlines():
         if f":{port}" not in line:
             continue
@@ -246,25 +219,45 @@ def _kill_process_on_local_port(port: int) -> None:
         if last.isdigit():
             pids.add(int(last))
 
-    for pid in sorted(pids):
+    return sorted(pids)
+
+
+def _kill_process_on_local_port(port: int) -> None:
+    pids = _find_process_ids_on_local_port(port)
+    for pid in pids:
         try:
-            print(f"[清理] 端口 {port} 占用 PID={pid}，尝试强制结束...")
+            print(f"[清理] 端口 {port} 被 PID={pid} 占用，尝试强制结束...")
             subprocess.run(["taskkill", "/PID", str(pid), "/F"], check=False, capture_output=True)
         except Exception:
             pass
-
     if pids:
         time.sleep(1)
 
 
+def _ensure_local_port_available(port: int) -> None:
+    pids = _find_process_ids_on_local_port(port)
+    if not pids:
+        return
+    raise RuntimeError(
+        f"端口 {port} 已被进程占用（PID={','.join(str(pid) for pid in pids)}）。"
+        "如确认可清理，请重新运行并附加 --kill-conflicts。"
+    )
+
+
 def main() -> int:
     run_until_ready = ("--run-until-ready" in sys.argv) or ("--check-only" in sys.argv)
-    # 本机直跑：优先从根目录 .env 注入数据库/AI 等配置到环境变量，供 AI 与 .NET 读取
+    kill_conflicts = "--kill-conflicts" in sys.argv
+
     _load_env_file(ROOT / ".env")
     _preflight_check()
-    # 一键启动前清理常见占用端口，避免重复启动导致绑定失败/进程锁文件
-    _kill_process_on_local_port(8000)  # AI 服务
-    _kill_process_on_local_port(5001)  # .NET 后端（launchSettings.json https://localhost:5001）
+
+    if kill_conflicts:
+        _kill_process_on_local_port(8000)
+        _kill_process_on_local_port(5001)
+    else:
+        _ensure_local_port_available(8000)
+        _ensure_local_port_available(5001)
+
     ai_python = _pick_ai_python()
     ai_cmd = [ai_python, "-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", "8000"]
     api_cmd = ["dotnet", "run"]
@@ -274,8 +267,7 @@ def main() -> int:
     return_code = 0
 
     try:
-        # 先等 AI 监听端口：避免与 dotnet 首次编译争抢 CPU，导致 ONNX 导入阶段长时间无法响应健康检查
-        print("[检查] 等待 AI 服务就绪（HTTP 2xx + JSON：code=0 且 model_loaded=true）...")
+        print("[检查] 等待 AI 服务就绪（HTTP 2xx + code=0 + model_loaded=true）...")
         if not _wait_http_json_probe(
             AI_HEALTH_URL,
             timeout_sec=120,
@@ -283,7 +275,7 @@ def main() -> int:
             progress_label="AI 服务（含 ONNX 加载）",
         ):
             raise RuntimeError(
-                "AI 服务 120 秒内未就绪（需 ONNX 加载完成）。请检查：1) 8000 端口；2) ai/.venv 与依赖；3) 模型路径 AURA_MODEL_PATH；4) uvicorn 控制台报错。"
+                "AI 服务 120 秒内未就绪。请检查：1) 8000 端口；2) ai/.venv 与依赖；3) 模型路径 AURA_MODEL_PATH；4) uvicorn 控制台报错。"
             )
 
         api_proc = subprocess.Popen(
@@ -297,75 +289,70 @@ def main() -> int:
             bufsize=1,
         )
 
-        # 异步读取 .NET 控制台输出：尝试提取开发环境管理员随机密码
         dev_admin_password_from_log: Optional[str] = None
 
         def _read_api_stdout() -> None:
             nonlocal dev_admin_password_from_log
-            assert api_proc.stdout is not None
+            assert api_proc is not None and api_proc.stdout is not None
             for line in api_proc.stdout:
-                # 保持可观测性：把输出回显到控制台
                 print(line, end="")
                 if dev_admin_password_from_log is None:
                     pwd = _extract_dev_admin_password_from_log_line(line)
                     if pwd:
                         dev_admin_password_from_log = pwd
 
-        t = threading.Thread(target=_read_api_stdout, daemon=True)
-        t.start()
+        threading.Thread(target=_read_api_stdout, daemon=True).start()
 
         print("[检查] 等待 .NET 服务就绪（HTTP 2xx + /api/health 返回 code=0）...")
         if not _wait_http_json_probe(
             API_HEALTH_URL,
             timeout_sec=180,
             ignore_tls=True,
-            predicate=lambda d: d.get("code") == 0 and "寓瞳" in str(d.get("msg", "")),
-            progress_label=".NET API（首次启动可能含编译，请稍候）",
+            predicate=lambda d: d.get("code") == 0,
+            progress_label=".NET API（首次启动可能包含编译）",
         ):
             raise RuntimeError(
-                ".NET 服务 180 秒内未就绪（首次 dotnet run 含编译可能较慢）。请检查 PostgreSQL/Redis 是否可达、AllowedHosts、HTTPS 开发证书及控制台日志。"
+                ".NET 服务 180 秒内未就绪。请检查 PostgreSQL/Redis 可达性、HTTPS 开发证书与控制台日志。"
             )
 
-        # 自动登录并调用 readiness（需要“超级管理员”权限）
         admin_user = str((os.environ.get("AURA_ADMIN_USER") or "admin")).strip()
         admin_password = str((os.environ.get("AURA_ADMIN_PASSWORD") or "")).strip()
-        readiness_payload: Optional[dict] = None
+        readiness_payload: Optional[dict[str, Any]] = None
         if admin_password:
             try:
                 readiness_payload = _login_and_call_readiness(admin_user, admin_password)
             except Exception as ex:
-                print(f"[readiness] 使用 .env 提供管理员密码登录失败：{ex}")
+                print(f"[readiness] 使用 .env 中的管理员密码登录失败：{ex}")
 
         if readiness_payload is None and dev_admin_password_from_log:
-            readiness_payload = _login_and_call_readiness(admin_user, dev_admin_password_from_log)
+            try:
+                readiness_payload = _login_and_call_readiness(admin_user, dev_admin_password_from_log)
+            except Exception as ex:
+                print(f"[readiness] 使用启动日志中的临时密码登录失败：{ex}")
 
         if readiness_payload is None:
-            raise RuntimeError(
-                "自动化 readiness 跑通失败：未能获得可用管理员密码。"
-                "请检查 .env 的 AURA_ADMIN_PASSWORD 是否与数据库一致，或重启后观察控制台打印随机密码。"
-            )
-
-        data = readiness_payload.get("data") or {}
-        ready = bool(data.get("ready"))
-        checks = data.get("checks") or {}
-        print(f"[就绪检查] 整体状态: {'全部就绪' if ready else '存在异常'}")
-        
-        desc_map = {
-            'jwt': 'JWT 密钥',
-            'hmac': '抓拍校验密钥',
-            'pgsql': 'PostgreSQL 数据库',
-            'redis': 'Redis 缓存',
-            'ai_service': 'AI 推理服务',
-            'ai_model': 'AI 模型加载',
-            'alertNotify': '告警通知通道'
-        }
-        for k, v in checks.items():
-            desc = desc_map.get(k, k)
-            status = "已就绪" if v else "异常"
-            print(f"  - {desc}: {status}")
-            
-        if not ready:
-            raise RuntimeError(f"就绪检查未通过：{readiness_payload}")
+            print("[readiness] 未拿到管理员密码，跳过需要登录态的 readiness 深度检查。")
+            print("[readiness] 如需执行完整检查，请在 .env 中设置 AURA_ADMIN_PASSWORD，或使用启动日志中显示的临时密码。")
+        else:
+            data = readiness_payload.get("data") or {}
+            ready = bool(data.get("ready"))
+            checks = data.get("checks") or {}
+            print(f"[就绪检查] 整体状态：{'全部就绪' if ready else '存在异常'}")
+            desc_map = {
+                "jwt": "JWT 密钥",
+                "hmac": "抓拍校验密钥",
+                "pgsql": "PostgreSQL 数据库",
+                "redis": "Redis 缓存",
+                "ai_service": "AI 推理服务",
+                "ai_model": "AI 模型加载",
+                "alertNotify": "告警通知通道",
+            }
+            for key, value in checks.items():
+                desc = desc_map.get(key, key)
+                status = "已就绪" if value else "异常"
+                print(f"  - {desc}: {status}")
+            if not ready:
+                raise RuntimeError(f"就绪检查未通过：{readiness_payload}")
 
         if run_until_ready:
             print("[readiness] 运行完成（run-until-ready 模式），即将退出并停止子进程。")
@@ -374,15 +361,11 @@ def main() -> int:
         print(f"[打开] 前端页面：{FRONTEND_URL}")
         webbrowser.open(FRONTEND_URL)
         print("[完成] 服务已启动。按 Ctrl+C 停止两个服务。")
-        print(
-            "[提示] 海康 NVR 告警长连接（alertStream）默认关闭；若需启用，请在配置中设置 "
-            "Hikvision:Isapi:AlertStream:Enabled 与设备默认凭据。联调状态：GET /api/device/hikvision/alert-stream-status"
-        )
 
         while True:
             if ai_proc.poll() is not None:
                 raise RuntimeError(f"AI 服务已退出，退出码：{ai_proc.returncode}")
-            if api_proc.poll() is not None:
+            if api_proc is not None and api_proc.poll() is not None:
                 raise RuntimeError(f".NET 服务已退出，退出码：{api_proc.returncode}")
             time.sleep(1)
     except KeyboardInterrupt:
@@ -398,8 +381,11 @@ def main() -> int:
             if proc.poll() is None:
                 print(f"[停止] {name}")
                 if os.name == "nt":
-                    proc.send_signal(signal.CTRL_BREAK_EVENT)
-                    time.sleep(1)
+                    try:
+                        proc.send_signal(signal.CTRL_BREAK_EVENT)
+                        time.sleep(1)
+                    except Exception:
+                        pass
                 proc.terminate()
                 try:
                     proc.wait(timeout=8)

@@ -10,6 +10,8 @@ namespace Aura.Api.Internal;
 
 internal static class AuraHelpers
 {
+    internal const string MustChangePasswordClaimType = "aura:must_change_password";
+
     public static async Task<IResult?> ValidateCaptureRequest(HttpRequest request, CapturePayload normalized, PgSqlStore db, bool isDev, string globalSecret, string[]? whitelist, long maxBytes, int maxBase64, int maxMetadata, RedisCacheService cache)
     {
         if (request.ContentLength > maxBytes) return Results.BadRequest(new { code = 40006, msg = "请求体过大" });

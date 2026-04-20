@@ -186,15 +186,24 @@
     });
   }
 
-  async function loadCurrentRole() {
+  async function loadCurrentSession() {
     try {
       const res = await fetch("/api/auth/me", { credentials: "include" });
-      if (!res.ok) return "";
+      if (!res.ok) return null;
       const data = await res.json();
-      return data?.data?.role || "";
+      return data?.data || null;
     } catch {
-      return "";
+      return null;
     }
+  }
+
+  function redirectToPasswordPage(session) {
+    if (!session || session.mustChangePassword !== true) return false;
+    const cur = normPath(window.location.pathname);
+    if (cur === "/password") return false;
+    const params = new URLSearchParams({ returnUrl: currentPathWithQuery() });
+    window.location.replace(`/password/?${params.toString()}`);
+    return true;
   }
 
   async function reportPageView(eventType, stayMs) {
@@ -419,10 +428,13 @@
   }
 
   async function bootstrap() {
+    const session = await loadCurrentSession();
+    if (redirectToPasswordPage(session)) {
+      return;
+    }
     const sidebar = document.getElementById("auraSidebar");
     if (sidebar) {
-      const role = await loadCurrentRole();
-      renderSidebar(sidebar, role);
+      renderSidebar(sidebar, session?.role || "");
     }
     setPageTitle();
     mountThemeControl();

@@ -50,7 +50,8 @@ internal sealed record UserStatusReq(int Status);
 /// <summary>超级管理员更新用户资料（登录用户名、显示名称、角色、状态）。</summary>
 internal sealed record UserUpdateReq(string UserName, string DisplayName, long RoleId, int Status);
 /// <summary>超级管理员重置指定用户密码。</summary>
-internal sealed record UserPasswordResetReq(string NewPassword);
+internal sealed record UserPasswordResetReq(string? NewPassword = null);
+internal sealed record ChangePasswordReq(string CurrentPassword, string NewPassword);
 internal sealed record CampusCreateReq(long? ParentId, string LevelType, string NodeName);
 internal sealed record CampusUpdateReq(string NodeName);
 internal sealed record FloorCreateReq(long NodeId, string FilePath, decimal ScaleRatio);

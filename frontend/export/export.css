@@ -1,0 +1,26 @@
+/* 文件：报表导出页样式（export.css） | File: Export Page Styles */
+.export-card {
+  max-width: 760px;
+}
+
+.export-lead {
+  margin-top: 6px;
+  margin-bottom: 14px;
+}
+
+.export-form {
+  display: grid;
+  gap: 14px;
+}
+
+.export-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 520px) {
+  .export-actions > button {
+    width: 100%;
+  }
+}

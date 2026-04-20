@@ -38,16 +38,70 @@ public static class ServiceExtensions
             : Path.GetFullPath(Path.Combine(projectRoot, retryRoot));
     }
 
-    public static IServiceCollection AddAuraServices(this IServiceCollection services, IConfiguration configuration, IHostEnvironment hostEnvironment, bool isDev)
+    private static bool IsPlaceholderValue(string? value, params string[] sentinels)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return true;
+        }
+
+        foreach (var sentinel in sentinels)
+        {
+            if (!string.IsNullOrWhiteSpace(sentinel) && value.Contains(sentinel, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static void EnsureSafeProductionConfiguration(IConfiguration configuration)
     {
         var jwtKey = configuration["Jwt:Key"];
-        var jwtIssuer = configuration["Jwt:Issuer"] ?? "Aura.Api";
-        var jwtAudience = configuration["Jwt:Audience"] ?? "Aura.Client";
+        var hmacSecret = configuration["Security:HmacSecret"];
+        var pgsqlConn = configuration.GetConnectionString("PgSql");
+        var redisConn = configuration.GetConnectionString("Redis");
+
+        if (IsPlaceholderValue(jwtKey, "PLEASE_", "aura-dev-jwt-key-please-change"))
+        {
+            throw new InvalidOperationException("生产环境缺少有效的 Jwt:Key 配置。");
+        }
+
+        if (IsPlaceholderValue(hmacSecret, "PLEASE_", "demo-hmac-secret"))
+        {
+            throw new InvalidOperationException("生产环境缺少有效的 Security:HmacSecret 配置。");
+        }
+
+        if (IsPlaceholderValue(pgsqlConn, "PLEASE_", "REPLACE_", "Password=aura_123456"))
+        {
+            throw new InvalidOperationException("生产环境缺少有效的 PostgreSQL 连接串配置。");
+        }
+
+        if (IsPlaceholderValue(redisConn, "PLEASE_", "REPLACE_"))
+        {
+            throw new InvalidOperationException("生产环境缺少有效的 Redis 连接串配置。");
+        }
+    }
+
+    public static IServiceCollection AddAuraServices(this IServiceCollection services, IConfiguration configuration, IHostEnvironment hostEnvironment, bool isDev)
+    {
+        if (hostEnvironment.IsProduction())
+        {
+            EnsureSafeProductionConfiguration(configuration);
+        }
+
+        var isTesting = hostEnvironment.IsEnvironment("Testing");
+        var jwtKey = configuration["Jwt:Key"];
+        var jwtIssuer = configuration["Jwt:Issuer"] ?? (isTesting ? "Aura.Api.Testing" : "Aura.Api");
+        var jwtAudience = configuration["Jwt:Audience"] ?? (isTesting ? "Aura.Client.Testing" : "Aura.Client");
         
         if (string.IsNullOrWhiteSpace(jwtKey))
         {
             if (!isDev) throw new InvalidOperationException("JWT Key 未配置（生产环境必须配置）");
-            jwtKey = "aura-dev-jwt-key-please-change";
+            jwtKey = isTesting
+                ? "aura-integration-test-jwt-signing-key-min-32-chars"
+                : "aura-dev-jwt-key-please-change";
         }
 
         var jwtExpireMinutes = int.TryParse(configuration["Jwt:ExpireMinutes"], out var jm) ? jm : 480;

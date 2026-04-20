@@ -2,11 +2,62 @@
 
 本文档记录仓库关键版本与阶段性改动，便于联调、回归与发布追踪。
 
+## 0.1.18（2026-04-20）
+
+### 安全 · 强制改密闭环（后端 + 前端）
+
+- **会话态新增“需改密”语义**：
+  - 后端新增 Claim：`aura:must_change_password`（见 `AuraHelpers.MustChangePasswordClaimType`），登录态与后续鉴权链路可携带该标记。
+  - `GET /api/auth/me` 返回体增加 `mustChangePassword`，便于前端在不额外请求的前提下判断是否需要跳转改密页。
+- **新增改密 API**：`POST /api/auth/change-password`（需登录态），校验当前密码、校验新密码强度（至少 12 位且包含大小写/数字/特殊字符），成功后更新密码并清除“需改密”标记，同时刷新会话 Cookie。
+- **强制拦截策略**：新增 `PasswordChangeEnforcementMiddleware` 并在管道中启用；当账号被标记为“需改密”时：
+  - 允许的最小路径白名单：`/api/auth/me`、`/api/auth/logout`、`/api/auth/change-password`、`/api/health`、`/api/health/live`
+  - 对其余 API/Hub 请求返回 `403`（`code=40321`，中文提示“当前账号需要先修改密码后才能继续使用”），避免在未改密时继续操作系统能力。
+- **新增改密页**：新增 `frontend/password/`（`password.html/.css/.js`），全程 `credentials: "include"` 使用同源 HttpOnly Cookie；支持携带 `returnUrl`，改密成功后回跳；并提供“一键退出登录”。
+- **登录页跳转逻辑**：`frontend/login/login.js` 登录成功后读取 `mustChangePassword`，若为 `true` 则优先跳转至 `/password/?returnUrl=...`，避免用户进入系统后才遇到 403 阻断。
+- **全站壳层兜底跳转**：`frontend/common/shell.js` 在加载会话（`/api/auth/me`）后，若发现 `mustChangePassword=true` 则对非改密页做 `window.location.replace` 跳转，避免用户从历史书签/刷新进入其它页面后频繁遇到 403。
+
+### 用户管理 · 密码重置与安全提示
+
+- **后端用户域补齐字段**：`sys_user` 增加 `must_change_password`（自动 `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` 确保兼容存量库），并在登录查询与用户列表中透出该字段；`DbUser`、`DbUserListItem` 与 `UserEntity` 同步增加 `MustChangePassword`。
+- **管理员重置密码**：支持“指定新密码”或“自动生成一次性临时密码”两种模式；重置后强制用户下次登录先改密（`must_change_password=true`）。
+- **前端用户页展示**：`frontend/user/user.js` 用户角色旁新增“需改密”标签（样式 `frontend/user/user.css`），重置密码成功提示改为展示“临时密码”（仅在本次操作结果中可见）；导入模板示例密码调整为更安全的示例值（`TempPass#2026`）。
+
+### 兼容性与工程改动
+
+- **生产配置更安全**：
+  - `backend/Aura.Api/appsettings.Production.json` 将 `ConnectionStrings:PgSql/Redis` 改为 `PLEASE_SET_*` 占位，避免误把示例弱口令带入生产。
+  - `backend/Aura.Api/appsettings.Production.json` 默认关闭 `Ops:Metrics:ExposePrometheus`，降低误暴露指标端点风险（生产建议按网络/反向代理策略显式开启）。
+- **默认 CSP 收紧**：`backend/Aura.Api/Program.cs` 默认 `Content-Security-Policy` 的 `script-src` 去掉 `'unsafe-eval'`，避免默认放开不必要的执行能力；如确有业务需要，可继续通过 `Security:CspPolicy` 显式覆盖。
+- **Testing 配置补齐**：`backend/Aura.Api/appsettings.Testing.json` 补齐 `Hikvision:Isapi:AlertStream` 段（默认关闭），保证测试环境配置结构与主配置一致。
+- **本机启动脚本行为调整**：`start_services.py` 默认不再自动杀端口占用进程，改为检测端口占用并提示；如确认可清理，需显式附加 `--kill-conflicts`。
+- **数据访问补充**：`PgSqlStore` 增加按设备查询摄像头列表 `GetCamerasByDeviceIdAsync`，便于后续设备联动场景复用。
+- **回归脚本修复**：`抓拍链路回归脚本.ps1` 修复 `$null` 比较告警（`if ($null -ne $Body)`），符合 PSScriptAnalyzer 推荐写法。
+- **工程配置**：`backend/Aura.Api/Aura.Api.csproj` 补充 `Microsoft.AspNetCore.OpenApi.Generated` 拦截命名空间配置，便于 OpenAPI 相关源生成/拦截器协同工作。
+- **补齐导出页目录**：新增 `frontend/export/export.html`、`export.js`、`export.css`，修复 `frontend/export/` 为空导致文档入口不可用的问题；页面复用 `window.aura.exportDataset()`（`frontend/common/shell.js`）执行导出。
+
+### 海康告警流 · 图片入库与稳态增强
+
+- **告警流图片部件接入抓拍闭环**：`HikvisionAlertStreamHostedService` 支持将 `image` 部件按配置写入既有抓拍处理链路（入库 → AI → 向量 → 告警 → 重试 → 事件推送），避免“告警有图但不进入抓拍主链路”的割裂。
+- **乱序回填与通道号稳态**：
+  - `HikvisionAlertStreamXmlInterpreter` 增加通道号与事件时间提取（兼容多字段名），并将“接收时间”作为稳态基准避免设备时钟漂移误配。
+  - 对每设备维护最近 N 条 XML 事件窗口，支持 image 先到时短暂等待 `ImageWaitForRecentXmlMs` 以回填；仍缺通道号时可按配置从摄像头布点表回退选择通道（策略 `first/latest`）。
+- **安全与去噪**：新增图片大小上限 `MaxImageBytes`、重复图片去重窗口 `DedupWindowSeconds`，超限/重复将丢弃并计数，避免异常大包与重复风暴。
+- **配置项**：`Hikvision:Isapi:AlertStream` 新增 `IngestCaptureEnabled/MaxImageBytes/AllowCameraChannelFallback/CameraChannelFallbackStrategy/DedupWindowSeconds/XmlRecentCacheSize/XmlRecentCacheTtlSeconds/ImageWaitForRecentXmlMs`，并在 `HikvisionIsapiOptionsValidator` 增加范围校验。
+
+### 测试
+
+- 新增集成测试用例：
+  - `backend/Aura.Api.Integration.Tests/PasswordChangeEnforcementTests.cs`
+  - `backend/Aura.Api.Integration.Tests/HikvisionAlertStreamRegistryRecentEventsTests.cs`
+  - `backend/Aura.Api.Integration.Tests/HikvisionAlertStreamXmlInterpreterTests.cs`
+
 ## 0.1.17（2026-04-20）
 
 ### P2 能力扩展（事件长链与媒体分层）
 
 - **海康 alertStream 后台订阅**：配置 `Hikvision:Isapi:AlertStream.Enabled=true` 且具备默认设备凭据时，`HikvisionAlertStreamHostedService` 对登记的海康 ISAPI 设备维持 `GET /ISAPI/Event/notification/alertStream` 长读；按官方 Demo 语义解析 `multipart/mixed`，跳过 `eventState=inactive`，订阅应答与事件 XML 摘要经 SignalR **`hikvision.alertStream`** 推送给楼栋管理员/超级管理员分组。新增指标 **`aura_hikvision_alert_stream_parts_total`**（按部件类型聚合，不含设备维度）。
+- **告警流乱序稳态增强**：补齐“image 部件可能先于 XML 到达”的极端顺序处理能力。后端对每设备维护**最近 N 条 XML 事件缓存**并设置 TTL 淘汰，image 到达时优先在窗口内择优回填（优先选择最新且带通道号的事件）；当暂时缺少可用 XML 时支持按配置**短暂等待最近事件**后再回填，避免乱序导致通道号缺失/元数据不完整。新增配置：`XmlRecentCacheSize`、`XmlRecentCacheTtlSeconds`、`ImageWaitForRecentXmlMs`；并补充对应单元测试覆盖。
 - **媒体规划 API**（不代理码流）：`GET /api/media/capabilities`、`POST /api/media/hikvision/stream-hint`（与抓图相同的通道号/码流类型规则生成 `StreamingChannelId`，返回典型 RTSP 路径模板，**不返回口令**）。
 - **前端设备页**：经本地 `signalr-vendor-loader.js` 加载 SignalR，展示长连接推送；增加「媒体能力说明」「RTSP 路径提示」按钮。
 - **可观测性**：`HikvisionAlertStreamRegistry` 记录各设备阶段（connecting / streaming / reconnecting / error）与最近事件时间；**`GET /api/device/hikvision/alert-stream-status`**（楼栋管理员）返回当前配置与进程内状态。`start_services.py` 成功启动后打印启用提示。**Aura.Api.Tests** 增加 multipart 单段解析自检。
@@ -810,4 +861,4 @@
 ## 版本规范
 
 - 版本号遵循 `MAJOR.MINOR.PATCH`
-- 当前版本：`0.1.16`
+- 当前版本：`0.1.18`

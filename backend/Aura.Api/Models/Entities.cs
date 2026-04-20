@@ -7,7 +7,7 @@ internal sealed record AlertEntity(long AlertId, string AlertType, string Detail
 internal sealed record OperationEntity(long OperationId, string OperatorName, string Action, string Detail, DateTimeOffset CreatedAt);
 internal sealed record SystemLogEntity(long SystemLogId, string Level, string Source, string Message, DateTimeOffset CreatedAt);
 internal sealed record RoleEntity(long RoleId, string RoleName, string PermissionJson);
-internal sealed record UserEntity(long UserId, string UserName, string DisplayName, string RoleName, long RoleId, int Status, DateTimeOffset CreatedAt, DateTimeOffset? LastLoginAt = null);
+internal sealed record UserEntity(long UserId, string UserName, string DisplayName, string RoleName, long RoleId, int Status, DateTimeOffset CreatedAt, DateTimeOffset? LastLoginAt = null, bool MustChangePassword = false);
 internal sealed record CampusNodeEntity(long NodeId, long? ParentId, string LevelType, string NodeName);
 internal sealed record FloorEntity(long FloorId, long NodeId, string FilePath, decimal ScaleRatio);
 internal sealed record CameraEntity(long CameraId, long FloorId, long DeviceId, int ChannelNo, decimal PosX, decimal PosY);

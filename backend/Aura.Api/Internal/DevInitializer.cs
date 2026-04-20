@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Aura.Api.Data;
@@ -12,12 +13,13 @@ internal static class DevInitializer
         {
             var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger(nameof(DevInitializer));
             var db = app.Services.GetRequiredService<PgSqlStore>();
-            var devResetAdminPasswordOnce = app.Configuration.GetValue("Dev:ResetAdminPasswordOnce", false);
+            var resetAdminPasswordOnce = app.Configuration.GetValue("Dev:ResetAdminPasswordOnce", false);
             var users = await db.GetUsersAsync();
-            if (users.Count == 0 || devResetAdminPasswordOnce)
+            if (users.Count == 0 || resetAdminPasswordOnce)
             {
-                var hash = BCrypt.Net.BCrypt.HashPassword("123456");
-                bool ok = false;
+                var nextPassword = ResolveDevAdminPassword();
+                var hash = BCrypt.Net.BCrypt.HashPassword(nextPassword);
+                var ok = false;
                 if (users.Count == 0)
                 {
                     var id = await db.InsertUserAsync("admin", "系统管理员", hash, 1);
@@ -25,20 +27,67 @@ internal static class DevInitializer
                 }
                 else
                 {
-                    ok = await db.UpdateUserPasswordByUserNameAsync("admin", hash);
+                    ok = await db.UpdateUserPasswordByUserNameAsync("admin", hash, mustChangePassword: false);
                 }
+
                 if (ok)
                 {
-                    logger.LogInformation("开发环境管理员已配置：用户名=admin, 密码=123456");
-                    if (devResetAdminPasswordOnce) TryDisableDevResetFlag(app);
+                    if (Environment.GetEnvironmentVariable("AURA_ADMIN_PASSWORD") is { Length: > 0 })
+                    {
+                        logger.LogInformation("开发环境管理员已配置：用户名=admin，密码已使用环境变量 AURA_ADMIN_PASSWORD。");
+                    }
+                    else
+                    {
+                        logger.LogInformation("开发环境管理员已配置：用户名=admin，临时密码={Password}", nextPassword);
+                    }
+
+                    if (resetAdminPasswordOnce)
+                    {
+                        TryDisableDevResetFlag(app);
+                    }
                 }
             }
         }
-        catch (Exception ex) 
+        catch (Exception ex)
         {
             var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger(nameof(DevInitializer));
             logger.LogError(ex, "开发环境数据初始化失败");
         }
+    }
+
+    private static string ResolveDevAdminPassword()
+    {
+        var fromEnv = (Environment.GetEnvironmentVariable("AURA_ADMIN_PASSWORD") ?? "").Trim();
+        if (!string.IsNullOrWhiteSpace(fromEnv))
+        {
+            return fromEnv;
+        }
+
+        const string upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+        const string lower = "abcdefghijkmnopqrstuvwxyz";
+        const string digits = "23456789";
+        const string symbols = "!@#$%^&*-_+=";
+        var all = upper + lower + digits + symbols;
+        var chars = new[]
+        {
+            upper[RandomNumberGenerator.GetInt32(upper.Length)],
+            lower[RandomNumberGenerator.GetInt32(lower.Length)],
+            digits[RandomNumberGenerator.GetInt32(digits.Length)],
+            symbols[RandomNumberGenerator.GetInt32(symbols.Length)]
+        }.ToList();
+
+        while (chars.Count < 16)
+        {
+            chars.Add(all[RandomNumberGenerator.GetInt32(all.Length)]);
+        }
+
+        for (var i = chars.Count - 1; i > 0; i--)
+        {
+            var j = RandomNumberGenerator.GetInt32(i + 1);
+            (chars[i], chars[j]) = (chars[j], chars[i]);
+        }
+
+        return new string(chars.ToArray());
     }
 
     private static void TryDisableDevResetFlag(WebApplication app)
@@ -54,6 +103,9 @@ internal static class DevInitializer
                 File.WriteAllText(path, node.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
             }
         }
-        catch { }
+        catch
+        {
+            // 开发环境下忽略回写失败，避免影响主流程
+        }
     }
 }

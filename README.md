@@ -80,7 +80,9 @@ dotnet run
 
 ## 开发环境账号说明
 
-- 开发环境启动时，后端会自动创建 `admin` 账号（若不存在），并将 `admin` 密码固定为 `123456`（便于本地联调）。
+- 开发环境启动时，后端会自动创建 `admin` 账号（若不存在）。
+- 若已设置环境变量 `AURA_ADMIN_PASSWORD`，开发管理员将直接使用该密码。
+- 若未设置 `AURA_ADMIN_PASSWORD`，系统会生成一组随机临时密码，仅在启动日志中输出，供首次登录使用。
 - 若你需要再次触发开发环境的“重置开关”，可将 `appsettings.Development.json` 中 `Dev:ResetAdminPasswordOnce` 设为 `true`；随后请改回 `false`（仅为一次性重置）。
 - 回归脚本与联调脚本不再内置默认密码，请先设置环境变量：`AURA_ADMIN_PASSWORD`。
 
@@ -108,7 +110,9 @@ python start_services.py
 说明：
 - **适用范围**：本机 **AI + .NET + PostgreSQL + Redis** 全栈联调；与仅跑 `dotnet test` 的 **`Testing` 环境**（可无 Redis/PG）不同。
 - 脚本会优先读取根目录 `e:\Aura\.env`，在启动过程中轮询：**AI 根路径**须 **HTTP 2xx** 且 JSON **`code=0` 且 `model_loaded=true`**；**.NET** 须 **`GET /api/health`** 为 **2xx** 且 **`code=0`** 且 `msg` 含「寓瞳」（避免误将 404 等响应当作就绪）。
-- 就绪后会用 **`AURA_ADMIN_PASSWORD`**（或 `.env`）登录并调用 **`GET /api/ops/readiness`**（超级管理员）。开发环境默认 **`admin` / `123456`** 与上文「开发环境账号说明」一致；若控制台出现 `密码=…` 日志行，脚本也可解析为兜底（与 `DevInitializer` 当前日志格式对齐）。
+- 就绪后会优先使用 **`AURA_ADMIN_PASSWORD`**（或 `.env`）登录并调用 **`GET /api/ops/readiness`**（超级管理员）。
+- 若未提供 `AURA_ADMIN_PASSWORD`，脚本会尝试从启动日志里解析开发环境生成的临时密码作为兜底。
+- 若两者都拿不到，脚本会保留基础健康检查成功结果，但跳过需要登录态的 readiness 深度检查，并给出提示。
 - 若 `readiness` 输出中 `jwt=false / hmac=false`，请检查 `.env` 中 `Jwt__Key` 与 `Security__HmacSecret` 是否仍为占位值。
 - 若用于 CI 预检，可使用 `python start_services.py --run-until-ready` 让脚本在就绪检查通过后直接退出。
 
