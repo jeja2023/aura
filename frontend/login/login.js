@@ -19,6 +19,24 @@ function buildPasswordRedirect(returnUrl) {
   return `/password/?${query.toString()}`;
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function verifySessionReady() {
+  // 少量重试：部分环境下 Cookie 写入/协议切换可能有轻微延迟
+  for (let i = 0; i < 3; i++) {
+    try {
+      const res = await fetch(`${apiBase}/api/auth/me`, { credentials: "include" });
+      if (res.ok) return true;
+    } catch {
+      // ignore
+    }
+    await sleep(120);
+  }
+  return false;
+}
+
 async function login() {
   const user = document.getElementById("user").value.trim();
   const pass = document.getElementById("pass").value.trim();
@@ -38,8 +56,17 @@ async function login() {
       const returnUrl = getReturnUrl();
       const mustChangePassword = data?.data?.mustChangePassword === true;
       result.textContent = mustChangePassword ? "登录成功，正在前往修改密码页面..." : "登录成功，正在跳转...";
-      result.hidden = true;
-      window.location.href = mustChangePassword ? buildPasswordRedirect(returnUrl) : returnUrl;
+      result.hidden = false;
+
+      const ok = await verifySessionReady();
+      if (!ok) {
+        result.textContent =
+          "登录接口返回成功，但浏览器未能建立登录状态（Cookie 未生效）。请确认使用同一协议与同一域名访问（建议全程 https），并检查浏览器/代理是否拦截了 Cookie。";
+        result.hidden = false;
+        return;
+      }
+
+      window.location.replace(mustChangePassword ? buildPasswordRedirect(returnUrl) : returnUrl);
       return;
     }
     result.textContent = data?.msg || "登录失败";

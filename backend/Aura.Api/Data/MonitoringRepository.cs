@@ -38,6 +38,27 @@ internal sealed class MonitoringRepository
         }
     }
 
+    public async Task<long?> InsertAlertWithTimeAsync(string alertType, string detail, DateTimeOffset createdAt)
+    {
+        try
+        {
+            var createdAtUtc = createdAt.ToUniversalTime();
+            await using var conn = CreateConnection();
+            return await conn.ExecuteScalarAsync<long>(
+                """
+                INSERT INTO alert_record(alert_type, detail_json, created_at)
+                VALUES(@AlertType, to_jsonb(@Detail::text), @CreatedAt)
+                RETURNING alert_id
+                """,
+                new { AlertType = alertType, Detail = detail, CreatedAt = createdAtUtc });
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "数据库写入告警失败（含时间）。alertType={AlertType}, createdAt={CreatedAt}", alertType, createdAt);
+            return null;
+        }
+    }
+
     public async Task<List<DbAlert>> GetAlertsAsync(int limit = 500)
     {
         try
