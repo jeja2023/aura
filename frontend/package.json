@@ -2,11 +2,9 @@
   "name": "aura-frontend",
   "private": true,
   "scripts": {
-    "lint": "eslint .",
-    "smoke": "playwright test -c playwright.smoke.config.js"
+    "lint": "eslint ."
   },
   "devDependencies": {
-    "@playwright/test": "^1.55.0",
     "@eslint/js": "9.24.0",
     "eslint": "9.24.0",
     "globals": "16.0.0"

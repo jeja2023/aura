@@ -1,3 +1,4 @@
+/* 文件：服务注册扩展（ServiceExtensions.cs） | File: Service registration extensions */
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;

@@ -1,3 +1,4 @@
+/* 文件：PostgreSQL 存储实现（PgSqlStore.cs） | File: PostgreSQL store implementation */
 using Microsoft.Extensions.Logging;
 using Npgsql;
 

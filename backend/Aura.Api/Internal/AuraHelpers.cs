@@ -1,3 +1,4 @@
+/* 文件：后端通用辅助方法（AuraHelpers.cs） | File: Backend helper utilities */
 using System.Security.Cryptography;
 using System.Text;
 using System.Security.Claims;

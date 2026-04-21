@@ -1,3 +1,4 @@
+/* 文件：数据库迁移工具入口（Program.cs） | File: Database migrator entrypoint */
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;

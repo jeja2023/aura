@@ -1,3 +1,4 @@
+/* 文件：后端启动入口（Program.cs） | File: Backend entrypoint */
 using System.Text.Json;
 using Aura.Api.Cache;
 using Aura.Api.Data;

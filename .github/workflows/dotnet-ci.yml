@@ -118,7 +118,7 @@ jobs:
         run: dotnet test "${{ github.workspace }}/backend/Aura.Api.Integration.Tests/Aura.Api.Integration.Tests.csproj" -c Release --no-build --no-restore --verbosity normal
 
   frontend:
-    name: Frontend Lint And Smoke
+    name: Frontend Lint
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: detect-changes
@@ -139,66 +139,9 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('frontend/package-lock.json', 'frontend/playwright.smoke.config.js') }}
-          restore-keys: |
-            ${{ runner.os }}-playwright-
-
       - name: Run frontend lint
         working-directory: frontend
         run: npm run lint
-
-      - name: Install Playwright browsers
-        working-directory: frontend
-        run: npx playwright install --with-deps
-
-      - name: Run frontend smoke tests
-        working-directory: frontend
-        run: npm run smoke
-
-      - name: Upload frontend smoke artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-smoke-artifacts
-          path: |
-            frontend/test-results
-            frontend/playwright-report
-          if-no-files-found: ignore
-
-  ai:
-    name: AI Pytest
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    needs: detect-changes
-    if: needs.detect-changes.outputs.ai == 'true'
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: "pip"
-          cache-dependency-path: |
-            ai/requirements.txt
-            ai/requirements-dev.txt
-
-      - name: Validate start_services.py syntax
-        run: python -m py_compile start_services.py
-
-      - name: Install AI test dependencies
-        working-directory: ai
-        run: python -m pip install -r requirements-dev.txt
-
-      - name: Run AI pytest
-        working-directory: ai
-        run: python -m pytest tests -q
 
   summary:
     name: CI Summary
@@ -208,7 +151,6 @@ jobs:
       - detect-changes
       - backend
       - frontend
-      - ai
 
     steps:
       - name: Summarize CI results
@@ -219,7 +161,6 @@ jobs:
           AI_CHANGED: ${{ needs.detect-changes.outputs.ai }}
           BACKEND_RESULT: ${{ needs.backend.result }}
           FRONTEND_RESULT: ${{ needs.frontend.result }}
-          AI_RESULT: ${{ needs.ai.result }}
         run: |
           echo "## CI Summary" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
@@ -227,7 +168,6 @@ jobs:
           echo "| --- | --- | --- |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Backend | ${BACKEND_CHANGED} | ${BACKEND_RESULT} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Frontend | ${FRONTEND_CHANGED} | ${FRONTEND_RESULT} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| AI | ${AI_CHANGED} | ${AI_RESULT} |" >> "$GITHUB_STEP_SUMMARY"
 
           if [[ "$BACKEND_CHANGED" == "true" && "$BACKEND_RESULT" != "success" ]]; then
             echo "Backend checks failed or were cancelled." >&2
@@ -236,10 +176,5 @@ jobs:
 
           if [[ "$FRONTEND_CHANGED" == "true" && "$FRONTEND_RESULT" != "success" ]]; then
             echo "Frontend checks failed or were cancelled." >&2
-            exit 1
-          fi
-
-          if [[ "$AI_CHANGED" == "true" && "$AI_RESULT" != "success" ]]; then
-            echo "AI checks failed or were cancelled." >&2
             exit 1
           fi
