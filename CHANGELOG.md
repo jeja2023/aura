@@ -4,6 +4,19 @@
 
 ## 0.1.20（2026-04-21）
 
+### AI 检索可观测与巡检增强（同日增量）
+
+- AI 健康检查 `GET /` 增加三类可视化字段：`熔断状态`、`限流状态`、`回填状态`，并同步保留结构化对象 `retrieval_guard`、`backfill_state` 便于程序解析。
+- 新增检索审计日志接口 `GET /ai/search-audit-logs`，返回结构化 JSON（含 `request_id`、`status`、`reason`、`latency_ms`、`engine`、`warnings` 等），用于快速定位失败与慢请求。
+- 新增 AI 检索巡检脚本 `AI检索巡检脚本.ps1`：
+  - 默认模式输出中文巡检结论与问题清单；
+  - CI 模式支持 `-JsonOutput`，仅输出结构化 JSON，退出码保持 `0=通过`、`2=未通过`、`3=执行异常`。
+- 新增运行时服务文件 `ai/services/index_runtime_service.py`、`ai/services/retrieval_guard_service.py` 与配置工具 `ai/utils/retrieval_config.py`，统一沉淀检索指标、审计记录、熔断/限流状态及参数纠偏逻辑。
+- 文档同步更新：
+  - `README.md` 补充 AI 健康字段、审计日志接口与巡检脚本用法；
+  - `docs/部署文档与运维手册.md` 补充巡检清单、字段解释与响应示例，便于值班与发布前排查。
+- 规范更新：`开发规范.md` 新增“所有新建代码文件必须添加文件头注释（中文名 + 英文名）”规则。
+
 ### AI 服务结构收敛（同日增量）
 
 - `ai/main.py` 进一步收敛为应用装配入口：保留 `create_app()` 与 `app` 导出，不再承载具体路由实现与中间件细节。

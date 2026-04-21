@@ -147,6 +147,8 @@ python start_services.py
 
 - 存活探针（负载均衡/K8s）：`GET /api/health/live`
 - 业务健康（中文提示）：`GET /api/health`
+- AI 健康检查：`GET /`（返回 `code/msg` 与 `model_loaded`，并新增 `熔断状态`、`限流状态`、`回填状态` 三个可视化字段；同时保留 `retrieval_guard`、`backfill_state` 结构化对象）
+- AI 检索审计日志：`GET /ai/search-audit-logs?limit=100`（结构化 JSON，`data.items` 每条包含 `time/request_id/success/status/reason/hit_count/latency_ms/engine/strategy/filters_applied/warnings`）
 - Prometheus 抓取（可选）：`GET /metrics`，由配置 **`Ops:Metrics:ExposePrometheus`** 控制（默认 `true`；集成测试所用 **`Testing`** 环境为 `false`）。生产环境建议仅允许监控网络或反向代理访问该路径；按路径在公网 Ingress 上拒绝的示例见 **`deploy/k8s/ingress-nginx-deny-public-metrics.example.yaml`**。
 - OpenTelemetry 链路追踪（可选）：配置 **`Ops:Telemetry:EnableTracing`** 为 **`true`** 且设置 **`Ops:Telemetry:OtlpEndpoint`**（或环境变量 **`OTEL_EXPORTER_OTLP_ENDPOINT`**）；默认关闭。协议 **`Ops:Telemetry:OtlpProtocol`** 支持 **`Grpc`**（默认）与 **`HttpProtobuf`**。
 - AI 服务访问控制（可选）：AI 进程读取 **`AURA_API_KEY`** 时，除根路径健康检查与 OpenAPI 文档外须在请求头携带 **`X-Aura-Ai-Key`**；.NET 侧配置 **`Ai:ApiKey`** 后由命名 **`HttpClient` 自动附加同名请求头。
@@ -215,6 +217,8 @@ Ops__Telemetry__ServiceName=Aura.Api
 
 - 抓拍链路回归：`powershell -ExecutionPolicy Bypass -File "e:\Aura\抓拍链路回归脚本.ps1"`
 - 全系统联调压测：`powershell -ExecutionPolicy Bypass -File "e:\Aura\全系统联调与压测脚本.ps1"`
+- AI 检索巡检：`powershell -ExecutionPolicy Bypass -File "e:\Aura\AI检索巡检脚本.ps1"`（检查 `熔断状态/限流状态/回填状态` 与检索审计日志；可通过 `-MaxLatencyMs`、`-MinRemainingQuota` 调整阈值）
+- AI 检索巡检（CI JSON 模式）：`powershell -ExecutionPolicy Bypass -File "e:\Aura\AI检索巡检脚本.ps1" -JsonOutput`（仅输出结构化 JSON，便于流水线解析；退出码仍为 `0/2/3`）
 
 ## 部署建议
 

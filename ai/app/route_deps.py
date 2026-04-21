@@ -6,7 +6,9 @@ from fastapi.responses import JSONResponse
 from PIL import Image
 
 from services.arango_service import ArangoIndexService
+from services.index_runtime_service import IndexRuntimeService
 from services.inference_service import InferenceService
+from services.retrieval_guard_service import RetrievalGuardService
 from utils.service_state import build_service_state
 from utils.vector_utils import cosine, decode_image, normalize_feature, preprocess_image
 
@@ -20,18 +22,27 @@ class RouteDeps:
     local_index: list
     arango: ArangoIndexService
     inference: InferenceService
+    index_runtime: IndexRuntimeService
+    retrieval_guard: RetrievalGuardService
 
     def mark_arango_failure(self, ex: Exception | str) -> None:
         self.arango.mark_failure(ex)
 
     def service_state(self, arango_enabled: bool | None = None) -> dict:
         enabled = (self.arango.db is not None) if arango_enabled is None else arango_enabled
-        return build_service_state(
+        payload = build_service_state(
             arango_enabled=enabled,
             arango_error=self.arango.error,
             model_loaded=self.inference.model_loaded,
             model_error=self.inference.model_error,
         )
+        guard_state = self.retrieval_guard.get_state()
+        payload["retrieval_guard"] = guard_state
+        payload["backfill_state"] = self.index_runtime.get_backfill_state()
+        payload["熔断状态"] = guard_state.get("circuit_breaker", {})
+        payload["限流状态"] = guard_state.get("rate_limiter", {})
+        payload["回填状态"] = payload["backfill_state"]
+        return payload
 
     def ensure_arango(self) -> bool:
         return self.arango.ensure()
@@ -57,3 +68,9 @@ class RouteDeps:
         if data is not None:
             payload["data"] = data
         return JSONResponse(status_code=503, content=payload)
+
+    def search_metrics(self) -> dict:
+        return self.index_runtime.get_search_metrics()
+
+    def search_audit_logs(self, *, limit: int = 100) -> dict:
+        return self.index_runtime.get_search_audit_logs(limit=limit)
