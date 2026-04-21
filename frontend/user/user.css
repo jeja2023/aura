@@ -204,6 +204,30 @@
   background: color-mix(in srgb, var(--card) 55%, var(--bg) 45%);
 }
 
+/* 用户管理：操作列按钮再收紧，避免撑高行导致出现垂直滚动条 */
+.user-list .aura-data-table {
+  --table-action-btn-min-height: 20px;
+  --table-action-btn-padding-y: 1px;
+  --table-action-btn-padding-x: 6px;
+  --table-btn-font-size: 12px;
+}
+
+.user-list .aura-data-table .aura-table-actions {
+  gap: 4px;
+}
+
+/* 状态胶囊/安全标签：避免把行高撑破全局 38px 基准 */
+.user-list .aura-data-table .user-status,
+.user-list .aura-data-table .user-security-tag {
+  padding: 1px 6px;
+  font-size: 11px;
+  line-height: 1.1;
+}
+
+.user-list .aura-data-table .user-security-tag {
+  margin-left: 6px;
+}
+
 .user-status {
   display: inline-flex;
   align-items: center;
