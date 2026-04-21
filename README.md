@@ -4,7 +4,7 @@
 
 ## 项目状态
 
-- 当前版本：`0.1.19`（细目见 **`CHANGELOG.md`**）
+- 当前版本：`0.1.20`（细目见 **`CHANGELOG.md`**）
 - 阶段状态：第一至第五阶段均已验收通过
 - 交付结论：计划项已全部完成并在 `开发计划.md` 归档勾选
 - 工程状态：后端可构建（推荐打开根目录 **`Aura.sln`** 或 `dotnet build backend/Aura.Api/Aura.Api.csproj`）、前端页面可访问、核心链路可联调
@@ -18,7 +18,7 @@
 - `backend/Aura.Api`：.NET 10 WebAPI 中枢服务；启动入口为 **`Program.cs`**，服务注册在 **`Extensions/ServiceExtensions.cs`**，路由按域拆分在 **`Extensions/AuraEndpoints*.cs`**，安全头与前端路由中间件在 **`Middleware/`**
 - `backend/Aura.Api.Tests`：轻量自检工程（聚类/导出等），可选执行
 - `backend/Aura.Api.Integration.Tests`：xUnit 集成测试（`WebApplicationFactory`，环境为 `Testing`）。**维护提示**：若修改 `backend/Aura.Api/appsettings.Testing.json` 中的 **`Jwt:Key` / `Jwt:Issuer` / `Jwt:Audience`**，必须同步修改 **`backend/Aura.Api.Integration.Tests/TestingJwt.cs`** 内同名常量，否则 `dotnet test` 会失败。
-- `ai`：Python FastAPI AI 服务（特征提取/检索）
+- `ai`：Python FastAPI AI 服务（特征提取/检索），主入口 `main.py` 已收敛为应用装配入口，核心拆分为 `app/`（启动装配/生命周期/中间件）、`routes/`（API 路由）、`vector_store/`（向量索引存取）、`services/`（Arango/推理/聚类能力）、`models/`（请求模型）
 - `database/schema.pgsql.sql`：PostgreSQL 表结构
 - `frontend`：Vanilla JS 前端页面（根目录含 **`package.json`**，维护者可执行 **`npm ci`** 与 **`npm run lint`** 做 ESLint 检查）。**NVR 设备**与**海康 ISAPI 联调**分别对应 `frontend/device/` 与 `frontend/device-diag/`（入口见下文「关键页面入口」）
 - `deploy/k8s`：Kubernetes 示例（Ingress 拒绝公网 **`/metrics`**、NetworkPolicy 入站基线）与说明文档
