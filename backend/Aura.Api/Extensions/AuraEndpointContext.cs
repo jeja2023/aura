@@ -1,4 +1,4 @@
-/* 文件：Minimal API 路由上下文 | File: Minimal API endpoint context */
+/* 鏂囦欢锛歁inimal API 璺敱涓婁笅鏂?| File: Minimal API endpoint context */
 using Microsoft.AspNetCore.Builder;
 using Aura.Api.Ai;
 using Aura.Api.Cache;
@@ -14,8 +14,15 @@ internal sealed class AuraEndpointContext
     {
         Configuration = configuration;
         IsDev = isDev;
-        AllowInMemoryFallback = configuration.GetValue("Aura:AllowInMemoryDataFallback", false);
-        Db = app.ServiceProvider.GetRequiredService<PgSqlStore>();
+        var pgSqlConnectionFactory = app.ServiceProvider.GetRequiredService<PgSqlConnectionFactory>();
+        AllowInMemoryFallback = configuration.GetValue("Aura:AllowInMemoryDataFallback", false) && !pgSqlConnectionFactory.IsConfigured;
+        PgSql = app.ServiceProvider.GetRequiredService<PgSqlStore>();
+        Users = app.ServiceProvider.GetRequiredService<UserAuthRepository>();
+        Devices = app.ServiceProvider.GetRequiredService<DeviceRepository>();
+        Capture = app.ServiceProvider.GetRequiredService<CaptureRepository>();
+        Audit = app.ServiceProvider.GetRequiredService<AuditRepository>();
+        Monitoring = app.ServiceProvider.GetRequiredService<MonitoringRepository>();
+        CampusResources = app.ServiceProvider.GetRequiredService<CampusResourceRepository>();
         Cache = app.ServiceProvider.GetRequiredService<RedisCacheService>();
         AlertNotifier = app.ServiceProvider.GetRequiredService<IAlertNotifier>();
         Store = app.ServiceProvider.GetRequiredService<AppStore>();
@@ -28,7 +35,13 @@ internal sealed class AuraEndpointContext
     public IConfiguration Configuration { get; }
     public bool IsDev { get; }
     public bool AllowInMemoryFallback { get; }
-    public PgSqlStore Db { get; }
+    public PgSqlStore PgSql { get; }
+    public UserAuthRepository Users { get; }
+    public DeviceRepository Devices { get; }
+    public CaptureRepository Capture { get; }
+    public AuditRepository Audit { get; }
+    public MonitoringRepository Monitoring { get; }
+    public CampusResourceRepository CampusResources { get; }
     public RedisCacheService Cache { get; }
     public IAlertNotifier AlertNotifier { get; }
     public AppStore Store { get; }

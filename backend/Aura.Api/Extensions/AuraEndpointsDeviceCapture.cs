@@ -1,8 +1,7 @@
-/* 文件：摄像头、设备与抓拍端点 | File: Camera, device and capture endpoints */
-using Aura.Api.Data;
 using System.Text.Json;
 using Aura.Api.Capture;
 using Aura.Api.Capture.Adapters;
+using Aura.Api.Data;
 using Aura.Api.Internal;
 using Aura.Api.Models;
 using Microsoft.AspNetCore.Builder;
@@ -15,7 +14,9 @@ internal static class AuraEndpointsDeviceCapture
 {
     public static void Map(IEndpointRouteBuilder app, AuraEndpointContext ctx)
     {
-        var db = ctx.Db;
+        var devices = ctx.Devices;
+        var campusResources = ctx.CampusResources;
+        var audit = ctx.Audit;
         var cache = ctx.Cache;
         var store = ctx.Store;
         var isDev = ctx.IsDev;
@@ -25,20 +26,22 @@ internal static class AuraEndpointsDeviceCapture
         var cameraGroup = app.MapGroup("/api/camera");
         cameraGroup.MapGet("/list", async () =>
         {
-            var rows = await db.GetCamerasAsync();
+            var rows = await campusResources.GetCamerasAsync();
             if (rows.Count > 0) return Results.Ok(new { code = 0, msg = "查询成功", data = rows });
             if (!ctx.AllowInMemoryFallback) return Results.Ok(new { code = 0, msg = "查询成功", data = new List<DbCamera>() });
             return Results.Ok(new { code = 0, msg = "查询成功", data = store.Cameras.OrderByDescending(x => x.CameraId) });
         }).RequireAuthorization("楼栋管理员");
+
         cameraGroup.MapPost("/create", async (CameraCreateReq req) =>
         {
-            var dbId = await db.InsertCameraAsync(req.FloorId, req.DeviceId, req.ChannelNo, req.PosX, req.PosY);
+            var dbId = await campusResources.InsertCameraAsync(req.FloorId, req.DeviceId, req.ChannelNo, req.PosX, req.PosY);
             if (dbId.HasValue)
             {
-                await db.InsertOperationAsync("楼栋管理员", "摄像头布点创建", $"楼层ID={req.FloorId}, 设备ID={req.DeviceId}");
+                await audit.InsertOperationAsync("楼栋管理员", "摄像头布点创建", $"楼层ID={req.FloorId}, 设备ID={req.DeviceId}");
                 return Results.Ok(new { code = 0, msg = "创建成功", data = new { cameraId = dbId.Value, req.FloorId, req.DeviceId, req.ChannelNo, req.PosX, req.PosY } });
             }
-            if (!ctx.AllowInMemoryFallback) return Results.Json(new { code = 50301, msg = "数据库写入失败，无法创建摄像头布点" }, statusCode: 503);
+
+            if (!ctx.AllowInMemoryFallback) return AuraApiResults.ServiceUnavailable("数据库写入失败，无法创建摄像头布点", 50301);
             var entity = new CameraEntity(Interlocked.Increment(ref store.CameraSeed), req.FloorId, req.DeviceId, req.ChannelNo, req.PosX, req.PosY);
             store.Cameras.Add(entity);
             AuraHelpers.AddOperationLog(store, "楼栋管理员", "摄像头布点创建", $"楼层ID={req.FloorId}, 设备ID={req.DeviceId}");
@@ -55,23 +58,56 @@ internal static class AuraEndpointsDeviceCapture
         {
             var reqJson = await http.Request.ReadFromJsonAsync<JsonElement>();
             var normalized = new HikvisionIsapiAdapter().Normalize(reqJson);
-            var v = await AuraHelpers.ValidateCaptureRequest(http.Request, normalized, db, isDev, globalHmacSecret, captureIpWhitelist, AuraEndpointContext.MaxCaptureRequestBytes, AuraEndpointContext.MaxImageBase64Chars, AuraEndpointContext.MaxMetadataJsonChars, cache);
-            return v ?? await svc.ProcessAsync(normalized, "海康ISAPI抓拍");
+            var validation = await AuraHelpers.ValidateCaptureRequest(
+                http.Request,
+                normalized,
+                devices,
+                isDev,
+                globalHmacSecret,
+                captureIpWhitelist,
+                AuraEndpointContext.MaxCaptureRequestBytes,
+                AuraEndpointContext.MaxImageBase64Chars,
+                AuraEndpointContext.MaxMetadataJsonChars,
+                cache);
+            return validation ?? await svc.ProcessAsync(normalized, "海康 ISAPI 抓拍");
         });
+
         captureGroup.MapPost("/sdk", async (HttpContext http, CaptureProcessingService svc) =>
         {
             var reqJson = await http.Request.ReadFromJsonAsync<JsonElement>();
             var normalized = new CppSdkAdapter().Normalize(reqJson);
-            var v = await AuraHelpers.ValidateCaptureRequest(http.Request, normalized, db, isDev, globalHmacSecret, captureIpWhitelist, AuraEndpointContext.MaxCaptureRequestBytes, AuraEndpointContext.MaxImageBase64Chars, AuraEndpointContext.MaxMetadataJsonChars, cache);
-            return v ?? await svc.ProcessAsync(normalized, "C++SDK抓拍");
+            var validation = await AuraHelpers.ValidateCaptureRequest(
+                http.Request,
+                normalized,
+                devices,
+                isDev,
+                globalHmacSecret,
+                captureIpWhitelist,
+                AuraEndpointContext.MaxCaptureRequestBytes,
+                AuraEndpointContext.MaxImageBase64Chars,
+                AuraEndpointContext.MaxMetadataJsonChars,
+                cache);
+            return validation ?? await svc.ProcessAsync(normalized, "C++SDK 抓拍");
         });
+
         captureGroup.MapPost("/onvif", async (HttpContext http, CaptureProcessingService svc) =>
         {
             var reqJson = await http.Request.ReadFromJsonAsync<JsonElement>();
             var normalized = new OnvifAdapter().Normalize(reqJson);
-            var v = await AuraHelpers.ValidateCaptureRequest(http.Request, normalized, db, isDev, globalHmacSecret, captureIpWhitelist, AuraEndpointContext.MaxCaptureRequestBytes, AuraEndpointContext.MaxImageBase64Chars, AuraEndpointContext.MaxMetadataJsonChars, cache);
-            return v ?? await svc.ProcessAsync(normalized, "ONVIF抓拍");
+            var validation = await AuraHelpers.ValidateCaptureRequest(
+                http.Request,
+                normalized,
+                devices,
+                isDev,
+                globalHmacSecret,
+                captureIpWhitelist,
+                AuraEndpointContext.MaxCaptureRequestBytes,
+                AuraEndpointContext.MaxImageBase64Chars,
+                AuraEndpointContext.MaxMetadataJsonChars,
+                cache);
+            return validation ?? await svc.ProcessAsync(normalized, "ONVIF 抓拍");
         });
+
         captureGroup.MapPost("/mock", async (CaptureMockReq req, CaptureOpsService svc) => await svc.CreateMockAsync(req)).RequireAuthorization("楼栋管理员");
         captureGroup.MapGet("/list", async (HttpRequest httpReq, CaptureOpsService svc) => await svc.GetCapturesAsync(httpReq)).RequireAuthorization("楼栋管理员");
 

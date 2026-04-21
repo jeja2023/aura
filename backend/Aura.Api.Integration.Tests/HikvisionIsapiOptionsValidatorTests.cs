@@ -37,10 +37,25 @@ public sealed class HikvisionIsapiOptionsValidatorTests
         var o = new HikvisionIsapiOptions
         {
             SkipSslCertificateValidation = true,
-            AllowInsecureDeviceTls = true
+            AllowInsecureDeviceTls = true,
+            GatewayMaxRequestsPerMinute = 60,
+            DeviceApiMaxRequestsPerMinute = 120
         };
         var r = v.Validate(null, o);
         Assert.True(r.Succeeded);
+    }
+
+    [Fact]
+    public void Validate_生产环境限流配置为0_失败()
+    {
+        var v = new HikvisionIsapiOptionsValidator(new StubHostEnvironment(Environments.Production));
+        var o = new HikvisionIsapiOptions
+        {
+            GatewayMaxRequestsPerMinute = 0,
+            DeviceApiMaxRequestsPerMinute = 0
+        };
+        var r = v.Validate(null, o);
+        Assert.False(r.Succeeded);
     }
 
     [Fact]

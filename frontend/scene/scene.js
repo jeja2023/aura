@@ -467,8 +467,7 @@ async function initSignalR() {
   }
   const connection = new window.signalR.HubConnectionBuilder()
     .withUrl(`${apiBase}/hubs/events`, {
-      // 纯 Cookie 会话下由浏览器自动携带 HttpOnly Cookie；accessTokenFactory 保持兼容占位
-      accessTokenFactory: () => ""
+      withCredentials: true
     })
     .withAutomaticReconnect()
     .build();

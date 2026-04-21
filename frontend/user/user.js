@@ -20,10 +20,10 @@ const deleteUserIdEl = document.getElementById("deleteUserId");
 const deleteUserIdDisplayEl = document.getElementById("deleteUserIdDisplay");
 const deleteResultEl = document.getElementById("deleteResult");
 const confirmDeleteUserBtn = document.getElementById("confirmDeleteUser");
-let latestUserPayload = null;
 const DEFAULT_USER_PAGE_SIZE = 15;
 let userPage = 1;
 let userPageSize = DEFAULT_USER_PAGE_SIZE;
+let userSearchDebounceTimer = null;
 
 function showToast(message, isError = false) {
   const text = String(message ?? "").trim();
@@ -217,28 +217,40 @@ function setElResult(el, data) {
 }
 
 async function load(options = {}) {
+  if (!options.keepPage) userPage = 1;
+  if (!Number.isFinite(userPage) || userPage <= 0) userPage = 1;
+  if (!Number.isFinite(userPageSize) || userPageSize <= 0) userPageSize = DEFAULT_USER_PAGE_SIZE;
   hideElResult(queryResultEl);
   setExportVisible(false);
   if (userListMetaEl) userListMetaEl.textContent = "正在加载用户列表…";
   if (userListEl) userListEl.innerHTML = "";
   try {
-    const res = await fetch(`${apiBase}/api/user/list`, {
+    const keyword = String(userKeywordEl?.value ?? "").trim();
+    const query = new URLSearchParams({
+      page: String(userPage),
+      pageSize: String(userPageSize)
+    });
+    if (keyword) {
+      query.set("keyword", keyword);
+    }
+    const res = await fetch(`${apiBase}/api/user/list?${query.toString()}`, {
       credentials: "include"
     });
     const payload = await res.json();
     const ok = res.ok && payload && typeof payload === "object" && payload.code === 0;
     if (ok) {
-      latestUserPayload = payload;
-      if (!options.keepPage) userPage = 1;
+      if (payload?.pager) {
+        userPage = Number(payload.pager.page ?? userPage);
+        userPageSize = Number(payload.pager.pageSize ?? userPageSize);
+      }
       renderUserList(payload);
-      const n = Array.isArray(payload.data) ? payload.data.length : 0;
+      const n = Number(payload?.pager?.total ?? (Array.isArray(payload.data) ? payload.data.length : 0));
       const tip =
         typeof payload.msg === "string" && payload.msg.trim()
           ? payload.msg.trim()
           : `查询成功，共 ${n} 个用户`;
       if (!options.silentSuccessToast) showToast(tip, false);
     } else {
-      latestUserPayload = null;
       userPage = 1;
       renderUserList(null);
       const errText =
@@ -248,7 +260,6 @@ async function load(options = {}) {
     }
   } catch (error) {
     showToast(`查询失败：${error.message}`, true);
-    latestUserPayload = null;
     userPage = 1;
     renderUserList(null);
   }
@@ -274,27 +285,15 @@ function formatRoleLabel(row) {
 function renderUserList(payload) {
   if (!userListEl) return;
   const rows = getUserRows(payload);
-  const keyword = userKeywordEl?.value.trim().toLowerCase() ?? "";
-  const filtered = keyword
-    ? rows.filter((row) => {
-        const loginName = String(row.userName ?? row.user_name ?? row.UserName ?? "").toLowerCase();
-        const displayName = String(row.displayName ?? row.display_name ?? row.DisplayName ?? "").toLowerCase();
-        return loginName.includes(keyword) || displayName.includes(keyword);
-      })
-    : rows;
-
-  const pagerApi = window.aura && typeof window.aura.paginateArray === "function" ? window.aura : null;
-  const pageData = pagerApi
-    ? pagerApi.paginateArray(filtered, userPage, userPageSize)
-    : { rows: filtered, page: 1, pageSize: filtered.length || DEFAULT_USER_PAGE_SIZE, total: filtered.length, totalPages: 1 };
-  userPage = pageData.page;
-  userPageSize = pageData.pageSize;
-  const totalCount = rows.length;
-  const filteredCount = filtered.length;
-  setExportVisible(filteredCount > 0);
+  const pager = payload && typeof payload === "object" && payload.pager && typeof payload.pager === "object" ? payload.pager : null;
+  userPage = Math.max(1, Number(pager?.page ?? userPage) || 1);
+  userPageSize = Math.max(1, Number(pager?.pageSize ?? userPageSize) || DEFAULT_USER_PAGE_SIZE);
+  const totalCount = Math.max(0, Number(pager?.total ?? rows.length) || 0);
+  const totalPages = Math.max(1, Math.ceil(totalCount / userPageSize));
+  setExportVisible(totalCount > 0);
 
   if (userListMetaEl) {
-    userListMetaEl.textContent = "";
+    userListMetaEl.textContent = totalCount > 0 ? `共 ${totalCount} 个用户，第 ${userPage} / ${totalPages} 页` : "";
   }
 
   if (!payload) {
@@ -305,7 +304,7 @@ function renderUserList(payload) {
     }
     return;
   }
-  if (!totalCount) {
+  if (totalCount <= 0) {
     userListEl.innerHTML = `<div class="user-list-empty" role="status">暂无可选用户。</div>`;
     if (userPagerEl) {
       userPagerEl.hidden = true;
@@ -313,7 +312,7 @@ function renderUserList(payload) {
     }
     return;
   }
-  if (!filteredCount) {
+  if (!rows.length) {
     userListEl.innerHTML = `<div class="user-list-empty" role="status">未匹配到用户，请调整关键词。</div>`;
     if (userPagerEl) {
       userPagerEl.hidden = true;
@@ -322,8 +321,8 @@ function renderUserList(payload) {
     return;
   }
 
-  const startIndex = (pageData.page - 1) * pageData.pageSize;
-  const bodyRows = pageData.rows
+  const startIndex = (userPage - 1) * userPageSize;
+  const bodyRows = rows
     .map((row, index) => {
       const rawId = row.userId ?? row.user_id ?? row.UserId;
       const userId = Number(rawId);
@@ -393,14 +392,14 @@ function renderUserList(payload) {
 
   if (userPagerEl && window.aura && typeof window.aura.renderPager === "function") {
     window.aura.renderPager(userPagerEl, {
-      page: pageData.page,
-      pageSize: pageData.pageSize,
-      total: filteredCount,
+      page: userPage,
+      pageSize: userPageSize,
+      total: totalCount,
       pageSizeOptions: [15, 30, 45, 60],
       onChange: (nextPage, nextPageSize) => {
         userPage = nextPage;
         userPageSize = nextPageSize;
-        renderUserList(latestUserPayload);
+        void load({ silentSuccessToast: true, keepPage: true });
       }
     });
   } else if (userPagerEl) {
@@ -666,7 +665,13 @@ importFileEl?.addEventListener("change", () => {
 });
 userKeywordEl?.addEventListener("input", () => {
   userPage = 1;
-  renderUserList(latestUserPayload);
+  if (userSearchDebounceTimer != null) {
+    window.clearTimeout(userSearchDebounceTimer);
+  }
+  userSearchDebounceTimer = window.setTimeout(() => {
+    userSearchDebounceTimer = null;
+    void load({ silentSuccessToast: true, keepPage: true });
+  }, 250);
 });
 userListEl?.addEventListener("click", (event) => {
   const target = event.target;

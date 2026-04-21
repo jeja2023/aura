@@ -7,14 +7,24 @@ namespace Aura.Api.Clustering;
 internal sealed class ClusterApplicationService
 {
     private readonly AppStore _store;
-    private readonly PgSqlStore _db;
+    private readonly CaptureRepository _captureRepository;
+    private readonly MonitoringRepository _monitoringRepository;
+    private readonly AuditRepository _auditRepository;
     private readonly AiClient _aiClient;
     private readonly FeatureClusteringService _clusterService;
 
-    public ClusterApplicationService(AppStore store, PgSqlStore db, AiClient aiClient, FeatureClusteringService clusterService)
+    public ClusterApplicationService(
+        AppStore store,
+        CaptureRepository captureRepository,
+        MonitoringRepository monitoringRepository,
+        AuditRepository auditRepository,
+        AiClient aiClient,
+        FeatureClusteringService clusterService)
     {
         _store = store;
-        _db = db;
+        _captureRepository = captureRepository;
+        _monitoringRepository = monitoringRepository;
+        _auditRepository = auditRepository;
         _aiClient = aiClient;
         _clusterService = clusterService;
     }
@@ -26,7 +36,7 @@ internal sealed class ClusterApplicationService
         var similarityThreshold = req.SimilarityThreshold <= 0 ? 0.82d : req.SimilarityThreshold;
         var minPoints = req.MinPoints <= 0 ? 2 : req.MinPoints;
 
-        var source = await _db.GetCapturesAsync(maxCaptures);
+        var source = await _captureRepository.GetCapturesAsync(maxCaptures);
         var captures = source.Count > 0
             ? source.Select(x => new CaptureClusterSource(x.CaptureId, x.DeviceId, x.ChannelNo, new DateTimeOffset(x.CaptureTime), x.MetadataJson, x.ImagePath)).ToList()
             : _store.Captures.Select(x => new CaptureClusterSource(x.CaptureId, x.DeviceId, x.ChannelNo, x.CaptureTime, x.MetadataJson, x.ImagePath)).ToList();
@@ -49,12 +59,12 @@ internal sealed class ClusterApplicationService
             ClusterAlgorithm: clusterResult.Algorithm,
             ClusterScore: group.CohesionScore)).ToList();
 
-        var cleared = await _db.ClearVirtualPersonsAsync();
+        var cleared = await _monitoringRepository.ClearVirtualPersonsAsync();
         if (cleared)
         {
             foreach (var item in results)
             {
-                await _db.InsertVirtualPersonAsync(item.Vid, item.FirstSeen, item.LastSeen, item.DeviceId, item.CaptureCount);
+                await _monitoringRepository.InsertVirtualPersonAsync(item.Vid, item.FirstSeen, item.LastSeen, item.DeviceId, item.CaptureCount);
             }
         }
         else
@@ -64,7 +74,7 @@ internal sealed class ClusterApplicationService
         }
 
         var detail = $"algorithm={clusterResult.Algorithm}, candidates={clusterResult.CandidateCount}, features={clusterResult.FeatureCount}, clusters={clusterResult.ClusterCount}, noise={clusterResult.NoiseCount}";
-        await _db.InsertOperationAsync("系统任务", "聚类执行", detail);
+        await _auditRepository.InsertOperationAsync("系统任务", "聚类执行", detail);
         _store.Operations.Add(new OperationEntity(
             OperationId: Interlocked.Increment(ref _store.OperationSeed),
             OperatorName: "系统任务",

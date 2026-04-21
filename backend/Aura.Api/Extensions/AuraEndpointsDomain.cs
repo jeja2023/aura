@@ -1,10 +1,9 @@
-/* 文件：ROI、轨迹、研判、告警与统计等端点 | File: ROI, track, judge, alerts, stats, export, vector, cluster */
-using Aura.Api.Data;
 using Aura.Api.Clustering;
-using Aura.Api.Ops;
+using Aura.Api.Data;
 using Aura.Api.Export;
 using Aura.Api.Internal;
 using Aura.Api.Models;
+using Aura.Api.Ops;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -15,7 +14,9 @@ internal static class AuraEndpointsDomain
 {
     public static void Map(IEndpointRouteBuilder app, AuraEndpointContext ctx)
     {
-        var db = ctx.Db;
+        var capture = ctx.Capture;
+        var audit = ctx.Audit;
+        var monitoring = ctx.Monitoring;
         var cache = ctx.Cache;
         var store = ctx.Store;
         var allow = ctx.AllowInMemoryFallback;
@@ -23,20 +24,22 @@ internal static class AuraEndpointsDomain
         var roiGroup = app.MapGroup("/api/roi");
         roiGroup.MapGet("/list", async () =>
         {
-            var rows = await db.GetRoisAsync();
+            var rows = await capture.GetRoisAsync();
             if (rows.Count > 0) return Results.Ok(new { code = 0, msg = "查询成功", data = rows });
             if (!allow) return Results.Ok(new { code = 0, msg = "查询成功", data = new List<DbRoi>() });
             return Results.Ok(new { code = 0, msg = "查询成功", data = store.Rois.OrderByDescending(x => x.RoiId) });
         }).RequireAuthorization("楼栋管理员");
+
         roiGroup.MapPost("/save", async (RoiReq req) =>
         {
-            var dbId = await db.InsertRoiAsync(req.CameraId, req.RoomNodeId, req.VerticesJson);
+            var dbId = await capture.InsertRoiAsync(req.CameraId, req.RoomNodeId, req.VerticesJson);
             if (dbId.HasValue)
             {
-                await db.InsertOperationAsync("楼栋管理员", "ROI规则保存", $"CameraID={req.CameraId}, RoomID={req.RoomNodeId}");
+                await audit.InsertOperationAsync("楼栋管理员", "ROI规则保存", $"CameraID={req.CameraId}, RoomID={req.RoomNodeId}");
                 return Results.Ok(new { code = 0, msg = "保存成功", data = new { roiId = dbId.Value, req.CameraId, req.RoomNodeId, req.VerticesJson } });
             }
-            if (!allow) return Results.Json(new { code = 50301, msg = "数据库写入失败，无法保存 ROI" }, statusCode: 503);
+
+            if (!allow) return AuraApiResults.ServiceUnavailable("数据库写入失败，无法保存 ROI", 50301);
             var entity = new RoiEntity(Interlocked.Increment(ref store.RoiSeed), req.CameraId, req.RoomNodeId, req.VerticesJson, DateTimeOffset.Now);
             store.Rois.Add(entity);
             AuraHelpers.AddOperationLog(store, "楼栋管理员", "ROI规则保存", $"CameraID={req.CameraId}, RoomID={req.RoomNodeId}");
@@ -47,15 +50,16 @@ internal static class AuraEndpointsDomain
         trackGroup.MapGet("/{vid}", async (HttpRequest httpReq, string vid) =>
         {
             var limit = int.TryParse(httpReq.Query["limit"].FirstOrDefault(), out var l) ? l : 500;
-            var rows = await db.GetTrackEventsAsync(vid, limit);
+            var rows = await capture.GetTrackEventsAsync(vid, limit);
             if (rows.Count > 0) return Results.Ok(new { code = 0, msg = "查询成功", data = rows });
             if (!allow) return Results.Ok(new { code = 0, msg = "查询成功", data = new List<DbTrackEvent>() });
             return Results.Ok(new { code = 0, msg = "查询成功", data = store.TrackEvents.Where(x => x.Vid == vid).OrderByDescending(x => x.EventTime).Take(limit) });
         }).RequireAuthorization("楼栋管理员");
+
         trackGroup.MapGet("/history/list", async (HttpRequest httpReq) =>
         {
             var limit = int.TryParse(httpReq.Query["limit"].FirstOrDefault(), out var l) ? l : 200;
-            var rows = await db.GetTrackEventsAsync(null, limit);
+            var rows = await capture.GetTrackEventsAsync(null, limit);
             if (rows.Count > 0) return Results.Ok(new { code = 0, msg = "查询成功", data = rows });
             if (!allow) return Results.Ok(new { code = 0, msg = "查询成功", data = new List<DbTrackEvent>() });
             return Results.Ok(new { code = 0, msg = "查询成功", data = store.TrackEvents.OrderByDescending(x => x.EventTime).Take(limit) });
@@ -71,6 +75,7 @@ internal static class AuraEndpointsDomain
             await dispatch.BroadcastRoleEventAsync("judge.updated", ret);
             return Results.Ok(new { code = 0, msg = "归寝研判完成", data = ret });
         }).RequireAuthorization("楼栋管理员");
+
         judgeGroup.MapPost("/run/abnormal", async (HttpRequest request, JudgeAbnormalReq req, JudgeService svc, EventDispatchService dispatch) =>
         {
             var rl = await AuraHelpers.CheckRateLimitAsync(request, cache, "judge.run.abnormal", 1, TimeSpan.FromMinutes(10));
@@ -82,6 +87,7 @@ internal static class AuraEndpointsDomain
             await dispatch.BroadcastRoleEventAsync("judge.updated", ret);
             return Results.Ok(new { code = 0, msg = "群租/滞留研判完成", data = ret });
         }).RequireAuthorization("楼栋管理员");
+
         judgeGroup.MapPost("/run/night", async (HttpRequest request, JudgeNightReq req, JudgeService svc, EventDispatchService dispatch) =>
         {
             var rl = await AuraHelpers.CheckRateLimitAsync(request, cache, "judge.run.night", 1, TimeSpan.FromMinutes(10));
@@ -92,6 +98,7 @@ internal static class AuraEndpointsDomain
             await dispatch.BroadcastRoleEventAsync("judge.updated", ret);
             return Results.Ok(new { code = 0, msg = "夜不归宿研判完成", data = ret });
         }).RequireAuthorization("楼栋管理员");
+
         judgeGroup.MapPost("/run/daily", async (HttpRequest request, JudgeNightReq req, JudgeService svc, EventDispatchService dispatch) =>
         {
             var rl = await AuraHelpers.CheckRateLimitAsync(request, cache, "judge.run.daily", 1, TimeSpan.FromMinutes(10));
@@ -105,11 +112,12 @@ internal static class AuraEndpointsDomain
             await dispatch.BroadcastRoleEventAsync("judge.updated", summary);
             return Results.Ok(new { code = 0, msg = "每日研判完成", data = summary });
         }).RequireAuthorization("楼栋管理员");
+
         judgeGroup.MapGet("/daily", async (HttpRequest httpReq, string? date) =>
         {
             var limit = int.TryParse(httpReq.Query["limit"].FirstOrDefault(), out var l) ? l : 2000;
             var dateFilter = string.IsNullOrWhiteSpace(date) ? DateOnly.FromDateTime(DateTime.Now) : DateOnly.Parse(date);
-            var rows = await db.GetJudgeResultsAsync(dateFilter, null, limit);
+            var rows = await monitoring.GetJudgeResultsAsync(dateFilter, null, limit);
             if (rows.Count > 0) return Results.Ok(new { code = 0, msg = "查询成功", data = rows });
             if (!allow) return Results.Ok(new { code = 0, msg = "查询成功", data = new List<DbJudgeResult>() });
             return Results.Ok(new { code = 0, msg = "查询成功", data = store.JudgeResults.Where(x => x.JudgeDate == dateFilter).OrderByDescending(x => x.JudgeId).Take(limit) });
@@ -119,16 +127,17 @@ internal static class AuraEndpointsDomain
         alertGroup.MapGet("/list", async (HttpRequest httpReq) =>
         {
             var limit = int.TryParse(httpReq.Query["limit"].FirstOrDefault(), out var l) ? l : 500;
-            var rows = await db.GetAlertsAsync(limit);
+            var rows = await monitoring.GetAlertsAsync(limit);
             if (rows.Count > 0) return Results.Ok(new { code = 0, msg = "查询成功", data = rows });
             if (!allow) return Results.Ok(new { code = 0, msg = "查询成功", data = new List<DbAlert>() });
             return Results.Ok(new { code = 0, msg = "查询成功", data = store.Alerts.OrderByDescending(x => x.AlertId).Take(limit) });
         }).RequireAuthorization("楼栋管理员");
+
         alertGroup.MapPost("/create", async (CreateAlertReq req) =>
         {
-            var dbId = await db.InsertAlertAsync(req.AlertType, req.Detail);
+            var dbId = await monitoring.InsertAlertAsync(req.AlertType, req.Detail);
             if (dbId.HasValue) return Results.Ok(new { code = 0, msg = "创建成功", data = new { alertId = dbId.Value, req.AlertType, req.Detail } });
-            if (!allow) return Results.Json(new { code = 50301, msg = "数据库写入失败，无法创建告警" }, statusCode: 503);
+            if (!allow) return AuraApiResults.ServiceUnavailable("数据库写入失败，无法创建告警", 50301);
             var entity = new AlertEntity(Interlocked.Increment(ref store.AlertSeed), req.AlertType, req.Detail, DateTimeOffset.Now);
             store.Alerts.Add(entity);
             return Results.Ok(new { code = 0, msg = "创建成功", data = entity });
@@ -147,6 +156,7 @@ internal static class AuraEndpointsDomain
                 return Results.Ok(new { code = 50001, msg = $"概览查询失败：{ex.Message}" });
             }
         }).RequireAuthorization("楼栋管理员");
+
         statsGroup.MapGet("/dashboard", async (StatsApplicationService svc) =>
         {
             try

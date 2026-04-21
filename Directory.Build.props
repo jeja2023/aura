@@ -1,11 +1,13 @@
 <Project>
   <PropertyGroup>
-    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory).verify_build\obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
-    <MSBuildProjectExtensionsPath>$(BaseIntermediateOutputPath)</MSBuildProjectExtensionsPath>
-    <DefaultItemExcludes>$(DefaultItemExcludes);obj\**</DefaultItemExcludes>
+    <AuraIntermediateRoot Condition="'$(AuraIntermediateRoot)' == '' and '$(AURA_INTERMEDIATE_ROOT)' != ''">$(AURA_INTERMEDIATE_ROOT)</AuraIntermediateRoot>
+    <AuraIntermediateRoot Condition="'$(AuraIntermediateRoot)' == '' and '$(CI)' == 'true'">$(MSBuildThisFileDirectory).verify_build\$(MSBuildProjectName)\$(Configuration)\</AuraIntermediateRoot>
+    <BaseIntermediateOutputPath Condition="'$(AuraIntermediateRoot)' != ''">$(AuraIntermediateRoot)obj\</BaseIntermediateOutputPath>
+    <MSBuildProjectExtensionsPath Condition="'$(AuraIntermediateRoot)' != ''">$(BaseIntermediateOutputPath)</MSBuildProjectExtensionsPath>
+    <DefaultItemExcludes Condition="'$(AuraIntermediateRoot)' != ''">$(DefaultItemExcludes);obj\**</DefaultItemExcludes>
   </PropertyGroup>
 
-  <ItemGroup>
+  <ItemGroup Condition="'$(AuraIntermediateRoot)' != ''">
     <Compile Remove="obj\**\*.cs" />
     <EmbeddedResource Remove="obj\**\*" />
     <None Remove="obj\**\*" />

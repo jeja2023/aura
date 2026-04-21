@@ -5,12 +5,14 @@ internal sealed class OperationQueryService
     internal sealed record OperationQueryResult(object Data, object Pager);
 
     private readonly AppStore _store;
-    private readonly PgSqlStore _db;
+    private readonly PgSqlConnectionFactory _pgSqlConnectionFactory;
+    private readonly AuditRepository _auditRepository;
 
-    public OperationQueryService(AppStore store, PgSqlStore db)
+    public OperationQueryService(AppStore store, PgSqlConnectionFactory pgSqlConnectionFactory, AuditRepository auditRepository)
     {
         _store = store;
-        _db = db;
+        _pgSqlConnectionFactory = pgSqlConnectionFactory;
+        _auditRepository = auditRepository;
     }
 
     public async Task<OperationQueryResult> GetOperationsAsync(string? keyword, int page, int pageSize)
@@ -19,8 +21,8 @@ internal sealed class OperationQueryService
         if (pageSize <= 0) pageSize = 20;
         if (pageSize > 100) pageSize = 100;
 
-        var dbResult = await _db.GetOperationsAsync(keyword, page, pageSize);
-        if (dbResult.Total > 0 || dbResult.Rows.Count > 0)
+        var dbResult = await _auditRepository.GetOperationsAsync(keyword, page, pageSize);
+        if (_pgSqlConnectionFactory.IsConfigured)
         {
             return new OperationQueryResult(dbResult.Rows, new { page, pageSize, total = dbResult.Total });
         }

@@ -66,10 +66,10 @@ internal sealed class HikvisionAlertStreamHostedService : BackgroundService
 
                 await using (var scope = _scopeFactory.CreateAsyncScope())
                 {
-                    var db = scope.ServiceProvider.GetRequiredService<PgSqlStore>();
+                    var devicesRepository = scope.ServiceProvider.GetRequiredService<DeviceRepository>();
                     var cfg = scope.ServiceProvider.GetRequiredService<IConfiguration>();
                     var store = scope.ServiceProvider.GetRequiredService<AppStore>();
-                    var devices = await ResolveTargetDevicesAsync(db, cfg, store, stream, stoppingToken).ConfigureAwait(false);
+                    var devices = await ResolveTargetDevicesAsync(devicesRepository, cfg, store, stream, stoppingToken).ConfigureAwait(false);
                     var want = new HashSet<long>(devices.Select(d => d.DeviceId));
 
                     foreach (var id in runners.Keys.ToArray())
@@ -133,13 +133,13 @@ internal sealed class HikvisionAlertStreamHostedService : BackgroundService
                     var opts = _optionsMonitor.CurrentValue;
                     var stream = opts.AlertStream;
                     var client = scope.ServiceProvider.GetRequiredService<HikvisionIsapiClient>();
-                    var db = scope.ServiceProvider.GetRequiredService<PgSqlStore>();
+                    var devicesRepository = scope.ServiceProvider.GetRequiredService<DeviceRepository>();
                     var cfg = scope.ServiceProvider.GetRequiredService<IConfiguration>();
                     var store = scope.ServiceProvider.GetRequiredService<AppStore>();
                     var dispatch = scope.ServiceProvider.GetRequiredService<EventDispatchService>();
                     var captureProcessingService = scope.ServiceProvider.GetRequiredService<CaptureProcessingService>();
 
-                    var endpoint = await ResolveDeviceEndpointAsync(db, cfg, store, deviceId, deviceStoppingToken).ConfigureAwait(false);
+                    var endpoint = await ResolveDeviceEndpointAsync(devicesRepository, cfg, store, deviceId, deviceStoppingToken).ConfigureAwait(false);
                     if (endpoint is null)
                     {
                         _registry.SetReconnecting(deviceId, "未解析到设备端点（库表或内存回退中无此设备）");
@@ -434,8 +434,8 @@ internal sealed class HikvisionAlertStreamHostedService : BackgroundService
     private async Task<List<DbCamera>> ResolveCamerasByDeviceAsync(long deviceId)
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<PgSqlStore>();
-        return await db.GetCamerasByDeviceIdAsync(deviceId).ConfigureAwait(false);
+        var campusResourcesRepository = scope.ServiceProvider.GetRequiredService<CampusResourceRepository>();
+        return await campusResourcesRepository.GetCamerasByDeviceIdAsync(deviceId).ConfigureAwait(false);
     }
 
     private static int ChooseFallbackChannelNo(List<DbCamera> cameras, string? strategy)
@@ -472,14 +472,14 @@ internal sealed class HikvisionAlertStreamHostedService : BackgroundService
     }
 
     private static async Task<List<DbDevice>> ResolveTargetDevicesAsync(
-        PgSqlStore db,
+        DeviceRepository devicesRepository,
         IConfiguration configuration,
         AppStore store,
         HikvisionAlertStreamOptions stream,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var rows = await db.GetDevicesAsync().ConfigureAwait(false);
+        var rows = await devicesRepository.GetDevicesAsync().ConfigureAwait(false);
         var filtered = rows.Where(IsHikvisionIsapiDevice).ToList();
         if (stream.DeviceIds is { Length: > 0 })
         {
@@ -530,14 +530,14 @@ internal sealed class HikvisionAlertStreamHostedService : BackgroundService
     }
 
     private static async Task<(long DeviceId, string Name, string Ip, int Port)?> ResolveDeviceEndpointAsync(
-        PgSqlStore db,
+        DeviceRepository devicesRepository,
         IConfiguration configuration,
         AppStore store,
         long deviceId,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var row = await db.GetDeviceByIdAsync(deviceId).ConfigureAwait(false);
+        var row = await devicesRepository.GetDeviceByIdAsync(deviceId).ConfigureAwait(false);
         if (row is not null)
         {
             return (row.DeviceId, row.Name, row.Ip, row.Port);

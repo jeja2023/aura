@@ -16,7 +16,8 @@ namespace Aura.Api;
 internal sealed class IdentityAdminService
 {
     private readonly AppStore _store;
-    private readonly PgSqlStore _db;
+    private readonly UserAuthRepository _userAuthRepository;
+    private readonly AuditRepository _auditRepository;
     private readonly RedisCacheService _cache;
     private readonly ILogger<IdentityAdminService> _logger;
     private readonly string _jwtKey;
@@ -26,7 +27,8 @@ internal sealed class IdentityAdminService
 
     public IdentityAdminService(
         AppStore store,
-        PgSqlStore db,
+        UserAuthRepository userAuthRepository,
+        AuditRepository auditRepository,
         RedisCacheService cache,
         ILogger<IdentityAdminService> logger,
         string jwtKey,
@@ -35,7 +37,8 @@ internal sealed class IdentityAdminService
         int jwtExpireMinutes)
     {
         _store = store;
-        _db = db;
+        _userAuthRepository = userAuthRepository;
+        _auditRepository = auditRepository;
         _cache = cache;
         _logger = logger;
         _jwtKey = jwtKey;
@@ -48,22 +51,22 @@ internal sealed class IdentityAdminService
     {
         if (string.IsNullOrWhiteSpace(req.UserName) || string.IsNullOrWhiteSpace(req.Password))
         {
-            return Results.BadRequest(new { code = 40001, msg = "用户名或密码不能为空" });
+            return AuraApiResults.BadRequest("用户名或密码不能为空", 40001);
         }
 
         var userName = req.UserName.Trim();
-        var dbUser = await _db.FindUserAsync(userName);
+        var dbUser = await _userAuthRepository.FindUserAsync(userName);
         if (dbUser is null || !BCrypt.Net.BCrypt.Verify(req.Password, dbUser.PasswordHash))
         {
             var failIp = http.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-            await _db.InsertSystemLogAsync("警告", "认证服务", $"登录失败，用户名={userName}, IP={failIp}");
+            await _auditRepository.InsertSystemLogAsync("警告", "认证服务", $"登录失败，用户名={userName}, IP={failIp}");
             _logger.LogWarning("登录失败：用户名或密码错误。用户：{UserName}", userName);
-            return Results.BadRequest(new { code = 40003, msg = "用户名或密码错误" });
+            return AuraApiResults.BadRequest("用户名或密码错误", 40003);
         }
 
         var role = AuraHelpers.ConvertRole(dbUser.RoleName);
         var loginAt = DateTimeOffset.Now;
-        if (await _db.UpdateUserLastLoginByUserNameAsync(userName, loginAt))
+        if (await _userAuthRepository.UpdateUserLastLoginByUserNameAsync(userName, loginAt))
         {
             await _cache.DeleteAsync("user:list:v2");
         }
@@ -79,8 +82,8 @@ internal sealed class IdentityAdminService
         AppendAuthCookie(http, token, expireAt);
 
         var ip = http.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-        await _db.InsertOperationAsync(userName, "用户登录", $"角色={role}, IP={ip}");
-        await _db.InsertSystemLogAsync("信息", "认证服务", $"用户登录成功，用户名={userName}, 角色={role}, IP={ip}");
+        await _auditRepository.InsertOperationAsync(userName, "用户登录", $"角色={role}, IP={ip}");
+        await _auditRepository.InsertSystemLogAsync("信息", "认证服务", $"用户登录成功，用户名={userName}, 角色={role}, IP={ip}");
         _logger.LogInformation("用户登录成功：{UserName}, 角色={Role}", userName, role);
 
         return Results.Ok(new
@@ -102,8 +105,8 @@ internal sealed class IdentityAdminService
         var userName = http.User?.Identity?.Name;
         var operatorName = string.IsNullOrWhiteSpace(userName) ? "匿名用户" : userName;
         var ip = http.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-        _ = _db.InsertOperationAsync(operatorName, "用户退出", $"IP={ip}");
-        _ = _db.InsertSystemLogAsync("信息", "认证服务", $"用户退出登录，用户名={operatorName}, IP={ip}");
+        _ = _auditRepository.InsertOperationAsync(operatorName, "用户退出", $"IP={ip}");
+        _ = _auditRepository.InsertSystemLogAsync("信息", "认证服务", $"用户退出登录，用户名={operatorName}, IP={ip}");
 
         http.Response.Cookies.Append("aura_token", string.Empty, new CookieOptions
         {
@@ -130,7 +133,7 @@ internal sealed class IdentityAdminService
             }
         }
 
-        var rows = await _db.GetRolesAsync();
+        var rows = await _userAuthRepository.GetRolesAsync();
         if (rows.Count > 0)
         {
             await _cache.SetAsync("role:list", JsonSerializer.Serialize(rows, AuraJsonSerializerOptions.Default), TimeSpan.FromMinutes(5));
@@ -145,14 +148,14 @@ internal sealed class IdentityAdminService
     {
         if (string.IsNullOrWhiteSpace(req.RoleName))
         {
-            return Results.BadRequest(new { code = 40011, msg = "角色名不能为空" });
+            return AuraApiResults.BadRequest("角色名不能为空", 40011);
         }
 
         var permissionJson = req.PermissionJson ?? "[]";
-        var dbId = await _db.InsertRoleAsync(req.RoleName, permissionJson);
+        var dbId = await _userAuthRepository.InsertRoleAsync(req.RoleName, permissionJson);
         if (dbId.HasValue)
         {
-            await _db.InsertOperationAsync("系统管理员", "角色创建", $"角色={req.RoleName}");
+            await _auditRepository.InsertOperationAsync("系统管理员", "角色创建", $"角色={req.RoleName}");
             _logger.LogInformation("角色创建成功：{RoleName}", req.RoleName);
             return Results.Ok(new { code = 0, msg = "创建成功", data = new { roleId = dbId.Value, roleName = req.RoleName, permissionJson } });
         }
@@ -164,67 +167,32 @@ internal sealed class IdentityAdminService
         return Results.Ok(new { code = 0, msg = "创建成功", data = entity });
     }
 
-    public async Task<IResult> GetUsersAsync()
-    {
-        var cached = await _cache.GetAsync("user:list:v2");
-        if (!string.IsNullOrWhiteSpace(cached))
-        {
-            var cacheRows = JsonSerializer.Deserialize<List<DbUserListItem>>(cached, AuraJsonSerializerOptions.Default);
-            if (cacheRows is { Count: > 0 })
-            {
-                return Results.Ok(new { code = 0, msg = "查询成功", data = cacheRows, from = "redis" });
-            }
-        }
-
-        var rows = await _db.GetUsersAsync();
-        if (rows.Count > 0)
-        {
-            await _cache.SetAsync("user:list:v2", JsonSerializer.Serialize(rows, AuraJsonSerializerOptions.Default), TimeSpan.FromMinutes(5));
-            return Results.Ok(new { code = 0, msg = "查询成功", data = rows });
-        }
-
-        var mockRows = _store.Users
-            .OrderByDescending(x => x.UserId)
-            .Select(u => new DbUserListItem(
-                u.UserId,
-                u.UserName,
-                u.Status,
-                u.DisplayName,
-                u.RoleName,
-                u.RoleId,
-                u.CreatedAt.DateTime,
-                u.LastLoginAt?.DateTime,
-                u.MustChangePassword))
-            .ToList();
-        return Results.Ok(new { code = 0, msg = "查询成功", data = mockRows });
-    }
-
     public async Task<IResult> CreateUserAsync(UserCreateReq req)
     {
         if (string.IsNullOrWhiteSpace(req.UserName) || string.IsNullOrWhiteSpace(req.Password))
         {
-            return Results.BadRequest(new { code = 40012, msg = "用户名或密码不能为空" });
+            return AuraApiResults.BadRequest("用户名或密码不能为空", 40012);
         }
 
         var userName = req.UserName.Trim();
         var displayName = string.IsNullOrWhiteSpace(req.DisplayName) ? userName : req.DisplayName.Trim();
         if (displayName.Length > 64)
         {
-            return Results.BadRequest(new { code = 40018, msg = "显示名称过长" });
+            return AuraApiResults.BadRequest("显示名称过长", 40018);
         }
 
         var passwordError = ValidatePassword(req.Password);
         if (passwordError is not null)
         {
-            return Results.BadRequest(new { code = 40019, msg = passwordError });
+            return AuraApiResults.BadRequest(passwordError, 40019);
         }
 
         var hash = BCrypt.Net.BCrypt.HashPassword(req.Password);
-        var dbId = await _db.InsertUserAsync(userName, displayName, hash, req.RoleId);
+        var dbId = await _userAuthRepository.InsertUserAsync(userName, displayName, hash, req.RoleId);
         if (dbId.HasValue)
         {
             await _cache.DeleteAsync("user:list:v2");
-            await _db.InsertOperationAsync("系统管理员", "用户创建", $"用户={userName}, 角色ID={req.RoleId}");
+            await _auditRepository.InsertOperationAsync("系统管理员", "用户创建", $"用户={userName}, 角色ID={req.RoleId}");
             _logger.LogInformation("用户创建成功：{UserName}", userName);
             return Results.Ok(new { code = 0, msg = "创建成功", data = new { userId = dbId.Value, userName, displayName, roleId = req.RoleId, status = 1, mustChangePassword = false } });
         }
@@ -247,11 +215,11 @@ internal sealed class IdentityAdminService
 
     public async Task<IResult> UpdateUserStatusAsync(long userId, UserStatusReq req)
     {
-        var ok = await _db.UpdateUserStatusAsync(userId, req.Status);
+        var ok = await _userAuthRepository.UpdateUserStatusAsync(userId, req.Status);
         if (ok)
         {
             await _cache.DeleteAsync("user:list:v2");
-            await _db.InsertOperationAsync("系统管理员", "用户状态更新", $"用户ID={userId}, 状态={req.Status}");
+            await _auditRepository.InsertOperationAsync("系统管理员", "用户状态更新", $"用户ID={userId}, 状态={req.Status}");
             _logger.LogInformation("用户状态更新成功：ID={UserId}, 状态={Status}", userId, req.Status);
             return Results.Ok(new { code = 0, msg = "状态更新成功" });
         }
@@ -260,7 +228,7 @@ internal sealed class IdentityAdminService
         if (uidx < 0)
         {
             _logger.LogWarning("用户状态更新失败：用户ID {UserId} 不存在", userId);
-            return Results.NotFound(new { code = 40402, msg = "用户不存在" });
+            return AuraApiResults.NotFound("用户不存在", 40402);
         }
 
         var entity = _store.Users[uidx];
@@ -275,48 +243,48 @@ internal sealed class IdentityAdminService
     public async Task<IResult> UpdateUserAsync(long userId, UserUpdateReq req)
     {
         if (string.IsNullOrWhiteSpace(req.UserName))
-            return Results.BadRequest(new { code = 40013, msg = "用户名不能为空" });
+            return AuraApiResults.BadRequest("用户名不能为空", 40013);
 
         var userName = req.UserName.Trim();
         var displayName = string.IsNullOrWhiteSpace(req.DisplayName) ? userName : req.DisplayName.Trim();
         if (userName.Length > 64)
-            return Results.BadRequest(new { code = 40016, msg = "用户名过长" });
+            return AuraApiResults.BadRequest("用户名过长", 40016);
         if (displayName.Length > 64)
-            return Results.BadRequest(new { code = 40018, msg = "显示名称过长" });
+            return AuraApiResults.BadRequest("显示名称过长", 40018);
         if (req.RoleId != 1 && req.RoleId != 2)
-            return Results.BadRequest(new { code = 40014, msg = "角色无效" });
+            return AuraApiResults.BadRequest("角色无效", 40014);
         if (req.Status != 0 && req.Status != 1)
-            return Results.BadRequest(new { code = 40015, msg = "状态无效" });
+            return AuraApiResults.BadRequest("状态无效", 40015);
 
         var roleName = req.RoleId == 1 ? "super_admin" : "building_admin";
 
         try
         {
-            var affected = await _db.UpdateUserProfileAsync(userId, userName, displayName, req.RoleId, req.Status);
+            var affected = await _userAuthRepository.UpdateUserProfileAsync(userId, userName, displayName, req.RoleId, req.Status);
             if (affected > 0)
             {
                 await _cache.DeleteAsync("user:list:v2");
-                await _db.InsertOperationAsync("系统管理员", "用户资料更新", $"用户ID={userId}, 用户名={userName}, 显示名称={displayName}, 角色ID={req.RoleId}, 状态={req.Status}");
+                await _auditRepository.InsertOperationAsync("系统管理员", "用户资料更新", $"用户ID={userId}, 用户名={userName}, 显示名称={displayName}, 角色ID={req.RoleId}, 状态={req.Status}");
                 _logger.LogInformation("用户资料已更新：UserId={UserId}", userId);
                 return Results.Ok(new { code = 0, msg = "保存成功" });
             }
         }
         catch (PostgresException ex) when (ex.SqlState == "23505")
         {
-            return Results.Json(new { code = 40901, msg = "用户名已被占用" }, statusCode: StatusCodes.Status409Conflict);
+            return AuraApiResults.Conflict("用户名已被占用", 40901);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "数据库更新用户资料异常。UserId={UserId}", userId);
-            return Results.Problem("保存失败");
+            return AuraApiResults.InternalServerError("保存失败");
         }
 
         if (_store.Users.Any(u => u.UserId != userId && string.Equals(u.UserName, userName, StringComparison.OrdinalIgnoreCase)))
-            return Results.Json(new { code = 40901, msg = "用户名已被占用" }, statusCode: StatusCodes.Status409Conflict);
+            return AuraApiResults.Conflict("用户名已被占用", 40901);
 
         var uidx = _store.Users.FindIndex(x => x.UserId == userId);
         if (uidx < 0)
-            return Results.NotFound(new { code = 40402, msg = "用户不存在" });
+            return AuraApiResults.NotFound("用户不存在", 40402);
 
         var prev = _store.Users[uidx];
         _store.Users[uidx] = prev with
@@ -339,14 +307,14 @@ internal sealed class IdentityAdminService
         var passwordError = ValidatePassword(nextPassword);
         if (passwordError is not null)
         {
-            return Results.BadRequest(new { code = 40019, msg = passwordError });
+            return AuraApiResults.BadRequest(passwordError, 40019);
         }
 
         var hash = BCrypt.Net.BCrypt.HashPassword(nextPassword);
-        if (await _db.UpdateUserPasswordByUserIdAsync(userId, hash, mustChangePassword: true))
+        if (await _userAuthRepository.UpdateUserPasswordByUserIdAsync(userId, hash, mustChangePassword: true))
         {
             await _cache.DeleteAsync("user:list:v2");
-            await _db.InsertOperationAsync("系统管理员", "用户密码重置", $"用户ID={userId}");
+            await _auditRepository.InsertOperationAsync("系统管理员", "用户密码重置", $"用户ID={userId}");
             _logger.LogInformation("用户密码已重置：UserId={UserId}", userId);
             return Results.Ok(new
             {
@@ -362,7 +330,7 @@ internal sealed class IdentityAdminService
 
         var uidx = _store.Users.FindIndex(x => x.UserId == userId);
         if (uidx < 0)
-            return Results.NotFound(new { code = 40402, msg = "用户不存在" });
+            return AuraApiResults.NotFound("用户不存在", 40402);
 
         _store.Users[uidx] = _store.Users[uidx] with { MustChangePassword = true };
         await _cache.DeleteAsync("user:list:v2");
@@ -384,35 +352,35 @@ internal sealed class IdentityAdminService
         var userName = http.User?.Identity?.Name?.Trim();
         if (string.IsNullOrWhiteSpace(userName))
         {
-            return Results.Unauthorized();
+            return AuraApiResults.Unauthorized();
         }
 
         if (string.IsNullOrWhiteSpace(req.CurrentPassword) || string.IsNullOrWhiteSpace(req.NewPassword))
         {
-            return Results.BadRequest(new { code = 40020, msg = "当前密码与新密码不能为空" });
+            return AuraApiResults.BadRequest("当前密码与新密码不能为空", 40020);
         }
 
         if (string.Equals(req.CurrentPassword, req.NewPassword, StringComparison.Ordinal))
         {
-            return Results.BadRequest(new { code = 40022, msg = "新密码不能与当前密码相同" });
+            return AuraApiResults.BadRequest("新密码不能与当前密码相同", 40022);
         }
 
         var passwordError = ValidatePassword(req.NewPassword);
         if (passwordError is not null)
         {
-            return Results.BadRequest(new { code = 40019, msg = passwordError });
+            return AuraApiResults.BadRequest(passwordError, 40019);
         }
 
-        var dbUser = await _db.FindUserAsync(userName);
+        var dbUser = await _userAuthRepository.FindUserAsync(userName);
         if (dbUser is null || !BCrypt.Net.BCrypt.Verify(req.CurrentPassword, dbUser.PasswordHash))
         {
-            return Results.BadRequest(new { code = 40023, msg = "当前密码不正确" });
+            return AuraApiResults.BadRequest("当前密码不正确", 40023);
         }
 
         var hash = BCrypt.Net.BCrypt.HashPassword(req.NewPassword);
-        if (!await _db.UpdateUserPasswordByUserNameAsync(userName, hash, mustChangePassword: false))
+        if (!await _userAuthRepository.UpdateUserPasswordByUserNameAsync(userName, hash, mustChangePassword: false))
         {
-            return Results.Problem("修改密码失败");
+            return AuraApiResults.InternalServerError("修改密码失败");
         }
 
         var userIdx = _store.Users.FindIndex(u => string.Equals(u.UserName, userName, StringComparison.OrdinalIgnoreCase));
@@ -429,8 +397,8 @@ internal sealed class IdentityAdminService
         AppendAuthCookie(http, token, expireAt);
 
         var ip = http.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-        await _db.InsertOperationAsync(userName, "修改自己的密码", $"IP={ip}");
-        await _db.InsertSystemLogAsync("信息", "认证服务", $"用户修改密码成功，用户名={userName}, IP={ip}");
+        await _auditRepository.InsertOperationAsync(userName, "修改自己的密码", $"IP={ip}");
+        await _auditRepository.InsertSystemLogAsync("信息", "认证服务", $"用户修改密码成功，用户名={userName}, IP={ip}");
 
         return Results.Ok(new
         {
@@ -448,11 +416,11 @@ internal sealed class IdentityAdminService
 
     public async Task<IResult> DeleteUserAsync(long userId)
     {
-        var ok = await _db.DeleteUserAsync(userId);
+        var ok = await _userAuthRepository.DeleteUserAsync(userId);
         if (ok)
         {
             await _cache.DeleteAsync("user:list:v2");
-            await _db.InsertOperationAsync("系统管理员", "用户删除", $"用户ID={userId}");
+            await _auditRepository.InsertOperationAsync("系统管理员", "用户删除", $"用户ID={userId}");
             _logger.LogInformation("用户已删除：UserId={UserId}", userId);
             return Results.Ok(new { code = 0, msg = "删除成功" });
         }
@@ -461,7 +429,7 @@ internal sealed class IdentityAdminService
         if (uidx < 0)
         {
             _logger.LogWarning("用户删除失败：用户ID {UserId} 不存在", userId);
-            return Results.NotFound(new { code = 40402, msg = "用户不存在" });
+            return AuraApiResults.NotFound("用户不存在", 40402);
         }
 
         _store.Users.RemoveAt(uidx);

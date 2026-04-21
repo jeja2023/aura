@@ -12,9 +12,9 @@ internal static class DevInitializer
         try
         {
             var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger(nameof(DevInitializer));
-            var db = app.Services.GetRequiredService<PgSqlStore>();
+            var usersRepository = app.Services.GetRequiredService<UserAuthRepository>();
             var resetAdminPasswordOnce = app.Configuration.GetValue("Dev:ResetAdminPasswordOnce", false);
-            var users = await db.GetUsersAsync();
+            var users = await usersRepository.GetUsersAsync();
             if (users.Count == 0 || resetAdminPasswordOnce)
             {
                 var nextPassword = ResolveDevAdminPassword();
@@ -22,23 +22,23 @@ internal static class DevInitializer
                 var ok = false;
                 if (users.Count == 0)
                 {
-                    var id = await db.InsertUserAsync("admin", "系统管理员", hash, 1);
+                    var id = await usersRepository.InsertUserAsync("admin", "系统管理员", hash, 1);
                     ok = id.HasValue;
                 }
                 else
                 {
-                    ok = await db.UpdateUserPasswordByUserNameAsync("admin", hash, mustChangePassword: false);
+                    ok = await usersRepository.UpdateUserPasswordByUserNameAsync("admin", hash, mustChangePassword: false);
                 }
 
                 if (ok)
                 {
                     if (Environment.GetEnvironmentVariable("AURA_ADMIN_PASSWORD") is { Length: > 0 })
                     {
-                        logger.LogInformation("开发环境管理员已配置：用户名=admin，密码已使用环境变量 AURA_ADMIN_PASSWORD。");
+                        logger.LogInformation("开发环境管理员已配置：用户名 admin，密码已使用环境变量 AURA_ADMIN_PASSWORD。");
                     }
                     else
                     {
-                        logger.LogInformation("开发环境管理员已配置：用户名=admin，临时密码={Password}", nextPassword);
+                        logger.LogInformation("开发环境管理员已配置：用户名 admin，临时密码 {Password}", nextPassword);
                     }
 
                     if (resetAdminPasswordOnce)

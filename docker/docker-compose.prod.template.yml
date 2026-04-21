@@ -12,6 +12,10 @@ services:
       Security__HmacSecret: ${SECURITY__HMACSECRET}
       Ops__Alert__WebhookUrl: ${OPS__ALERT__WEBHOOKURL}
       Ops__Alert__FilePath: ${OPS__ALERT__FILEPATH}
+      Ops__Metrics__ExposePrometheus: ${OPS__METRICS__EXPOSEPROMETHEUS:-false}
+      Ops__Telemetry__EnableTracing: ${OPS__TELEMETRY__ENABLETRACING:-false}
+      Ops__Telemetry__OtlpEndpoint: ${OPS__TELEMETRY__OTLPENDPOINT:-}
+      Ops__Telemetry__OtlpProtocol: ${OPS__TELEMETRY__OTLPPROTOCOL:-Grpc}
       AURA_ADMIN_USER: ${AURA_ADMIN_USER}
       AURA_ADMIN_PASSWORD: ${AURA_ADMIN_PASSWORD}
       # 可选：与 PATHS__FRONTENDROOT 配合；静态页由网关/对象存储提供时可不设置（默认探测 /app/frontend）
@@ -34,6 +38,7 @@ services:
       ARANGO_DB: ${ARANGO_DB}
       ARANGO_USER: ${ARANGO_USER}
       ARANGO_PASSWORD: ${ARANGO_PASSWORD}
+      AURA_AI_REQUIRE_ARANGO: ${AURA_AI_REQUIRE_ARANGO:-true}
       AURA_MODEL_PATH: ${AURA_MODEL_PATH}
     ports:
       - "8000:8000"

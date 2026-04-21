@@ -7,19 +7,19 @@ using Microsoft.AspNetCore.Http;
 internal sealed class SpaceCollisionService
 {
     private readonly AppStore _store;
-    private readonly PgSqlStore _db;
+    private readonly CaptureRepository _captureRepository;
     private readonly EventDispatchService _eventDispatchService;
 
-    public SpaceCollisionService(AppStore store, PgSqlStore db, EventDispatchService eventDispatchService)
+    public SpaceCollisionService(AppStore store, CaptureRepository captureRepository, EventDispatchService eventDispatchService)
     {
         _store = store;
-        _db = db;
+        _captureRepository = captureRepository;
         _eventDispatchService = eventDispatchService;
     }
 
     public async Task<IResult> CheckCollisionAsync(SpaceCollisionReq req)
     {
-        var roisDb = await _db.GetRoisAsync();
+        var roisDb = await _captureRepository.GetRoisAsync();
         var rois = roisDb.Count > 0
             ? roisDb.Select(x => new RoiEntity(x.RoiId, x.CameraId, x.RoomNodeId, x.VerticesJson, x.CreatedAt)).ToList()
             : _store.Rois.ToList();
@@ -34,7 +34,7 @@ internal sealed class SpaceCollisionService
         var events = new List<TrackEventEntity>();
         foreach (var item in matched)
         {
-            var dbId = await _db.InsertTrackEventAsync(vid, req.CameraId, item.RoiId, eventTime);
+            var dbId = await _captureRepository.InsertTrackEventAsync(vid, req.CameraId, item.RoiId, eventTime);
             var local = new TrackEventEntity(dbId ?? Interlocked.Increment(ref _store.TrackEventSeed), vid, req.CameraId, item.RoiId, eventTime);
             if (!dbId.HasValue)
             {

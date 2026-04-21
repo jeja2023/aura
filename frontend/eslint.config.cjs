@@ -3,10 +3,11 @@ const js = require("@eslint/js");
 const globals = require("globals");
 
 module.exports = [
-  { ignores: ["common/vendor/**"] },
+  { ignores: ["common/vendor/**", "test-results/**"] },
   js.configs.recommended,
   {
     files: ["**/*.js"],
+    ignores: ["playwright.smoke.config.js", "tests/smoke/**/*.js"],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: "script",
@@ -25,6 +26,16 @@ module.exports = [
           caughtErrors: "none",
         },
       ],
+    },
+  },
+  {
+    files: ["playwright.smoke.config.js", "tests/smoke/**/*.js"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "commonjs",
+      globals: {
+        ...globals.node,
+      },
     },
   },
 ];

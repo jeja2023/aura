@@ -14,7 +14,7 @@ public static class OpenTelemetryExtensions
         IConfiguration configuration,
         IHostEnvironment environment)
     {
-        var enable = configuration.GetValue("Ops:Telemetry:EnableTracing", false);
+        var enable = configuration.GetValue<bool?>("Ops:Telemetry:EnableTracing") ?? false;
         var endpoint = configuration["Ops:Telemetry:OtlpEndpoint"]?.Trim();
         if (string.IsNullOrWhiteSpace(endpoint))
         {
@@ -44,6 +44,10 @@ public static class OpenTelemetryExtensions
 
         var version = typeof(OpenTelemetryExtensions).Assembly.GetName().Version?.ToString() ?? "0.0.0";
         var protocolRaw = configuration["Ops:Telemetry:OtlpProtocol"]?.Trim();
+        if (string.IsNullOrWhiteSpace(protocolRaw))
+        {
+            protocolRaw = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_PROTOCOL")?.Trim();
+        }
 
         services.AddOpenTelemetry()
             .WithTracing(builder =>

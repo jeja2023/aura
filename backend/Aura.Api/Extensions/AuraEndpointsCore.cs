@@ -1,4 +1,3 @@
-/* 文件：Hub、健康与运维端点 | File: Hub, health and ops endpoints */
 using Aura.Api.Hubs;
 using Aura.Api.Internal;
 using Aura.Api.Models;
@@ -15,7 +14,8 @@ internal static class AuraEndpointsCore
     {
         var configuration = ctx.Configuration;
         var isDev = ctx.IsDev;
-        var db = ctx.Db;
+        var pgsql = ctx.PgSql;
+        var audit = ctx.Audit;
         var cache = ctx.Cache;
         var store = ctx.Store;
         var allow = ctx.AllowInMemoryFallback;
@@ -26,18 +26,17 @@ internal static class AuraEndpointsCore
         app.MapHub<EventHub>("/hubs/events");
 
         app.MapGet("/", () => Results.Redirect("/index/"));
-        // 负载均衡 / K8s 存活探针：无鉴权、无外部依赖，不暴露业务文案
         app.MapGet("/api/health/live", () => Results.Ok(new { status = "alive" }));
-        app.MapGet("/api/health", () => Results.Ok(new { code = 0, msg = "寓瞳中枢服务运行正常", time = DateTimeOffset.Now }));
+        app.MapGet("/api/health", () => Results.Ok(new { code = 0, msg = "寓瞳服务运行正常", time = DateTimeOffset.Now }));
 
         app.MapPost("/api/audit/page-view", async (HttpRequest request, HttpContext http, PageViewAuditReq req) =>
         {
-            if (http.User.Identity?.IsAuthenticated != true) return Results.Unauthorized();
+            if (http.User.Identity?.IsAuthenticated != true) return AuraApiResults.Unauthorized();
 
-            var rawPath = (req.PagePath ?? "").Trim();
+            var rawPath = (req.PagePath ?? string.Empty).Trim();
             if (string.IsNullOrWhiteSpace(rawPath) || rawPath.Length > 256 || !rawPath.StartsWith('/'))
             {
-                return Results.BadRequest(new { code = 40021, msg = "页面路径不合法" });
+                return AuraApiResults.BadRequest("页面路径不合法", 40021);
             }
 
             var path = AuraHelpers.Sanitize(rawPath);
@@ -50,18 +49,18 @@ internal static class AuraEndpointsCore
             var rl = await AuraHelpers.CheckRateLimitAsync(request, cache, "audit.page", 1, TimeSpan.FromMinutes(2), dim);
             if (rl is not null) return Results.Ok(new { code = 0, msg = "上报成功" });
 
-            var title = AuraHelpers.Sanitize((req.PageTitle ?? "").Trim());
-            var sessionId = AuraHelpers.Sanitize((req.SessionId ?? "").Trim());
+            var title = AuraHelpers.Sanitize((req.PageTitle ?? string.Empty).Trim());
+            var sessionId = AuraHelpers.Sanitize((req.SessionId ?? string.Empty).Trim());
             var stayMs = req.StayMs.GetValueOrDefault();
             if (stayMs < 0) stayMs = 0;
             if (stayMs > 7L * 24 * 60 * 60 * 1000) stayMs = 7L * 24 * 60 * 60 * 1000;
-            var stayPart = isLeave ? $", 停留毫秒={stayMs}" : "";
-            var titlePart = string.IsNullOrWhiteSpace(title) ? "" : $", 标题={title}";
-            var sessionPart = string.IsNullOrWhiteSpace(sessionId) ? "" : $", 会话={sessionId}";
+            var stayPart = isLeave ? $", 停留毫秒={stayMs}" : string.Empty;
+            var titlePart = string.IsNullOrWhiteSpace(title) ? string.Empty : $", 标题={title}";
+            var sessionPart = string.IsNullOrWhiteSpace(sessionId) ? string.Empty : $", 会话={sessionId}";
             var detail = $"页面={path}{titlePart}{stayPart}{sessionPart}, IP={ip}";
 
-            var opId = await db.InsertOperationAsync(userName, eventName, detail);
-            await db.InsertSystemLogAsync("信息", "页面审计", $"用户={userName}, {detail}");
+            var opId = await audit.InsertOperationAsync(userName, eventName, detail);
+            await audit.InsertSystemLogAsync("信息", "页面审计", $"用户={userName}, {detail}");
             if (!opId.HasValue && allow)
             {
                 AuraHelpers.AddOperationLog(store, userName, eventName, detail);
@@ -104,9 +103,9 @@ internal static class AuraEndpointsCore
                 && lastFailureAt.HasValue
                 && lastFailureAt.GetValueOrDefault() >= windowStart;
 
-            var jwtSecret = configuration["Jwt:Key"] ?? "";
-            var hmacSecret = configuration["Security:HmacSecret"] ?? "";
-            var pgsqlOk = await db.TryPingAsync();
+            var jwtSecret = configuration["Jwt:Key"] ?? string.Empty;
+            var hmacSecret = configuration["Security:HmacSecret"] ?? string.Empty;
+            var pgsqlOk = await pgsql.TryPingAsync();
 
             var checks = new Dictionary<string, bool>
             {
@@ -119,17 +118,24 @@ internal static class AuraEndpointsCore
                 ["alertNotify"] = !alertNotifyRecentFailure
             };
             var ready = checks.Values.All(v => v);
-            return Results.Ok(new { code = 0, msg = ready ? "就绪检查通过" : "就绪检查未通过", data = new { environment = isDev ? "开发环境" : "生产环境", ready, checks }, time = now });
+            return Results.Ok(new
+            {
+                code = 0,
+                msg = ready ? "就绪检查通过" : "就绪检查未通过",
+                data = new { environment = isDev ? "开发环境" : "生产环境", ready, checks },
+                time = now
+            });
         }).RequireAuthorization("超级管理员");
 
         app.MapPost("/api/ops/alert-notify-test", async (OpsAlertNotifyTestReq req) =>
         {
             var alertType = req.AlertType ?? "运维自检";
             await alertNotifier.NotifyAsync(new AlertNotifyMessage(alertType, req.Detail ?? "自检消息", "ops.test", DateTimeOffset.Now));
-            await db.InsertOperationAsync("系统管理员", "告警通知自检", $"类型={alertType}");
+            await audit.InsertOperationAsync("系统管理员", "告警通知自检", $"类型={alertType}");
             return Results.Ok(new { code = 0, msg = "已发送" });
         }).RequireAuthorization("超级管理员");
 
-        app.MapGet("/api/ops/alert-notify-stats", () => Results.Ok(new { code = 0, msg = "获取统计成功", data = alertNotifier.GetStats(), time = DateTimeOffset.Now })).RequireAuthorization("超级管理员");
+        app.MapGet("/api/ops/alert-notify-stats", () => Results.Ok(new { code = 0, msg = "获取统计成功", data = alertNotifier.GetStats(), time = DateTimeOffset.Now }))
+            .RequireAuthorization("超级管理员");
     }
 }

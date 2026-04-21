@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Net.Http;
 using Aura.Api.Data;
+using Aura.Api.Internal;
 using Aura.Api.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
@@ -19,7 +20,7 @@ internal enum HikvisionDemoStreamType
 /// <summary>按官方 AppsDemo 路径封装设备信息、通道与抓图。</summary>
 internal sealed class HikvisionNvrIntegrationService
 {
-    private readonly PgSqlStore _db;
+    private readonly DeviceRepository _deviceRepository;
     private readonly AppStore _store;
     private readonly IConfiguration _configuration;
     private readonly HikvisionIsapiClient _client;
@@ -28,7 +29,7 @@ internal sealed class HikvisionNvrIntegrationService
     private readonly ILogger<HikvisionNvrIntegrationService> _logger;
 
     public HikvisionNvrIntegrationService(
-        PgSqlStore db,
+        DeviceRepository deviceRepository,
         AppStore store,
         IConfiguration configuration,
         HikvisionIsapiClient client,
@@ -36,7 +37,7 @@ internal sealed class HikvisionNvrIntegrationService
         IHttpContextAccessor httpContextAccessor,
         ILogger<HikvisionNvrIntegrationService> logger)
     {
-        _db = db;
+        _deviceRepository = deviceRepository;
         _store = store;
         _configuration = configuration;
         _client = client;
@@ -50,13 +51,13 @@ internal sealed class HikvisionNvrIntegrationService
         var resolved = await ResolveEndpointAsync(req.DeviceId);
         if (resolved is null)
         {
-            return Results.NotFound(new { code = 40401, msg = "设备不存在或未在库中注册" });
+            return AuraApiResults.NotFound("设备不存在或未在库中注册", 40401);
         }
 
         var cred = ResolveCredentials(req.UserName, req.Password);
         if (cred is null)
         {
-            return Results.BadRequest(new { code = 40002, msg = "未配置海康 ISAPI 账号密码，请在配置 Hikvision:Isapi 或请求体中提供 UserName/Password" });
+            return AuraApiResults.BadRequest("未配置海康 ISAPI 账号密码，请在配置 Hikvision:Isapi 或请求体中提供 UserName/Password", 40002);
         }
 
         var opt = _options.Value;
@@ -101,13 +102,13 @@ internal sealed class HikvisionNvrIntegrationService
         var resolved = await ResolveEndpointAsync(req.DeviceId);
         if (resolved is null)
         {
-            return Results.NotFound(new { code = 40401, msg = "设备不存在或未在库中注册" });
+            return AuraApiResults.NotFound("设备不存在或未在库中注册", 40401);
         }
 
         var cred = ResolveCredentials(req.UserName, req.Password);
         if (cred is null)
         {
-            return Results.BadRequest(new { code = 40002, msg = "未配置海康 ISAPI 账号密码，请在配置 Hikvision:Isapi 或请求体中提供 UserName/Password" });
+            return AuraApiResults.BadRequest("未配置海康 ISAPI 账号密码，请在配置 Hikvision:Isapi 或请求体中提供 UserName/Password", 40002);
         }
 
         var opt = _options.Value;
@@ -190,18 +191,18 @@ internal sealed class HikvisionNvrIntegrationService
         var resolved = await ResolveEndpointAsync(req.DeviceId);
         if (resolved is null)
         {
-            return Results.NotFound(new { code = 40401, msg = "设备不存在或未在库中注册" });
+            return AuraApiResults.NotFound("设备不存在或未在库中注册", 40401);
         }
 
         var cred = ResolveCredentials(req.UserName, req.Password);
         if (cred is null)
         {
-            return Results.BadRequest(new { code = 40002, msg = "未配置海康 ISAPI 账号密码" });
+            return AuraApiResults.BadRequest("未配置海康 ISAPI 账号密码", 40002);
         }
 
         if (req.ChannelIndex < 1 || req.ChannelIndex > 512)
         {
-            return Results.BadRequest(new { code = 40003, msg = "通道序号 ChannelIndex 应在 1～512 之间（与官方 Demo 一致）" });
+            return AuraApiResults.BadRequest("通道序号 ChannelIndex 应在 1～512 之间（与官方 Demo 一致）", 40003);
         }
 
         var opt = _options.Value;
@@ -264,13 +265,13 @@ internal sealed class HikvisionNvrIntegrationService
         var resolved = await ResolveEndpointAsync(req.DeviceId);
         if (resolved is null)
         {
-            return Results.NotFound(new { code = 40401, msg = "设备不存在或未在库中注册" });
+            return AuraApiResults.NotFound("设备不存在或未在库中注册", 40401);
         }
 
         var cred = ResolveCredentials(req.UserName, req.Password);
         if (cred is null)
         {
-            return Results.BadRequest(new { code = 40002, msg = "未配置海康 ISAPI 账号密码" });
+            return AuraApiResults.BadRequest("未配置海康 ISAPI 账号密码", 40002);
         }
 
         var opt = _options.Value;
@@ -316,7 +317,7 @@ internal sealed class HikvisionNvrIntegrationService
 
     private async Task<(long DeviceId, string Name, string Ip, int Port)?> ResolveEndpointAsync(long deviceId)
     {
-        var row = await _db.GetDeviceByIdAsync(deviceId);
+        var row = await _deviceRepository.GetDeviceByIdAsync(deviceId);
         if (row is not null)
         {
             return (row.DeviceId, row.Name, row.Ip, row.Port);
@@ -352,18 +353,18 @@ internal sealed class HikvisionNvrIntegrationService
         var resolved = await ResolveEndpointAsync(req.DeviceId);
         if (resolved is null)
         {
-            return Results.NotFound(new { code = 40401, msg = "设备不存在或未在库中注册" });
+            return AuraApiResults.NotFound("设备不存在或未在库中注册", 40401);
         }
 
         var cred = ResolveCredentials(req.UserName, req.Password);
         if (cred is null)
         {
-            return Results.BadRequest(new { code = 40002, msg = "未配置海康 ISAPI 账号密码" });
+            return AuraApiResults.BadRequest("未配置海康 ISAPI 账号密码", 40002);
         }
 
         if (string.IsNullOrWhiteSpace(req.StreamingChannelId) || req.StreamingChannelId.Length > 16)
         {
-            return Results.BadRequest(new { code = 40008, msg = "StreamingChannelId 无效（示例：101 表示第 1 路主码流）" });
+            return AuraApiResults.BadRequest("StreamingChannelId 无效（示例：101 表示第 1 路主码流）", 40008);
         }
 
         var opt = _options.Value;
@@ -447,12 +448,12 @@ internal sealed class HikvisionNvrIntegrationService
         var resolved = await ResolveEndpointAsync(req.DeviceId);
         if (resolved is null)
         {
-            return Results.NotFound(new { code = 40401, msg = "设备不存在或未在库中注册" });
+            return AuraApiResults.NotFound("设备不存在或未在库中注册", 40401);
         }
 
         if (req.ChannelIndex < 1 || req.ChannelIndex > 512)
         {
-            return Results.BadRequest(new { code = 40003, msg = "通道序号 ChannelIndex 应在 1～512 之间" });
+            return AuraApiResults.BadRequest("通道序号 ChannelIndex 应在 1～512 之间", 40003);
         }
 
         var streamKind = (HikvisionDemoStreamType)Math.Clamp(req.StreamType, 0, 2);
@@ -494,18 +495,18 @@ internal sealed class HikvisionNvrIntegrationService
         var resolved = await ResolveEndpointAsync(req.DeviceId);
         if (resolved is null)
         {
-            return Results.NotFound(new { code = 40401, msg = "设备不存在或未在库中注册" });
+            return AuraApiResults.NotFound("设备不存在或未在库中注册", 40401);
         }
 
         var cred = ResolveCredentials(req.UserName, req.Password);
         if (cred is null)
         {
-            return Results.BadRequest(new { code = 40002, msg = "未配置海康 ISAPI 账号密码" });
+            return AuraApiResults.BadRequest("未配置海康 ISAPI 账号密码", 40002);
         }
 
         if (string.IsNullOrWhiteSpace(req.ImageBase64))
         {
-            return Results.BadRequest(new { code = 40009, msg = "ImageBase64 不能为空" });
+            return AuraApiResults.BadRequest("ImageBase64 不能为空", 40009);
         }
 
         byte[] bytes;
@@ -515,14 +516,14 @@ internal sealed class HikvisionNvrIntegrationService
         }
         catch
         {
-            return Results.BadRequest(new { code = 40006, msg = "ImageBase64 不是有效的 Base64" });
+            return AuraApiResults.BadRequest("ImageBase64 不是有效的 Base64", 40006);
         }
 
         var opt = _options.Value;
         var maxBytes = Math.Clamp(opt.MaxSdtPictureUploadBytes, 1024, opt.GatewayMaxRequestBodyBytes);
         if (bytes.Length > maxBytes)
         {
-            return Results.BadRequest(new { code = 40010, msg = $"图片数据超过配置上限（{maxBytes} 字节）" });
+            return AuraApiResults.BadRequest($"图片数据超过配置上限（{maxBytes} 字节）", 40010);
         }
 
         var rawName = string.IsNullOrWhiteSpace(req.FileName) ? "upload.jpg" : req.FileName.Trim();
@@ -530,13 +531,13 @@ internal sealed class HikvisionNvrIntegrationService
             || rawName.Contains("..", StringComparison.Ordinal)
             || rawName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
         {
-            return Results.BadRequest(new { code = 40011, msg = "FileName 无效（仅允许不含路径的合法文件名）" });
+            return AuraApiResults.BadRequest("FileName 无效（仅允许不含路径的合法文件名）", 40011);
         }
 
         var safeName = Path.GetFileName(rawName);
         if (string.IsNullOrEmpty(safeName))
         {
-            return Results.BadRequest(new { code = 40011, msg = "FileName 无效（仅允许不含路径的合法文件名）" });
+            return AuraApiResults.BadRequest("FileName 无效（仅允许不含路径的合法文件名）", 40011);
         }
 
         var partType = string.IsNullOrWhiteSpace(req.PartContentType) ? "image/jpeg" : req.PartContentType.Trim();
@@ -608,14 +609,16 @@ internal sealed class HikvisionNvrIntegrationService
     {
         if (_options.Value.DeviceApiIncludeErrorBodyIn502)
         {
-            return Results.Json(
-                new { code, msg, detail, httpStatus, deviceId, raw = rawBody },
-                statusCode: StatusCodes.Status502BadGateway);
+            return AuraApiResults.BadGateway(
+                msg,
+                code,
+                new { detail, httpStatus, deviceId, raw = rawBody });
         }
 
-        return Results.Json(
-            new { code, msg, detail, httpStatus, deviceId },
-            statusCode: StatusCodes.Status502BadGateway);
+        return AuraApiResults.BadGateway(
+            msg,
+            code,
+            new { detail, httpStatus, deviceId });
     }
 
     private IResult DeviceApi502Snapshot(
@@ -629,30 +632,28 @@ internal sealed class HikvisionNvrIntegrationService
     {
         if (_options.Value.DeviceApiIncludeErrorBodyIn502)
         {
-            return Results.Json(
+            return AuraApiResults.BadGateway(
+                msg,
+                code,
                 new
                 {
-                    code,
-                    msg,
                     detail,
                     httpStatus,
                     deviceId,
                     streamingChannelId,
                     raw = rawBody
-                },
-                statusCode: StatusCodes.Status502BadGateway);
+                });
         }
 
-        return Results.Json(
+        return AuraApiResults.BadGateway(
+            msg,
+            code,
             new
             {
-                code,
-                msg,
                 detail,
                 httpStatus,
                 deviceId,
                 streamingChannelId
-            },
-            statusCode: StatusCodes.Status502BadGateway);
+            });
     }
 }

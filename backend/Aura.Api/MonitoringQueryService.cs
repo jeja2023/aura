@@ -5,13 +5,25 @@ using Aura.Api.Ops;
 internal sealed class MonitoringQueryService
 {
     private readonly AppStore _store;
-    private readonly PgSqlStore _db;
+    private readonly PgSqlConnectionFactory _pgSqlConnectionFactory;
+    private readonly CaptureRepository _captureRepository;
+    private readonly MonitoringRepository _monitoringRepository;
+    private readonly AuditRepository _auditRepository;
     private readonly EventDispatchService _eventDispatchService;
 
-    public MonitoringQueryService(AppStore store, PgSqlStore db, EventDispatchService eventDispatchService)
+    public MonitoringQueryService(
+        AppStore store,
+        PgSqlConnectionFactory pgSqlConnectionFactory,
+        CaptureRepository captureRepository,
+        MonitoringRepository monitoringRepository,
+        AuditRepository auditRepository,
+        EventDispatchService eventDispatchService)
     {
         _store = store;
-        _db = db;
+        _pgSqlConnectionFactory = pgSqlConnectionFactory;
+        _captureRepository = captureRepository;
+        _monitoringRepository = monitoringRepository;
+        _auditRepository = auditRepository;
         _eventDispatchService = eventDispatchService;
     }
 
@@ -21,8 +33,8 @@ internal sealed class MonitoringQueryService
         const int maxLimit = 2000;
         var lim = limit <= 0 ? defaultLimit : Math.Clamp(limit, 1, maxLimit);
 
-        var rows = await _db.GetTrackEventsAsync(vid, lim);
-        if (rows.Count > 0)
+        var rows = await _captureRepository.GetTrackEventsAsync(vid, lim);
+        if (_pgSqlConnectionFactory.IsConfigured)
         {
             return Results.Ok(new { code = 0, msg = "查询成功", data = new { vid, limit = lim, points = rows.Select(x => new { x.CameraId, x.RoiId, time = x.EventTime }) } });
         }
@@ -41,8 +53,8 @@ internal sealed class MonitoringQueryService
         const int maxLimit = 5000;
         var lim = limit <= 0 ? defaultLimit : Math.Clamp(limit, 1, maxLimit);
         var day = string.IsNullOrWhiteSpace(date) ? DateOnly.FromDateTime(DateTime.Now) : DateOnly.Parse(date);
-        var rows = await _db.GetJudgeResultsAsync(day, null, lim);
-        if (rows.Count > 0)
+        var rows = await _monitoringRepository.GetJudgeResultsAsync(day, null, lim);
+        if (_pgSqlConnectionFactory.IsConfigured)
         {
             return Results.Ok(new { code = 0, msg = "查询成功", data = rows, limit = lim });
         }
@@ -62,8 +74,8 @@ internal sealed class MonitoringQueryService
         const int maxLimit = 2000;
         var lim = limit <= 0 ? defaultLimit : Math.Clamp(limit, 1, maxLimit);
 
-        var rows = await _db.GetAlertsAsync(lim);
-        if (rows.Count > 0)
+        var rows = await _monitoringRepository.GetAlertsAsync(lim);
+        if (_pgSqlConnectionFactory.IsConfigured)
         {
             var mapped = rows.Select(x => new AlertEntity(x.AlertId, x.AlertType, x.Detail, x.CreatedAt));
             return Results.Ok(new { code = 0, msg = "查询成功", data = mapped });
@@ -75,14 +87,14 @@ internal sealed class MonitoringQueryService
     public async Task<IResult> CreateAlertAsync(CreateAlertReq req)
     {
         var entity = new AlertEntity(Interlocked.Increment(ref _store.AlertSeed), req.AlertType, req.Detail, DateTimeOffset.Now);
-        var dbId = await _db.InsertAlertAsync(entity.AlertType, entity.Detail);
+        var dbId = await _monitoringRepository.InsertAlertAsync(entity.AlertType, entity.Detail);
         var saved = dbId.HasValue ? entity with { AlertId = dbId.Value } : entity;
         if (!dbId.HasValue)
         {
             _store.Alerts.Add(saved);
         }
 
-        await _db.InsertOperationAsync("楼栋管理员", "手动告警", $"类型={req.AlertType}");
+        await _auditRepository.InsertOperationAsync("楼栋管理员", "手动告警", $"类型={req.AlertType}");
         _store.Operations.Add(new OperationEntity(
             OperationId: Interlocked.Increment(ref _store.OperationSeed),
             OperatorName: "楼栋管理员",
@@ -96,8 +108,8 @@ internal sealed class MonitoringQueryService
 
     public async Task<IResult> GetClustersAsync()
     {
-        var rows = await _db.GetVirtualPersonsAsync();
-        if (rows.Count > 0)
+        var rows = await _monitoringRepository.GetVirtualPersonsAsync();
+        if (_pgSqlConnectionFactory.IsConfigured)
         {
             return Results.Ok(new { code = 0, msg = "查询成功", data = rows });
         }

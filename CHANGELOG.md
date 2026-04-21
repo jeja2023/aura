@@ -2,6 +2,83 @@
 
 本文档记录仓库关键版本与阶段性改动，便于联调、回归与发布追踪。
 
+## 0.1.19（2026-04-21）
+
+### 本次说明
+
+- 本次为“数据库迁移工具化 + 数据访问层拆分 + 统一错误响应 + 安全扫描与回归测试补齐”的综合迭代，覆盖后端、数据库、AI、前端与 CI。
+- 变更以兼容存量环境为前提：新增增量 SQL 迁移脚本与 `Aura.DbMigrator`，并将“运行时修复 identity 序列”的行为迁移为显式迁移步骤，便于上线可控。
+
+### CI / 安全基线（GitHub Actions）
+
+- 新增安全扫描工作流：
+  - CodeQL：代码静态分析。
+  - Gitleaks：敏感信息泄露扫描。
+  - Trivy：依赖与镜像漏洞扫描（按仓库策略执行）。
+
+### 数据库 · 增量迁移与可控执行
+
+- **迁移脚本目录补齐**：新增 `database/migrations/001..004_*.sql`，用于对存量库做字段/表/索引与序列同步修复（基线仍以 `database/schema.pgsql.sql` 为准）。
+- **迁移工具**：新增 `backend/Aura.DbMigrator`：
+  - `status`：查看已应用/待应用脚本与校验和一致性。
+  - `migrate`：按版本顺序应用待执行脚本，并记录到 `schema_migrations`。
+  - `bootstrap`：仅空库可用；先应用 `schema.pgsql.sql`，再将当前增量脚本登记为 baseline，统一迁移历史。
+- **运行时行为调整**：从 `003_sync_identity_sequences.sql` 起，应用不再在运行时修复 `sys_role/sys_user` 的 identity 序列；升级时需先执行对应迁移脚本（详见 `database/migrations/README.txt`）。
+
+### 后端 · 数据访问层拆分与统一错误响应
+
+- **数据访问层拆分**：新增 `backend/Aura.Api/Data/*Repository.cs`、`PgSqlConnectionFactory.cs`、`PgSqlRecords.cs`、`UserQueryService.cs` 等，将原 `PgSqlStore` 的职责拆分为更明确的仓储与查询服务，降低超大文件维护成本并便于后续单测/集测覆盖。
+- **统一错误响应模型**：新增 `ApiErrorResponse` 与 `AuraApiResults`，用于 Minimal API 与中间件统一输出结构化 JSON 错误（`code/msg/data/traceId`），避免前端在不同错误形态间解析不稳定。
+- **全局异常处理与鉴权链路**：`GlobalExceptionHandlerExtensions`、端点扩展与相关服务做了配套更新，以对齐统一错误返回与新数据访问层。
+
+### 修复与维护性
+
+- **Testing 配置合法化**：移除 `backend/Aura.Api/appsettings.Testing.json` 中的 `//` 注释，避免 JSON 解析/校验器报错（JSON 标准不支持注释）。
+- **测试警告清零**：修复 `xUnit1031/xUnit2013` 分析器警告（测试改为 `async/await`、集合空断言改为 `Assert.Empty`），确保 `dotnet build` 在仓库默认规则下无警告通过。
+
+### AI · 严格模式与测试补齐
+
+- 新增 AI 侧开发依赖清单 `ai/requirements-dev.txt`，并补齐 `pytest` 用例（`ai/tests/test_main.py`）：
+  - 覆盖健康检查、特征提取、检索回退与“严格模式（要求 Arango 可用）”下的 503 行为与拒绝内存回退策略。
+
+### 前端 · 冒烟测试与工程约束
+
+- 新增 Playwright 冒烟测试框架与用例（`frontend/tests/smoke/*`），并提供 `frontend/playwright.smoke.config.js`：
+  - 本地默认优先使用系统 Chrome（减少缺少 ffmpeg/浏览器依赖导致的阻塞），CI 继续使用 Playwright 安装浏览器。
+- 工程侧配套更新：`frontend/package.json` 增加 `lint/smoke` 脚本，`frontend/eslint.config.cjs` 与锁文件同步更新。
+
+### 按文件落点（审计清单）
+
+- **CI / 安全扫描**：
+  - 新增：`.github/workflows/codeql.yml`、`.github/workflows/gitleaks.yml`、`.github/workflows/trivy.yml`
+  - 修改：`.github/workflows/dotnet-ci.yml`
+- **后端（`backend/Aura.Api`）**：
+  - 修改：`Program.cs`、`Extensions/*`、`Middleware/*`、`Services/Hikvision/*`、`Capture/*`、`Export/*`、`Clustering/*`、`*ApplicationService.cs`、`DeviceManagementService.cs`、`IdentityAdminService.cs`、`JudgeService.cs`、`ResourceManagementService.cs`、`RetryProcessingService.cs`、`MonitoringQueryService.cs`、`OperationQueryService.cs`、`OutputApplicationService.cs`、`SystemLogQueryService.cs`、`VectorApplicationService.cs`、`SpaceCollisionService.cs`
+  - 修改：`Data/PgSqlStore.cs`
+  - 新增：`Data/AuditRepository.cs`、`Data/CampusResourceRepository.cs`、`Data/CaptureRepository.cs`、`Data/DeviceRepository.cs`、`Data/MonitoringRepository.cs`、`Data/PgSqlConnectionFactory.cs`、`Data/PgSqlRecords.cs`、`Data/UserAuthRepository.cs`、`Internal/AuraApiResults.cs`、`Models/ApiErrorResponse.cs`、`UserQueryService.cs`
+  - 配置修改：`appsettings.json`、`appsettings.Development.json`、`appsettings.Production.json`、`appsettings.Testing.json`
+- **后端测试**：
+  - 修改：`backend/Aura.Api.Integration.Tests/HikvisionIsapiOptionsValidatorTests.cs`、`backend/Aura.Api.Integration.Tests/PasswordChangeEnforcementTests.cs`
+  - 新增：`backend/Aura.Api.Integration.Tests/UnifiedErrorResponseTests.cs`、`backend/Aura.Api.Integration.Tests/UserPaginationTests.cs`
+  - 修改：`backend/Aura.Api.Tests/Aura.Api.Tests.csproj`
+  - 删除：`backend/Aura.Api.Tests/Program.cs`
+  - 新增：`backend/Aura.Api.Tests/ClusteringTests.cs`、`backend/Aura.Api.Tests/HikvisionAlertStreamMultipartParserTests.cs`、`backend/Aura.Api.Tests/TabularExportServiceTests.cs`
+- **数据库**：
+  - 修改：`database/schema.pgsql.sql`、`database/migrations/README.txt`
+  - 新增：`database/migrations/001_ensure_sys_user_columns.sql`、`002_ensure_log_system_table.sql`、`003_sync_identity_sequences.sql`、`004_add_log_search_trgm_indexes.sql`
+- **数据库迁移工具**：
+  - 新增：`backend/Aura.DbMigrator/`（`Aura.DbMigrator.csproj`、`Program.cs`）
+- **AI**：
+  - 修改：`ai/main.py`
+  - 新增：`ai/requirements-dev.txt`、`ai/tests/test_main.py`
+- **前端**：
+  - 修改：`frontend/common/shell.js`、`frontend/device/vendors/hik-isapi-actions.js`、`frontend/index/index.js`、`frontend/scene/scene.js`、`frontend/user/user.js`
+  - 修改：`frontend/package.json`、`frontend/package-lock.json`、`frontend/eslint.config.cjs`
+  - 新增：`frontend/playwright.smoke.config.js`、`frontend/tests/smoke/server.js`、`frontend/tests/smoke/smoke.spec.js`
+  - 产物：`frontend/test-results/.last-run.json`（测试输出，是否纳入版本管理以仓库策略为准）
+- **部署/脚本与模板**：
+  - 修改：`.env.example`、`Aura.sln`、`docker/.env.prod.example`、`docker/deploy-aura-ubuntu.sh`、`docker/docker-compose.prod.template.yml`
+
 ## 0.1.18（2026-04-20）
 
 ### 安全 · 强制改密闭环（后端 + 前端）

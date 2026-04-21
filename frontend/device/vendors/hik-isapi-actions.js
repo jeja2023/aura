@@ -183,7 +183,12 @@
       res.status === 503 ||
       (typeof data?.code === "number" && data.code >= 50200 && data.code < 50400)
     ) {
-      const detail = typeof data?.detail === "string" ? data.detail : "";
+      const detail =
+        typeof data?.detail === "string"
+          ? data.detail
+          : typeof data?.data?.detail === "string"
+            ? data.data.detail
+            : "";
       return `【设备或上游异常】${typeof data?.msg === "string" ? data.msg : "调用失败"}${detail ? `（${detail}）` : ""}\n\n`;
     }
     if (!res.ok) {
@@ -591,7 +596,7 @@
     if (!window.signalR) return;
     try {
       const connection = new window.signalR.HubConnectionBuilder()
-        .withUrl(`${apiBase}/hubs/events`, { accessTokenFactory: () => "" })
+        .withUrl(`${apiBase}/hubs/events`, { withCredentials: true })
         .withAutomaticReconnect()
         .build();
       connection.on("hikvision.alertStream", (payload) => {

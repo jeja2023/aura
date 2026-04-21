@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http;
+using System.Text.Json;
 using Xunit;
 
 namespace Aura.Api.Integration.Tests;
@@ -40,7 +41,10 @@ public sealed class PasswordChangeEnforcementTests : IClassFixture<AuraApiFactor
         var response = await client.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-        var body = await response.Content.ReadAsStringAsync();
-        Assert.Contains("40321", body, StringComparison.Ordinal);
+        await using var stream = await response.Content.ReadAsStreamAsync();
+        using var document = await JsonDocument.ParseAsync(stream);
+        var root = document.RootElement;
+        Assert.Equal(40321, root.GetProperty("code").GetInt32());
+        Assert.False(string.IsNullOrWhiteSpace(root.GetProperty("msg").GetString()));
     }
 }

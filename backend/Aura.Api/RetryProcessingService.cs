@@ -2,19 +2,27 @@ using System.Text.Json;
 using Aura.Api.Ai;
 using Aura.Api.Cache;
 using Aura.Api.Data;
+using Aura.Api.Internal;
 using Aura.Api.Models;
 using Aura.Api.Serialization;
 
 internal sealed class RetryProcessingService
 {
-    private readonly PgSqlStore _db;
+    private readonly CaptureRepository _captureRepository;
+    private readonly AuditRepository _auditRepository;
     private readonly RedisCacheService _cache;
     private readonly RetryQueueService _retryQueue;
     private readonly AiClient _aiClient;
 
-    public RetryProcessingService(PgSqlStore db, RedisCacheService cache, RetryQueueService retryQueue, AiClient aiClient)
+    public RetryProcessingService(
+        CaptureRepository captureRepository,
+        AuditRepository auditRepository,
+        RedisCacheService cache,
+        RetryQueueService retryQueue,
+        AiClient aiClient)
     {
-        _db = db;
+        _captureRepository = captureRepository;
+        _auditRepository = auditRepository;
         _cache = cache;
         _retryQueue = retryQueue;
         _aiClient = aiClient;
@@ -36,7 +44,7 @@ internal sealed class RetryProcessingService
             lockToken = await _cache.TryAcquireLockAsync(processLockKey, TimeSpan.FromMinutes(processLockMinutes));
             if (lockToken is null)
             {
-                return Results.Json(new { code = 42902, msg = "重试任务处理正在进行中，请稍后再试（其他实例或会话可能正在执行）" }, statusCode: 429);
+                return AuraApiResults.TooManyRequests("重试任务处理正在进行中，请稍后再试（其他实例或会话可能正在执行）", 42902);
             }
         }
 
@@ -71,14 +79,14 @@ internal sealed class RetryProcessingService
                 {
                     success++;
                     var newMetadata = AttachAiResult(task.MetadataJson, ai);
-                    _ = await _db.UpdateCaptureMetadataAsync(task.CaptureId, newMetadata);
+                    _ = await _captureRepository.UpdateCaptureMetadataAsync(task.CaptureId, newMetadata);
                     if (ai.Feature.Count > 0)
                     {
                         var vectorId = $"C_{task.CaptureId}";
                         await _aiClient.UpsertAsync(vectorId, ai.Feature);
                     }
 
-                    await _db.InsertOperationAsync("重试任务", "AI重试成功", $"captureId={task.CaptureId}, 设备={task.DeviceId}, 通道={task.ChannelNo}");
+                    await _auditRepository.InsertOperationAsync("重试任务", "AI重试成功", $"captureId={task.CaptureId}, 设备={task.DeviceId}, 通道={task.ChannelNo}");
                     TryDeleteFile(task.ImagePath);
                     continue;
                 }
@@ -93,7 +101,7 @@ internal sealed class RetryProcessingService
                     TryDeleteFile(task.ImagePath);
                 }
 
-                await _db.InsertOperationAsync("重试任务", "AI重试失败", $"设备={task.DeviceId}, 通道={task.ChannelNo}, 原因={ai.Message}");
+                await _auditRepository.InsertOperationAsync("重试任务", "AI重试失败", $"设备={task.DeviceId}, 通道={task.ChannelNo}, 原因={ai.Message}");
             }
         }
         finally

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Aura.Api.Cache;
 using Aura.Api.Data;
+using Aura.Api.Internal;
 using Aura.Api.Models;
 using Aura.Api.Serialization;
 
@@ -9,14 +10,24 @@ namespace Aura.Api;
 internal sealed class DeviceManagementService
 {
     private readonly AppStore _store;
-    private readonly PgSqlStore _db;
+    private readonly PgSqlConnectionFactory _pgSqlConnectionFactory;
+    private readonly DeviceRepository _deviceRepository;
+    private readonly AuditRepository _auditRepository;
     private readonly RedisCacheService _cache;
     private readonly ILogger<DeviceManagementService> _logger;
 
-    public DeviceManagementService(AppStore store, PgSqlStore db, RedisCacheService cache, ILogger<DeviceManagementService> logger)
+    public DeviceManagementService(
+        AppStore store,
+        PgSqlConnectionFactory pgSqlConnectionFactory,
+        DeviceRepository deviceRepository,
+        AuditRepository auditRepository,
+        RedisCacheService cache,
+        ILogger<DeviceManagementService> logger)
     {
         _store = store;
-        _db = db;
+        _pgSqlConnectionFactory = pgSqlConnectionFactory;
+        _deviceRepository = deviceRepository;
+        _auditRepository = auditRepository;
         _cache = cache;
         _logger = logger;
     }
@@ -34,10 +45,14 @@ internal sealed class DeviceManagementService
             }
         }
 
-        var rows = await _db.GetDevicesAsync();
-        if (rows.Count > 0)
+        var rows = await _deviceRepository.GetDevicesAsync();
+        if (_pgSqlConnectionFactory.IsConfigured)
         {
-            await _cache.SetAsync("device:list", JsonSerializer.Serialize(rows, AuraJsonSerializerOptions.Default), TimeSpan.FromMinutes(3));
+            if (_cache.Enabled && rows.Count > 0)
+            {
+                await _cache.SetAsync("device:list", JsonSerializer.Serialize(rows, AuraJsonSerializerOptions.Default), TimeSpan.FromMinutes(3));
+            }
+
             return Results.Ok(new { code = 0, msg = "查询成功", data = rows });
         }
 
@@ -49,24 +64,41 @@ internal sealed class DeviceManagementService
     {
         if (string.IsNullOrWhiteSpace(req.Name) || string.IsNullOrWhiteSpace(req.Ip))
         {
-            return Results.BadRequest(new { code = 40002, msg = "设备名称和IP不能为空" });
+            return AuraApiResults.BadRequest("设备名称和IP不能为空", 40002);
         }
 
-        var entity = new DeviceEntity(Interlocked.Increment(ref _store.DeviceSeed), req.Name, req.Ip, req.Port, req.Brand, req.Protocol, "offline", DateTimeOffset.Now);
-        var dbId = await _db.InsertDeviceAsync(entity.Name, entity.Ip, entity.Port, entity.Brand, entity.Protocol, entity.Status);
-        
+        var entity = new DeviceEntity(
+            Interlocked.Increment(ref _store.DeviceSeed),
+            req.Name,
+            req.Ip,
+            req.Port,
+            req.Brand,
+            req.Protocol,
+            "offline",
+            DateTimeOffset.Now);
+
+        var dbId = await _deviceRepository.InsertDeviceAsync(entity.Name, entity.Ip, entity.Port, entity.Brand, entity.Protocol, entity.Status);
+
         if (dbId.HasValue)
         {
             var savedDb = entity with { DeviceId = dbId.Value };
-            await _db.InsertOperationAsync("系统管理员", "设备注册", $"设备={savedDb.Name}, IP={savedDb.Ip}");
-            if (_cache.Enabled) await _cache.DeleteAsync("device:list");
+            await _auditRepository.InsertOperationAsync("系统管理员", "设备注册", $"设备={savedDb.Name}, IP={savedDb.Ip}");
+            if (_cache.Enabled)
+            {
+                await _cache.DeleteAsync("device:list");
+            }
+
             _logger.LogInformation("设备注册成功：{DeviceName}, IP: {Ip}", savedDb.Name, savedDb.Ip);
             return Results.Ok(new { code = 0, msg = "设备注册成功", data = savedDb });
         }
 
         _store.Devices.Add(entity);
         AddOperationLog("系统管理员", "设备注册", $"设备={entity.Name}, IP={entity.Ip}");
-        if (_cache.Enabled) await _cache.DeleteAsync("device:list");
+        if (_cache.Enabled)
+        {
+            await _cache.DeleteAsync("device:list");
+        }
+
         _logger.LogWarning("数据库写入失败，已将设备注册到内存库：{DeviceName}", entity.Name);
         return Results.Ok(new { code = 0, msg = "设备注册成功", data = entity });
     }
@@ -77,7 +109,7 @@ internal sealed class DeviceManagementService
         if (idx < 0)
         {
             _logger.LogWarning("心跳更新失败：设备ID {DeviceId} 不存在", deviceId);
-            return Results.NotFound(new { code = 40401, msg = "设备不存在" });
+            return AuraApiResults.NotFound("设备不存在", 40401);
         }
 
         var entity = _store.Devices[idx];

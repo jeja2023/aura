@@ -53,12 +53,10 @@ internal sealed class PasswordChangeEnforcementMiddleware
             return;
         }
 
-        context.Response.StatusCode = StatusCodes.Status403Forbidden;
-        context.Response.ContentType = "application/json; charset=utf-8";
-        await context.Response.WriteAsJsonAsync(new
-        {
-            code = 40321,
-            msg = "当前账号需要先修改密码后才能继续使用"
-        });
+        await AuraApiResults.WriteErrorAsync(
+            context.Response,
+            StatusCodes.Status403Forbidden,
+            "当前账号需要先修改密码后才能继续使用",
+            40321);
     }
 }

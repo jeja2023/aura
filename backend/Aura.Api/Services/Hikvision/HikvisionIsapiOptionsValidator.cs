@@ -7,6 +7,7 @@ namespace Aura.Api.Services.Hikvision;
 /// <summary>启动时校验 <see cref="HikvisionIsapiOptions"/>，避免运行时发现非法组合。</summary>
 internal sealed class HikvisionIsapiOptionsValidator : IValidateOptions<HikvisionIsapiOptions>
 {
+    private const int ProductionMinRequestsPerMinute = 1;
     private readonly IHostEnvironment _environment;
 
     public HikvisionIsapiOptionsValidator(IHostEnvironment environment)
@@ -71,6 +72,16 @@ internal sealed class HikvisionIsapiOptionsValidator : IValidateOptions<Hikvisio
         if (options.DeviceApiMaxRequestsPerMinute is < 0 or > 100_000)
         {
             errors.Add("DeviceApiMaxRequestsPerMinute 应在 0～100000 之间（0 表示不限流）。");
+        }
+
+        if (_environment.IsProduction() && options.GatewayEnabled && options.GatewayMaxRequestsPerMinute < ProductionMinRequestsPerMinute)
+        {
+            errors.Add($"生产环境启用 Gateway 时，GatewayMaxRequestsPerMinute 必须大于等于 {ProductionMinRequestsPerMinute}。");
+        }
+
+        if (_environment.IsProduction() && options.DeviceApiMaxRequestsPerMinute < ProductionMinRequestsPerMinute)
+        {
+            errors.Add($"生产环境下 DeviceApiMaxRequestsPerMinute 必须大于等于 {ProductionMinRequestsPerMinute}。");
         }
 
         if (options.ConnectivityProbeTimeoutSeconds is < 0 or > 600)

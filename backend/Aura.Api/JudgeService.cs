@@ -7,28 +7,37 @@ using Aura.Api.Serialization;
 internal sealed class JudgeService
 {
     private readonly AppStore _store;
-    private readonly PgSqlStore _db;
+    private readonly CaptureRepository _captureRepository;
+    private readonly MonitoringRepository _monitoringRepository;
+    private readonly AuditRepository _auditRepository;
     private readonly EventDispatchService _eventDispatchService;
 
-    public JudgeService(AppStore store, PgSqlStore db, EventDispatchService eventDispatchService)
+    public JudgeService(
+        AppStore store,
+        CaptureRepository captureRepository,
+        MonitoringRepository monitoringRepository,
+        AuditRepository auditRepository,
+        EventDispatchService eventDispatchService)
     {
         _store = store;
-        _db = db;
+        _captureRepository = captureRepository;
+        _monitoringRepository = monitoringRepository;
+        _auditRepository = auditRepository;
         _eventDispatchService = eventDispatchService;
     }
 
     public async Task<JudgeRunResult> RunHomeAsync(DateOnly judgeDate)
     {
-        await _db.DeleteJudgeResultsByDateAsync(judgeDate, "home_room");
+        await _monitoringRepository.DeleteJudgeResultsByDateAsync(judgeDate, "home_room");
         var start = judgeDate.ToDateTime(TimeOnly.MinValue);
         var end = start.AddDays(1);
-        var events = await _db.GetTrackEventsInRangeAsync(start, end);
+        var events = await _captureRepository.GetTrackEventsInRangeAsync(start, end);
         if (events.Count == 0)
         {
             return new JudgeRunResult(judgeDate, "home_room", 0, 0);
         }
 
-        var roiMap = (await _db.GetRoisAsync()).ToDictionary(x => x.RoiId, x => x.RoomNodeId);
+        var roiMap = (await _captureRepository.GetRoisAsync()).ToDictionary(x => x.RoiId, x => x.RoomNodeId);
         var saveCount = 0;
         foreach (var group in events.GroupBy(x => x.Vid))
         {
@@ -45,7 +54,7 @@ internal sealed class JudgeService
             }
 
             var detail = JsonSerializer.Serialize(new { roomAgg.Count, roomAgg.Last }, AuraJsonSerializerOptions.Default);
-            var id = await _db.InsertJudgeResultAsync(group.Key, roomAgg.RoomId, "home_room", judgeDate, detail);
+            var id = await _monitoringRepository.InsertJudgeResultAsync(group.Key, roomAgg.RoomId, "home_room", judgeDate, detail);
             if (id.HasValue)
             {
                 saveCount++;
@@ -57,23 +66,23 @@ internal sealed class JudgeService
             }
         }
 
-        await _db.InsertOperationAsync("系统任务", "归寝研判", $"日期={judgeDate:yyyy-MM-dd}, 结果={saveCount}");
+        await _auditRepository.InsertOperationAsync("系统任务", "归寝研判", $"日期={judgeDate:yyyy-MM-dd}, 结果={saveCount}");
         return new JudgeRunResult(judgeDate, "home_room", events.Count, saveCount);
     }
 
     public async Task<JudgeRunResult> RunGroupRentAndStayAsync(DateOnly judgeDate, int groupThreshold, int stayMinutes)
     {
-        await _db.DeleteJudgeResultsByDateAsync(judgeDate, "group_rent");
-        await _db.DeleteJudgeResultsByDateAsync(judgeDate, "abnormal_stay");
+        await _monitoringRepository.DeleteJudgeResultsByDateAsync(judgeDate, "group_rent");
+        await _monitoringRepository.DeleteJudgeResultsByDateAsync(judgeDate, "abnormal_stay");
         var start = judgeDate.ToDateTime(TimeOnly.MinValue);
         var end = start.AddDays(1);
-        var events = await _db.GetTrackEventsInRangeAsync(start, end);
+        var events = await _captureRepository.GetTrackEventsInRangeAsync(start, end);
         if (events.Count == 0)
         {
             return new JudgeRunResult(judgeDate, "group_rent+abnormal_stay", 0, 0);
         }
 
-        var roiMap = (await _db.GetRoisAsync()).ToDictionary(x => x.RoiId, x => x.RoomNodeId);
+        var roiMap = (await _captureRepository.GetRoisAsync()).ToDictionary(x => x.RoiId, x => x.RoomNodeId);
         var eventWithRoom = events
             .Where(x => roiMap.ContainsKey(x.RoiId))
             .Select(x => new { x.Vid, RoomId = roiMap[x.RoiId], x.EventTime })
@@ -89,13 +98,13 @@ internal sealed class JudgeService
             }
 
             var detail = JsonSerializer.Serialize(new { distinctVidCount = distinctVid.Length, vids = distinctVid }, AuraJsonSerializerOptions.Default);
-            var id = await _db.InsertJudgeResultAsync($"ROOM_{room.Key}", room.Key, "group_rent", judgeDate, detail);
+            var id = await _monitoringRepository.InsertJudgeResultAsync($"ROOM_{room.Key}", room.Key, "group_rent", judgeDate, detail);
             if (id.HasValue)
             {
                 saveCount++;
             }
 
-            var aid = await _db.InsertAlertAsync("群租预警", $"房间={room.Key}, 人数={distinctVid.Length}");
+            var aid = await _monitoringRepository.InsertAlertAsync("群租预警", $"房间={room.Key}, 人数={distinctVid.Length}");
             if (!aid.HasValue)
             {
                 _store.Alerts.Add(new AlertEntity(Interlocked.Increment(ref _store.AlertSeed), "群租预警", $"房间={room.Key}, 人数={distinctVid.Length}", DateTimeOffset.Now));
@@ -115,13 +124,13 @@ internal sealed class JudgeService
             }
 
             var detail = JsonSerializer.Serialize(new { stayMinutes = minutes, first, last }, AuraJsonSerializerOptions.Default);
-            var id = await _db.InsertJudgeResultAsync(personRoom.Key.Vid, personRoom.Key.RoomId, "abnormal_stay", judgeDate, detail);
+            var id = await _monitoringRepository.InsertJudgeResultAsync(personRoom.Key.Vid, personRoom.Key.RoomId, "abnormal_stay", judgeDate, detail);
             if (id.HasValue)
             {
                 saveCount++;
             }
 
-            var aid = await _db.InsertAlertAsync("异常滞留", $"VID={personRoom.Key.Vid}, 房间={personRoom.Key.RoomId}, 分钟={Math.Round(minutes, 1)}");
+            var aid = await _monitoringRepository.InsertAlertAsync("异常滞留", $"VID={personRoom.Key.Vid}, 房间={personRoom.Key.RoomId}, 分钟={Math.Round(minutes, 1)}");
             if (!aid.HasValue)
             {
                 _store.Alerts.Add(new AlertEntity(Interlocked.Increment(ref _store.AlertSeed), "异常滞留", $"VID={personRoom.Key.Vid}, 房间={personRoom.Key.RoomId}, 分钟={Math.Round(minutes, 1)}", DateTimeOffset.Now));
@@ -129,14 +138,14 @@ internal sealed class JudgeService
             await _eventDispatchService.NotifyAlertAsync("异常滞留", $"VID={personRoom.Key.Vid}, 房间={personRoom.Key.RoomId}, 分钟={Math.Round(minutes, 1)}", "滞留研判");
         }
 
-        await _db.InsertOperationAsync("系统任务", "群租/滞留研判", $"日期={judgeDate:yyyy-MM-dd}, 结果={saveCount}");
+        await _auditRepository.InsertOperationAsync("系统任务", "群租/滞留研判", $"日期={judgeDate:yyyy-MM-dd}, 结果={saveCount}");
         return new JudgeRunResult(judgeDate, "group_rent+abnormal_stay", events.Count, saveCount);
     }
 
     public async Task<JudgeRunResult> RunNightAbsenceAsync(DateOnly judgeDate, int cutoffHour)
     {
-        await _db.DeleteJudgeResultsByDateAsync(judgeDate, "night_absence");
-        var homeRows = await _db.GetJudgeResultsAsync(judgeDate, "home_room");
+        await _monitoringRepository.DeleteJudgeResultsByDateAsync(judgeDate, "night_absence");
+        var homeRows = await _monitoringRepository.GetJudgeResultsAsync(judgeDate, "home_room");
         var home = homeRows.Count > 0
             ? homeRows.Select(x => new JudgeResultEntity(x.JudgeId, x.Vid, x.RoomId, x.JudgeType, DateOnly.FromDateTime(x.JudgeDate), x.DetailJson, x.CreatedAt)).ToList()
             : _store.JudgeResults.Where(x => x.JudgeDate == judgeDate && x.JudgeType == "home_room").ToList();
@@ -147,8 +156,8 @@ internal sealed class JudgeService
 
         var start = judgeDate.ToDateTime(new TimeOnly(cutoffHour, 0));
         var end = start.AddHours(8);
-        var roiMap = (await _db.GetRoisAsync()).ToDictionary(x => x.RoiId, x => x.RoomNodeId);
-        var events = (await _db.GetTrackEventsInRangeAsync(start, end))
+        var roiMap = (await _captureRepository.GetRoisAsync()).ToDictionary(x => x.RoiId, x => x.RoomNodeId);
+        var events = (await _captureRepository.GetTrackEventsInRangeAsync(start, end))
             .Where(x => roiMap.ContainsKey(x.RoiId))
             .ToList();
         var existedPairs = events
@@ -164,13 +173,13 @@ internal sealed class JudgeService
             }
 
             var detail = JsonSerializer.Serialize(new { cutoffHour, message = "截止时间后未回到归属房间" }, AuraJsonSerializerOptions.Default);
-            var id = await _db.InsertJudgeResultAsync(row.Vid, row.RoomId, "night_absence", judgeDate, detail);
+            var id = await _monitoringRepository.InsertJudgeResultAsync(row.Vid, row.RoomId, "night_absence", judgeDate, detail);
             if (id.HasValue)
             {
                 saveCount++;
             }
 
-            var aid = await _db.InsertAlertAsync("夜不归宿", $"VID={row.Vid}, 房间={row.RoomId}, 日期={judgeDate:yyyy-MM-dd}");
+            var aid = await _monitoringRepository.InsertAlertAsync("夜不归宿", $"VID={row.Vid}, 房间={row.RoomId}, 日期={judgeDate:yyyy-MM-dd}");
             if (!aid.HasValue)
             {
                 _store.Alerts.Add(new AlertEntity(Interlocked.Increment(ref _store.AlertSeed), "夜不归宿", $"VID={row.Vid}, 房间={row.RoomId}, 日期={judgeDate:yyyy-MM-dd}", DateTimeOffset.Now));
@@ -179,7 +188,7 @@ internal sealed class JudgeService
             await _eventDispatchService.BroadcastRoleEventAsync("alert.created", new { alertType = "夜不归宿", vid = row.Vid, roomId = row.RoomId, date = judgeDate });
         }
 
-        await _db.InsertOperationAsync("系统任务", "夜不归宿研判", $"日期={judgeDate:yyyy-MM-dd}, 结果={saveCount}");
+        await _auditRepository.InsertOperationAsync("系统任务", "夜不归宿研判", $"日期={judgeDate:yyyy-MM-dd}, 结果={saveCount}");
         return new JudgeRunResult(judgeDate, "night_absence", home.Count, saveCount);
     }
 }

@@ -1,11 +1,12 @@
 import asyncio
+import base64
+import io
+import logging
+import math
+import os
 import threading
 from contextlib import asynccontextmanager
 from datetime import datetime
-import base64
-import io
-import math
-import os
 from pathlib import Path
 
 import numpy as np
@@ -20,11 +21,75 @@ try:
 except Exception:
     ArangoClient = None
 
+
+logger = logging.getLogger("aura.ai")
+
+COLLECTION_NAME = "aura_reid"
+VECTOR_DIM = 512
+
 _batch_task: asyncio.Task | None = None
+_batch_queue = asyncio.Queue()
+_BATCH_SIZE = 16
+_MAX_WAIT_SECONDS = 0.05
+
+_local_index = []
+_index_lock = threading.Lock()
+_arango_db = None
+_arango_collection = None
+_ort_session = None
+_ort_input_name = ""
+_model_error = ""
+_arango_error = ""
+
+
+def _truthy(value: str | None) -> bool:
+    if value is None:
+        return False
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _current_environment() -> str:
+    for key in ("AURA_ENV", "ASPNETCORE_ENVIRONMENT", "ENVIRONMENT", "FASTAPI_ENV"):
+        value = os.getenv(key, "").strip()
+        if value:
+            return value
+    return "Development"
+
+
+def _requires_persistent_index() -> bool:
+    override = os.getenv("AURA_AI_REQUIRE_ARANGO", "").strip()
+    if override:
+        return _truthy(override)
+    return _current_environment().lower() == "production"
+
+
+def _mark_arango_failure(ex: Exception | str) -> None:
+    global _arango_db, _arango_collection, _arango_error
+    _arango_db = None
+    _arango_collection = None
+    _arango_error = str(ex)
+
+
+def _service_state(arango_enabled: bool | None = None) -> dict:
+    return {
+        "time": datetime.now().isoformat(),
+        "environment": _current_environment(),
+        "arango_required": _requires_persistent_index(),
+        "arangodb_enabled": (_arango_db is not None) if arango_enabled is None else arango_enabled,
+        "arango_error": _arango_error,
+        "model_loaded": _ort_session is not None,
+        "model_error": _model_error,
+    }
+
+
+def _service_unavailable_response(code: int, message: str, *, data: dict | list | None = None) -> JSONResponse:
+    payload = {"code": code, "msg": message}
+    if data is not None:
+        payload["data"] = data
+    return JSONResponse(status_code=503, content=payload)
 
 
 async def _background_init_and_batch():
-    """在后台加载 Arango/ONNX，避免阻塞 Uvicorn 绑定端口；完成后启动批处理循环。"""
     global _model_error, _batch_task
     loop = asyncio.get_running_loop()
     try:
@@ -32,8 +97,9 @@ async def _background_init_and_batch():
         await loop.run_in_executor(None, _init_model)
     except Exception as ex:
         _model_error = f"后台初始化异常: {ex}"
-        print(f"[启动] 后台初始化失败: {ex}")
+        logger.exception("后台初始化失败")
         return
+
     if _ort_session is not None:
         _batch_task = asyncio.create_task(_batch_loop())
 
@@ -44,15 +110,15 @@ async def _lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="寓瞳AI推理服务", version="0.1.0", lifespan=_lifespan)
+app = FastAPI(title="Aura AI 推理服务", version="0.1.0", lifespan=_lifespan)
 
 
 @app.middleware("http")
 async def _aura_ai_api_key_guard(request: Request, call_next):
-    """若设置环境变量 AURA_API_KEY，则除根路径健康检查与 OpenAPI 文档外须携带请求头 X-Aura-Ai-Key。"""
     expected = os.getenv("AURA_API_KEY", "").strip()
     if not expected:
         return await call_next(request)
+
     if request.method in ("GET", "HEAD"):
         path = request.url.path
         if (
@@ -63,33 +129,17 @@ async def _aura_ai_api_key_guard(request: Request, call_next):
             or path == "/favicon.ico"
         ):
             return await call_next(request)
+
     incoming = request.headers.get("X-Aura-Ai-Key", "")
     if incoming != expected:
         return JSONResponse(
             status_code=401,
-            content={"code": 40101, "msg": "未授权访问AI服务"},
+            content={"code": 40101, "msg": "未授权访问 AI 服务"},
         )
     return await call_next(request)
 
 
-COLLECTION_NAME = "aura_reid"
-VECTOR_DIM = 512
-_local_index = []
-_index_lock = threading.Lock()
-_arango_db = None
-_arango_collection = None
-_ort_session = None
-_ort_input_name = ""
-_model_error = ""
-_arango_error = ""
-
-# Batching relevant
-_batch_queue = asyncio.Queue()
-_BATCH_SIZE = 16
-_MAX_WAIT_SECONDS = 0.05
-
 def _init_arango():
-    """初始化 ArangoDB 向量存储；失败则保持在内存降级模式。"""
     global _arango_db, _arango_collection, _arango_error
     if ArangoClient is None:
         _arango_db = None
@@ -108,7 +158,8 @@ def _init_arango():
         _arango_collection = None
         _arango_error = "ARANGO_USER/ARANGO_PASSWORD 未配置"
         return
-    if "PLEASE_" in str(arango_user).upper() or "PLEASE_" in str(arango_password).upper():
+
+    if "PLEASE_" in arango_user.upper() or "PLEASE_" in arango_password.upper():
         _arango_db = None
         _arango_collection = None
         _arango_error = "ARANGO_USER/ARANGO_PASSWORD 仍为占位值"
@@ -125,16 +176,13 @@ def _init_arango():
             _arango_db.create_collection(COLLECTION_NAME)
         _arango_collection = _arango_db.collection(COLLECTION_NAME)
     except Exception as ex:
-        _arango_db = None
-        _arango_collection = None
-        _arango_error = str(ex)
+        _mark_arango_failure(ex)
 
 
 def _ensure_arango():
-    """惰性重连：避免容器编排先后导致永久降级。"""
-    global _arango_db
     if _arango_db is not None:
         return True
+
     _init_arango()
     return _arango_db is not None
 
@@ -147,18 +195,17 @@ def _init_model():
         if not model_path.exists():
             _model_error = f"未找到模型文件: {model_path}"
             return
-        
-        # 探测可用提供者，优先 CUDA
+
         available = ort.get_available_providers()
         providers = []
         if "CUDAExecutionProvider" in available:
             providers.append("CUDAExecutionProvider")
         providers.append("CPUExecutionProvider")
-        
+
         _ort_session = ort.InferenceSession(str(model_path), providers=providers)
         _ort_input_name = _ort_session.get_inputs()[0].name
         _model_error = ""
-        print(f"ONNX 推理会话已初始化，使用提供者：{providers}")
+        logger.info("ONNX 推理会话已初始化，providers=%s", providers)
     except Exception as ex:
         _ort_session = None
         _model_error = f"模型加载失败: {ex}"
@@ -174,52 +221,6 @@ class ImageFileReq(BaseModel):
     metadata_json: str = "{}"
 
 
-async def _batch_loop():
-    """推理批处理后台循环：搜集请求并统一调用 ONNX 运行。"""
-    while True:
-        # 等待至少一个任务进入队列
-        item = await _batch_queue.get()
-        batch = [item]
-        
-        # 尝试在短时间内搜集更多任务（最多 _BATCH_SIZE）
-        start_time = asyncio.get_event_loop().time()
-        while len(batch) < _BATCH_SIZE:
-            time_left = _MAX_WAIT_SECONDS - (asyncio.get_event_loop().time() - start_time)
-            if time_left <= 0:
-                break
-            try:
-                # 尝试非阻塞获取
-                item = await asyncio.wait_for(_batch_queue.get(), timeout=time_left)
-                batch.append(item)
-            except (asyncio.TimeoutError, asyncio.QueueEmpty):
-                break
-        
-        if not batch:
-            continue
-
-        try:
-            # 准备批处理张量
-            tensors = [x[0] for x in batch]
-            if len(tensors) == 1:
-                input_data = tensors[0]
-            else:
-                input_data = np.concatenate(tensors, axis=0)
-            
-            # 执行推理 (同步调用，考虑在线程池执行以避免阻塞 Loop)
-            loop = asyncio.get_event_loop()
-            outputs = await loop.run_in_executor(None, lambda: _ort_session.run(None, {_ort_input_name: input_data}))
-            
-            # 分发结果
-            feat_batch = np.asarray(outputs[0]).astype(np.float32)
-            for i, (tensor, future) in enumerate(batch):
-                feat = feat_batch[i].reshape(-1).tolist()
-                future.set_result(_normalize_feature(feat))
-        except Exception as ex:
-            for _, future in batch:
-                if not future.done():
-                    future.set_exception(ex)
-
-
 class SearchReq(BaseModel):
     feature: list[float]
     top_k: int = 10
@@ -230,29 +231,54 @@ class UpsertReq(BaseModel):
     feature: list[float]
 
 
-@app.get("/")
-def health():
-    return {
-        "code": 0,
-        "msg": "AI服务运行正常",
-        "time": datetime.now().isoformat(),
-        "arangodb_enabled": _arango_db is not None,
-        "arango_error": _arango_error,
-        "model_loaded": _ort_session is not None,
-        "model_error": _model_error,
-    }
+async def _batch_loop():
+    while True:
+        item = await _batch_queue.get()
+        batch = [item]
+        start_time = asyncio.get_running_loop().time()
+
+        while len(batch) < _BATCH_SIZE:
+            time_left = _MAX_WAIT_SECONDS - (asyncio.get_running_loop().time() - start_time)
+            if time_left <= 0:
+                break
+            try:
+                item = await asyncio.wait_for(_batch_queue.get(), timeout=time_left)
+                batch.append(item)
+            except (asyncio.TimeoutError, asyncio.QueueEmpty):
+                break
+
+        try:
+            tensors = [tensor for tensor, _future in batch]
+            input_data = tensors[0] if len(tensors) == 1 else np.concatenate(tensors, axis=0)
+            loop = asyncio.get_running_loop()
+            outputs = await loop.run_in_executor(
+                None,
+                lambda: _ort_session.run(None, {_ort_input_name: input_data}),
+            )
+
+            feat_batch = np.asarray(outputs[0]).astype(np.float32)
+            for index, (_tensor, future) in enumerate(batch):
+                feature = feat_batch[index].reshape(-1).tolist()
+                future.set_result(_normalize_feature(feature))
+        except Exception as ex:
+            for _tensor, future in batch:
+                if not future.done():
+                    future.set_exception(ex)
 
 
 def _normalize_feature(feature: list[float]) -> list[float]:
     if not feature:
         return [0.0] * VECTOR_DIM
+
     if len(feature) >= VECTOR_DIM:
         data = feature[:VECTOR_DIM]
     else:
         data = feature + [0.0] * (VECTOR_DIM - len(feature))
+
     norm = math.sqrt(sum(x * x for x in data))
     if norm == 0:
         return data
+
     return [x / norm for x in data]
 
 
@@ -274,13 +300,36 @@ def _preprocess(img: Image.Image) -> np.ndarray:
 
 
 async def _extract_feature_batched(tensor: np.ndarray) -> list[float]:
-    """将推理请求发送到批处理队列。"""
     if _ort_session is None:
         raise RuntimeError(_model_error or "onnx session not initialized")
-    
-    future = asyncio.get_event_loop().create_future()
+
+    future = asyncio.get_running_loop().create_future()
     await _batch_queue.put((tensor, future))
     return await future
+
+
+def _cosine(a: list[float], b: list[float]) -> float:
+    return sum(x * y for x, y in zip(a, b))
+
+
+def _strict_arango_unavailable(message: str, *, data: dict | list | None = None) -> JSONResponse:
+    logger.critical("%s; arango_error=%s", message, _arango_error or "unknown")
+    return _service_unavailable_response(50301, message, data=data)
+
+
+@app.get("/")
+def health():
+    arango_enabled = _ensure_arango()
+    payload = _service_state(arango_enabled=arango_enabled)
+    if payload["arango_required"] and not arango_enabled:
+        payload["code"] = 50301
+        payload["msg"] = "ArangoDB 不可用，AI 服务处于受限状态"
+        logger.critical("健康检查发现 ArangoDB 不可用且当前环境要求持久化索引")
+        return JSONResponse(status_code=503, content=payload)
+
+    payload["code"] = 0
+    payload["msg"] = "AI 服务运行正常"
+    return payload
 
 
 @app.post("/ai/extract")
@@ -297,30 +346,27 @@ async def extract(req: ImageReq):
 @app.post("/ai/extract-file")
 async def extract_file(req: ImageFileReq):
     try:
-        p = Path(req.image_path)
-        if not p.exists():
+        path = Path(req.image_path)
+        if not path.exists():
             return {"code": 40401, "msg": f"文件不存在: {req.image_path}"}
-        
-        with Image.open(str(p)) as img:
+
+        with Image.open(str(path)) as img:
             rgb = img.convert("RGB")
             tensor = _preprocess(rgb)
-        
+
         feature = await _extract_feature_batched(tensor)
         return {"code": 0, "msg": "特征提取成功", "data": {"feature": feature, "dim": len(feature)}}
     except Exception as ex:
         return {"code": 50001, "msg": f"特征提取失败: {ex}", "data": {"feature": [], "dim": 0}}
 
 
-def _cosine(a: list[float], b: list[float]) -> float:
-    return sum(x * y for x, y in zip(a, b))
-
-
 @app.post("/ai/upsert")
 async def upsert(req: UpsertReq):
     feature = _normalize_feature(req.feature)
+    strict_mode = _requires_persistent_index()
+
     if _ensure_arango():
         try:
-            # 以 _key=vid 作为幂等写入主键
             _arango_db.aql.execute(
                 """
                 UPSERT { _key: @vid }
@@ -335,14 +381,25 @@ async def upsert(req: UpsertReq):
                 },
             )
             return {"code": 0, "msg": "写入成功", "data": {"vid": req.vid, "engine": "arangodb"}}
-        except Exception:
-            pass
+        except Exception as ex:
+            _mark_arango_failure(ex)
+            if strict_mode:
+                return _strict_arango_unavailable(
+                    "ArangoDB 不可用，已拒绝向内存索引降级写入",
+                    data={"vid": req.vid, "engine": "unavailable"},
+                )
+            logger.warning("ArangoDB 写入失败，降级到内存索引. vid=%s error=%s", req.vid, _arango_error)
+    elif strict_mode:
+        return _strict_arango_unavailable(
+            "ArangoDB 不可用，已拒绝向内存索引降级写入",
+            data={"vid": req.vid, "engine": "unavailable"},
+        )
 
     with _index_lock:
         global _local_index
         _local_index = [item for item in _local_index if item["vid"] != req.vid]
         _local_index.append({"vid": req.vid, "feature": feature})
-    
+
     return {"code": 0, "msg": "写入成功", "data": {"vid": req.vid, "engine": "memory"}}
 
 
@@ -350,9 +407,10 @@ async def upsert(req: UpsertReq):
 async def search(req: SearchReq):
     feature = _normalize_feature(req.feature)
     top_k = max(1, min(req.top_k, 50))
+    strict_mode = _requires_persistent_index()
+
     if _ensure_arango():
         try:
-            # 特征向量已归一化：cosine 相似度 = 向量点积
             cursor = _arango_db.aql.execute(
                 """
                 FOR d IN @@col
@@ -370,20 +428,27 @@ async def search(req: SearchReq):
                     "k": top_k,
                 },
             )
-            hits = [{"vid": x["vid"], "score": float(x["score"])} for x in cursor]
+            hits = [{"vid": item["vid"], "score": float(item["score"])} for item in cursor]
             return {"code": 0, "msg": "检索成功", "data": hits}
-        except Exception:
-            pass
+        except Exception as ex:
+            _mark_arango_failure(ex)
+            if strict_mode:
+                return _strict_arango_unavailable(
+                    "ArangoDB 不可用，已拒绝降级到内存索引检索",
+                    data=[],
+                )
+            logger.warning("ArangoDB 检索失败，降级到内存索引. error=%s", _arango_error)
+    elif strict_mode:
+        return _strict_arango_unavailable(
+            "ArangoDB 不可用，已拒绝降级到内存索引检索",
+            data=[],
+        )
 
     with _index_lock:
-        scores = [{"vid": x["vid"], "score": _cosine(feature, x["feature"])} for x in _local_index]
-    
-    scores.sort(key=lambda x: x["score"], reverse=True)
-    return {
-        "code": 0,
-        "msg": "检索成功",
-        "data": scores[:top_k],
-    }
+        scores = [{"vid": item["vid"], "score": _cosine(feature, item["feature"])} for item in _local_index]
+
+    scores.sort(key=lambda item: item["score"], reverse=True)
+    return {"code": 0, "msg": "检索成功", "data": scores[:top_k]}
 
 
 @app.post("/ai/cluster")

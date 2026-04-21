@@ -1,5 +1,6 @@
 /* 文件：海康 ISAPI 通用网关（HikvisionIsapiGatewayService.cs） | File: Hikvision ISAPI gateway */
 using Aura.Api.Data;
+using Aura.Api.Internal;
 using Aura.Api.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
@@ -11,7 +12,7 @@ namespace Aura.Api.Services.Hikvision;
 /// <summary>将官方 Demo 中任意 ISAPI 调用映射为单次 HTTP 转发（路径受白名单约束）。</summary>
 internal sealed class HikvisionIsapiGatewayService
 {
-    private readonly PgSqlStore _db;
+    private readonly DeviceRepository _deviceRepository;
     private readonly AppStore _store;
     private readonly IConfiguration _configuration;
     private readonly HikvisionIsapiClient _client;
@@ -20,7 +21,7 @@ internal sealed class HikvisionIsapiGatewayService
     private readonly ILogger<HikvisionIsapiGatewayService> _logger;
 
     public HikvisionIsapiGatewayService(
-        PgSqlStore db,
+        DeviceRepository deviceRepository,
         AppStore store,
         IConfiguration configuration,
         HikvisionIsapiClient client,
@@ -28,7 +29,7 @@ internal sealed class HikvisionIsapiGatewayService
         IHttpContextAccessor httpContextAccessor,
         ILogger<HikvisionIsapiGatewayService> logger)
     {
-        _db = db;
+        _deviceRepository = deviceRepository;
         _store = store;
         _configuration = configuration;
         _client = client;
@@ -42,29 +43,29 @@ internal sealed class HikvisionIsapiGatewayService
         var opt = _options.Value;
         if (!opt.GatewayEnabled)
         {
-            return Results.Json(new { code = 40301, msg = "海康 ISAPI 网关已在配置中关闭" }, statusCode: StatusCodes.Status403Forbidden);
+            return AuraApiResults.Forbidden("海康 ISAPI 网关已在配置中关闭", 40301);
         }
 
         if (!HikvisionIsapiPathGuard.TryValidate(req.PathAndQuery, opt.GatewayMaxPathLength, out var pathError))
         {
-            return Results.BadRequest(new { code = 40004, msg = pathError });
+            return AuraApiResults.BadRequest(pathError, 40004);
         }
 
         var resolved = await ResolveEndpointAsync(req.DeviceId);
         if (resolved is null)
         {
-            return Results.NotFound(new { code = 40401, msg = "设备不存在或未在库中注册" });
+            return AuraApiResults.NotFound("设备不存在或未在库中注册", 40401);
         }
 
         var cred = ResolveCredentials(req.UserName, req.Password);
         if (cred is null)
         {
-            return Results.BadRequest(new { code = 40002, msg = "未配置海康 ISAPI 账号密码" });
+            return AuraApiResults.BadRequest("未配置海康 ISAPI 账号密码", 40002);
         }
 
         if (!TryParseMethod(req.Method, out var httpMethod))
         {
-            return Results.BadRequest(new { code = 40005, msg = "仅支持 GET、PUT、POST、DELETE" });
+            return AuraApiResults.BadRequest("仅支持 GET、PUT、POST、DELETE", 40005);
         }
 
         byte[]? body = null;
@@ -76,7 +77,7 @@ internal sealed class HikvisionIsapiGatewayService
             }
             catch
             {
-                return Results.BadRequest(new { code = 40006, msg = "BodyBase64 不是有效的 Base64" });
+                return AuraApiResults.BadRequest("BodyBase64 不是有效的 Base64", 40006);
             }
         }
         else if (!string.IsNullOrEmpty(req.Body))
@@ -86,7 +87,7 @@ internal sealed class HikvisionIsapiGatewayService
 
         if (body != null && body.Length > opt.GatewayMaxRequestBodyBytes)
         {
-            return Results.BadRequest(new { code = 40007, msg = "请求体超过配置上限" });
+            return AuraApiResults.BadRequest("请求体超过配置上限", 40007);
         }
 
         var baseUri = HikvisionIsapiBaseUri.Build(resolved.Value.Ip, resolved.Value.Port, opt);
@@ -136,25 +137,27 @@ internal sealed class HikvisionIsapiGatewayService
 
             if (opt.GatewayIncludeDeviceErrorBodyIn502)
             {
-                return Results.Json(new
-                {
-                    code = 50203,
-                    msg = "ISAPI 网关转发失败",
-                    detail = result.Message,
-                    httpStatus = result.HttpStatus,
-                    deviceId = req.DeviceId,
-                    raw = result.ErrorBody
-                }, statusCode: StatusCodes.Status502BadGateway);
+                return AuraApiResults.BadGateway(
+                    "ISAPI 网关转发失败",
+                    50203,
+                    new
+                    {
+                        detail = result.Message,
+                        httpStatus = result.HttpStatus,
+                        deviceId = req.DeviceId,
+                        raw = result.ErrorBody
+                    });
             }
 
-            return Results.Json(new
-            {
-                code = 50203,
-                msg = "ISAPI 网关转发失败",
-                detail = result.Message,
-                httpStatus = result.HttpStatus,
-                deviceId = req.DeviceId
-            }, statusCode: StatusCodes.Status502BadGateway);
+            return AuraApiResults.BadGateway(
+                "ISAPI 网关转发失败",
+                50203,
+                new
+                {
+                    detail = result.Message,
+                    httpStatus = result.HttpStatus,
+                    deviceId = req.DeviceId
+                });
         }
 
         HikvisionIsapiMetrics.GatewayInvocation(true);
@@ -214,7 +217,7 @@ internal sealed class HikvisionIsapiGatewayService
 
     private async Task<(long DeviceId, string Name, string Ip, int Port)?> ResolveEndpointAsync(long deviceId)
     {
-        var row = await _db.GetDeviceByIdAsync(deviceId);
+        var row = await _deviceRepository.GetDeviceByIdAsync(deviceId);
         if (row is not null)
         {
             return (row.DeviceId, row.Name, row.Ip, row.Port);

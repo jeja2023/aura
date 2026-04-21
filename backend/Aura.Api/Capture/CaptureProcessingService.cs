@@ -11,7 +11,9 @@ using Microsoft.AspNetCore.Http;
 internal sealed class CaptureProcessingService
 {
     private readonly AppStore _store;
-    private readonly PgSqlStore _db;
+    private readonly CaptureRepository _captureRepository;
+    private readonly MonitoringRepository _monitoringRepository;
+    private readonly AuditRepository _auditRepository;
     private readonly RetryQueueService _retryQueue;
     private readonly AiClient _aiClient;
     private readonly EventDispatchService _eventDispatchService;
@@ -23,7 +25,9 @@ internal sealed class CaptureProcessingService
 
     public CaptureProcessingService(
         AppStore store,
-        PgSqlStore db,
+        CaptureRepository captureRepository,
+        MonitoringRepository monitoringRepository,
+        AuditRepository auditRepository,
         RetryQueueService retryQueue,
         AiClient aiClient,
         EventDispatchService eventDispatchService,
@@ -34,7 +38,9 @@ internal sealed class CaptureProcessingService
         bool saveCaptureImageOnSuccess)
     {
         _store = store;
-        _db = db;
+        _captureRepository = captureRepository;
+        _monitoringRepository = monitoringRepository;
+        _auditRepository = auditRepository;
         _retryQueue = retryQueue;
         _aiClient = aiClient;
         _eventDispatchService = eventDispatchService;
@@ -88,7 +94,7 @@ internal sealed class CaptureProcessingService
             normalized.CaptureTime,
             metadata,
             captureImagePathForDb);
-        var dbId = await _db.InsertCaptureAsync(record.DeviceId, record.ChannelNo, record.CaptureTime, record.MetadataJson, captureImagePathForDb);
+        var dbId = await _captureRepository.InsertCaptureAsync(record.DeviceId, record.ChannelNo, record.CaptureTime, record.MetadataJson, captureImagePathForDb);
         var saved = dbId.HasValue ? record with { CaptureId = dbId.Value } : record;
         if (!dbId.HasValue)
         {
@@ -101,7 +107,7 @@ internal sealed class CaptureProcessingService
             await _aiClient.UpsertAsync(vectorId, aiResult.Feature);
         }
 
-        await _db.InsertOperationAsync("采集网关", source, $"设备={normalized.DeviceId}, 通道={normalized.ChannelNo}, AI={aiResult.Message}");
+        await _auditRepository.InsertOperationAsync("采集网关", source, $"设备={normalized.DeviceId}, 通道={normalized.ChannelNo}, AI={aiResult.Message}");
         AddOperationLog("采集网关", source, $"设备={normalized.DeviceId}, 通道={normalized.ChannelNo}, AI={aiResult.Message}");
         await _eventDispatchService.BroadcastRoleEventAsync("capture.received", new { saved.CaptureId, saved.DeviceId, saved.ChannelNo, saved.CaptureTime, source });
 
@@ -120,7 +126,7 @@ internal sealed class CaptureProcessingService
         }
         else if (!aiResult.Success)
         {
-            await _db.InsertOperationAsync("重试任务", "AI重试入队已跳过", $"captureId={saved.CaptureId}, 原因=图片落盘失败且禁止内联Base64回退");
+            await _auditRepository.InsertOperationAsync("重试任务", "AI重试入队已跳过", $"captureId={saved.CaptureId}, 原因=图片落盘失败且禁止内联Base64回退");
         }
 
         if (!string.IsNullOrWhiteSpace(normalized.MetadataJson) && normalized.MetadataJson.Contains("异常", StringComparison.Ordinal))
@@ -130,7 +136,7 @@ internal sealed class CaptureProcessingService
                 "异常滞留",
                 $"抓拍记录{saved.CaptureId}命中异常关键词",
                 DateTimeOffset.Now);
-            var alertId = await _db.InsertAlertAsync(alert.AlertType, alert.Detail);
+            var alertId = await _monitoringRepository.InsertAlertAsync(alert.AlertType, alert.Detail);
             if (!alertId.HasValue)
             {
                 _store.Alerts.Add(alert);

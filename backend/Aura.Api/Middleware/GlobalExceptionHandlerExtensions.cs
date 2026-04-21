@@ -1,4 +1,6 @@
 /* 文件：全局异常处理扩展 | File: Global exception handler extensions */
+using Aura.Api.Models;
+using Aura.Api.Serialization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
@@ -30,12 +32,9 @@ internal static class GlobalExceptionHandlerExtensions
 
                 context.Response.StatusCode = StatusCodes.Status500InternalServerError;
                 context.Response.ContentType = "application/json; charset=utf-8";
-                await context.Response.WriteAsJsonAsync(new
-                {
-                    code = 50000,
-                    msg = "服务内部错误，请稍后重试或联系管理员。",
-                    traceId
-                });
+                await context.Response.WriteAsJsonAsync(
+                    new ApiErrorResponse(50000, "服务内部错误，请稍后重试或联系管理员。", TraceId: traceId),
+                    AuraJsonSerializerOptions.Default);
             });
         });
     }

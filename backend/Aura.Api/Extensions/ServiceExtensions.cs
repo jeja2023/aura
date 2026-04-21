@@ -98,7 +98,7 @@ public static class ServiceExtensions
         
         if (string.IsNullOrWhiteSpace(jwtKey))
         {
-            if (!isDev) throw new InvalidOperationException("JWT Key 未配置（生产环境必须配置）");
+            if (!isDev && !isTesting) throw new InvalidOperationException("JWT Key 未配置（生产环境必须配置）");
             jwtKey = isTesting
                 ? "aura-integration-test-jwt-signing-key-min-32-chars"
                 : "aura-dev-jwt-key-please-change";
@@ -118,8 +118,23 @@ public static class ServiceExtensions
         var alertAttemptTimeout = configuration.GetValue("HttpClients:AlertNotifier:AttemptTimeoutSeconds", 15);
         var alertMaxRetries = configuration.GetValue("HttpClients:AlertNotifier:MaxRetryAttempts", 2);
 
+        services.AddSingleton(new PgSqlConnectionFactory(pgsqlConn));
+        services.AddSingleton<UserAuthRepository>(sp =>
+            new UserAuthRepository(sp.GetRequiredService<PgSqlConnectionFactory>(), sp.GetRequiredService<ILogger<UserAuthRepository>>()));
+        services.AddSingleton<DeviceRepository>(sp =>
+            new DeviceRepository(sp.GetRequiredService<PgSqlConnectionFactory>(), sp.GetRequiredService<ILogger<DeviceRepository>>()));
+        services.AddSingleton<CaptureRepository>(sp =>
+            new CaptureRepository(sp.GetRequiredService<PgSqlConnectionFactory>(), sp.GetRequiredService<ILogger<CaptureRepository>>()));
+        services.AddSingleton<AuditRepository>(sp =>
+            new AuditRepository(sp.GetRequiredService<PgSqlConnectionFactory>(), sp.GetRequiredService<ILogger<AuditRepository>>()));
+        services.AddSingleton<MonitoringRepository>(sp =>
+            new MonitoringRepository(sp.GetRequiredService<PgSqlConnectionFactory>(), sp.GetRequiredService<ILogger<MonitoringRepository>>()));
+        services.AddSingleton<CampusResourceRepository>(sp =>
+            new CampusResourceRepository(sp.GetRequiredService<PgSqlConnectionFactory>(), sp.GetRequiredService<ILogger<CampusResourceRepository>>()));
         services.AddSingleton<PgSqlStore>(sp =>
-            new PgSqlStore(pgsqlConn, sp.GetRequiredService<ILogger<PgSqlStore>>()));
+            new PgSqlStore(
+                sp.GetRequiredService<PgSqlConnectionFactory>(),
+                sp.GetRequiredService<ILogger<PgSqlStore>>()));
         
         services.AddSingleton<RedisCacheService>(sp =>
             new RedisCacheService(redisConn, sp.GetRequiredService<ILogger<RedisCacheService>>()));
@@ -182,7 +197,8 @@ public static class ServiceExtensions
         services.AddScoped<IdentityAdminService>(sp => 
             new IdentityAdminService(
                 sp.GetRequiredService<AppStore>(),
-                sp.GetRequiredService<PgSqlStore>(),
+                sp.GetRequiredService<UserAuthRepository>(),
+                sp.GetRequiredService<AuditRepository>(),
                 sp.GetRequiredService<RedisCacheService>(),
                 sp.GetRequiredService<ILogger<IdentityAdminService>>(),
                 jwtKey ?? "aura-dev-jwt-key-please-change",
@@ -236,9 +252,11 @@ public static class ServiceExtensions
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
             options.OnRejected = async (context, token) =>
             {
-                context.HttpContext.Response.ContentType = "application/json; charset=utf-8";
-                await context.HttpContext.Response.WriteAsJsonAsync(
-                    new { code = 42901, msg = "请求过于频繁，请稍后再试" },
+                await AuraApiResults.WriteErrorAsync(
+                    context.HttpContext.Response,
+                    StatusCodes.Status429TooManyRequests,
+                    "请求过于频繁，请稍后再试",
+                    42901,
                     cancellationToken: token);
             };
             options.AddPolicy("HikvisionGateway", context =>
@@ -293,13 +311,17 @@ public static class ServiceExtensions
         services.AddScoped<StatsApplicationService>();
         services.AddScoped<ExportApplicationService>(sp => new ExportApplicationService(
             sp.GetRequiredService<AppStore>(),
-            sp.GetRequiredService<PgSqlStore>(),
+            sp.GetRequiredService<PgSqlConnectionFactory>(),
+            sp.GetRequiredService<CaptureRepository>(),
+            sp.GetRequiredService<MonitoringRepository>(),
+            sp.GetRequiredService<AuditRepository>(),
+            sp.GetRequiredService<UserAuthRepository>(),
             sp.GetRequiredService<TabularExportService>(),
             ProjectPaths.ResolveStorageRoot(hostEnvironment)));
         services.AddScoped<OutputApplicationService>();
         services.AddScoped<VectorApplicationService>(sp => new VectorApplicationService(
             sp.GetRequiredService<AiClient>(),
-            sp.GetRequiredService<PgSqlStore>(),
+            sp.GetRequiredService<CaptureRepository>(),
             configuration.GetValue("Limits:MaxImageBase64Chars", 5_000_000),
             configuration.GetValue("Limits:MaxMetadataJsonChars", 200_000)));
         services.AddScoped<SpaceCollisionService>();
@@ -307,7 +329,9 @@ public static class ServiceExtensions
         services.AddScoped<MonitoringQueryService>();
         services.AddScoped<CaptureProcessingService>(sp => new CaptureProcessingService(
             sp.GetRequiredService<AppStore>(),
-            sp.GetRequiredService<PgSqlStore>(),
+            sp.GetRequiredService<CaptureRepository>(),
+            sp.GetRequiredService<MonitoringRepository>(),
+            sp.GetRequiredService<AuditRepository>(),
             sp.GetRequiredService<RetryQueueService>(),
             sp.GetRequiredService<AiClient>(),
             sp.GetRequiredService<EventDispatchService>(),
@@ -319,11 +343,22 @@ public static class ServiceExtensions
         services.AddScoped<RetryProcessingService>();
         services.AddScoped<ResourceManagementService>(sp => new ResourceManagementService(
             sp.GetRequiredService<AppStore>(),
-            sp.GetRequiredService<PgSqlStore>(),
+            sp.GetRequiredService<CampusResourceRepository>(),
+            sp.GetRequiredService<CaptureRepository>(),
+            sp.GetRequiredService<AuditRepository>(),
             ProjectPaths.ResolveStorageRoot(hostEnvironment)));
         services.AddScoped<OperationQueryService>();
         services.AddScoped<SystemLogQueryService>();
-        services.AddScoped<CaptureOpsService>();
+        services.AddScoped<CaptureOpsService>(sp => new CaptureOpsService(
+            sp.GetRequiredService<AppStore>(),
+            sp.GetRequiredService<PgSqlConnectionFactory>(),
+            sp.GetRequiredService<CaptureRepository>(),
+            sp.GetRequiredService<MonitoringRepository>(),
+            sp.GetRequiredService<AuditRepository>()));
+        services.AddScoped<UserQueryService>(sp => new UserQueryService(
+            sp.GetRequiredService<AppStore>(),
+            sp.GetRequiredService<PgSqlConnectionFactory>(),
+            sp.GetRequiredService<UserAuthRepository>()));
         
         // 多实例水平扩展时需配置 Redis Backplane，否则 SignalR 连接仅落在单节点。
         services.AddSignalR();
@@ -358,6 +393,33 @@ public static class ServiceExtensions
                             if (!string.IsNullOrWhiteSpace(accessToken)) context.Token = accessToken;
                         }
                         return Task.CompletedTask;
+                    },
+                    OnChallenge = async context =>
+                    {
+                        if (context.Response.HasStarted)
+                        {
+                            return;
+                        }
+
+                        context.HandleResponse();
+                        await AuraApiResults.WriteErrorAsync(
+                            context.Response,
+                            StatusCodes.Status401Unauthorized,
+                            "未登录或登录已过期，请重新登录",
+                            40100);
+                    },
+                    OnForbidden = async context =>
+                    {
+                        if (context.Response.HasStarted)
+                        {
+                            return;
+                        }
+
+                        await AuraApiResults.WriteErrorAsync(
+                            context.Response,
+                            StatusCodes.Status403Forbidden,
+                            "无权限访问该资源",
+                            40300);
                     }
                 };
             });

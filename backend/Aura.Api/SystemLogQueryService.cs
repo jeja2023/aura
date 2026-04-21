@@ -6,12 +6,14 @@ internal sealed class SystemLogQueryService
     internal sealed record SystemLogQueryResult(object Data, object Pager);
 
     private readonly AppStore _store;
-    private readonly PgSqlStore _db;
+    private readonly PgSqlConnectionFactory _pgSqlConnectionFactory;
+    private readonly AuditRepository _auditRepository;
 
-    public SystemLogQueryService(AppStore store, PgSqlStore db)
+    public SystemLogQueryService(AppStore store, PgSqlConnectionFactory pgSqlConnectionFactory, AuditRepository auditRepository)
     {
         _store = store;
-        _db = db;
+        _pgSqlConnectionFactory = pgSqlConnectionFactory;
+        _auditRepository = auditRepository;
     }
 
     public async Task<SystemLogQueryResult> GetSystemLogsAsync(string? keyword, int page, int pageSize)
@@ -20,8 +22,8 @@ internal sealed class SystemLogQueryService
         if (pageSize <= 0) pageSize = 20;
         if (pageSize > 100) pageSize = 100;
 
-        var dbResult = await _db.GetSystemLogsAsync(keyword, page, pageSize);
-        if (dbResult.Total > 0 || dbResult.Rows.Count > 0)
+        var dbResult = await _auditRepository.GetSystemLogsAsync(keyword, page, pageSize);
+        if (_pgSqlConnectionFactory.IsConfigured)
         {
             return new SystemLogQueryResult(dbResult.Rows, new { page, pageSize, total = dbResult.Total });
         }

@@ -118,3 +118,7 @@ credentials.json
 # 本地 SQLite（本项目业务库为 PostgreSQL；勿误提交本机调试库）
 *.sqlite
 *.sqlite3
+.verify_build_run/
+pytest-cache-files-*/
+frontend/test-results/
+frontend/playwright-report/

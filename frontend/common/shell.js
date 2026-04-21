@@ -159,7 +159,6 @@
     btn.className = "btn-primary";
     btn.textContent = "退出登录";
     btn.addEventListener("click", async () => {
-      localStorage.removeItem("token");
       try {
         await fetch("/api/auth/logout", { method: "POST" });
       } catch {
