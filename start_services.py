@@ -267,13 +267,13 @@ def main() -> int:
     _load_env_file(ROOT / ".env")
     _preflight_check()
 
-    # 经验：AI 服务（8000）更容易因上次调试/异常退出残留监听而阻塞一键启动。
-    # 因此默认“只对 8000 做一次安全清理”，避免误判或手动介入。
-    # 5001（.NET）仍保持谨慎策略：仅在显式 --kill-conflicts 时清理。
-    _kill_process_on_local_port(8000)
+    # 端口清理保持一致策略：仅在显式 --kill-conflicts 时才执行强制结束。
+    # 默认只检查占用并提示，避免误杀其他会话进程。
     if kill_conflicts:
+        _kill_process_on_local_port(8000)
         _kill_process_on_local_port(5001)
     else:
+        _ensure_local_port_available(8000)
         _ensure_local_port_available(5001)
 
     ai_python = _pick_ai_python()

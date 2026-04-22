@@ -1,5 +1,6 @@
 # 文件：AI 路由定义（api_routes.py） | File: AI route definitions
 from pathlib import Path
+import os
 import time
 
 from fastapi import APIRouter, Request
@@ -9,6 +10,7 @@ from PIL import Image
 from app.route_deps import RouteDeps
 from models.schemas import ClusterReq, ImageFileReq, ImageReq, SearchReq, UpsertReq
 from services.cluster_service import cluster_vectors, compute_cluster_cohesion
+from services.inference_service import InferenceBackpressureError
 from vector_store.index_store import load_vectors_for_cluster, search_vectors, upsert_vector
 from utils.retrieval_config import build_retrieval_defaults, resolve_search_params
 from utils.service_state import requires_persistent_index
@@ -16,6 +18,33 @@ from utils.service_state import requires_persistent_index
 
 def build_api_router(deps: RouteDeps) -> APIRouter:
     router = APIRouter()
+
+    def _resolve_extract_file_path(raw_path: str) -> tuple[bool, str]:
+        target = Path(raw_path).expanduser()
+        if not target.exists():
+            return True, ""
+        allowed_roots_raw = os.getenv("AURA_AI_EXTRACT_FILE_ROOTS", "").strip()
+        if not allowed_roots_raw:
+            return True, ""
+        allowed_roots = [Path(item.strip()).expanduser().resolve() for item in allowed_roots_raw.split(";") if item.strip()]
+        try:
+            target_resolved = target.resolve()
+        except Exception:
+            return False, "文件路径解析失败"
+        for root in allowed_roots:
+            try:
+                target_resolved.relative_to(root)
+                return True, ""
+            except Exception:
+                continue
+        return False, "文件路径不在允许目录内"
+
+    def _allow_operation(request: Request) -> tuple[bool, JSONResponse | None]:
+        request_id = getattr(request.state, "request_id", "")
+        allowed, reason = deps.retrieval_guard.allow_request()
+        if allowed:
+            return True, None
+        return False, JSONResponse(status_code=429, content={"code": 42901, "msg": reason, "request_id": request_id})
 
     @router.get("/")
     def health():
@@ -32,24 +61,39 @@ def build_api_router(deps: RouteDeps) -> APIRouter:
         return payload
 
     @router.post("/ai/extract")
-    async def extract(req: ImageReq):
+    async def extract(req: ImageReq, request: Request):
+        allowed, blocked_response = _allow_operation(request)
+        if not allowed:
+            return blocked_response
         try:
             img = deps.decode_image(req.image_base64)
             tensor = deps.preprocess(img)
             feature = await deps.extract_feature_batched(tensor)
             return {"code": 0, "msg": "特征提取成功", "data": {"feature": feature, "dim": len(feature)}}
-        except Exception as ex:
+        except InferenceBackpressureError:
+            return JSONResponse(
+                status_code=429,
+                content={"code": 42902, "msg": "推理服务繁忙，请稍后重试", "data": {"feature": [], "dim": 0}},
+            )
+        except Exception:
+            deps.logger.exception("特征提取失败（/ai/extract）")
             return JSONResponse(
                 status_code=500,
-                content={"code": 50001, "msg": f"特征提取失败: {ex}", "data": {"feature": [], "dim": 0}},
+                content={"code": 50001, "msg": "特征提取失败，请稍后重试", "data": {"feature": [], "dim": 0}},
             )
 
     @router.post("/ai/extract-file")
-    async def extract_file(req: ImageFileReq):
+    async def extract_file(req: ImageFileReq, request: Request):
+        allowed, blocked_response = _allow_operation(request)
+        if not allowed:
+            return blocked_response
         try:
             path = Path(req.image_path)
             if not path.exists():
                 return JSONResponse(status_code=404, content={"code": 40401, "msg": f"文件不存在: {req.image_path}"})
+            allowed, reason = _resolve_extract_file_path(req.image_path)
+            if not allowed:
+                return JSONResponse(status_code=403, content={"code": 40301, "msg": reason})
 
             with Image.open(str(path)) as img:
                 rgb = img.convert("RGB")
@@ -57,14 +101,23 @@ def build_api_router(deps: RouteDeps) -> APIRouter:
 
             feature = await deps.extract_feature_batched(tensor)
             return {"code": 0, "msg": "特征提取成功", "data": {"feature": feature, "dim": len(feature)}}
-        except Exception as ex:
+        except InferenceBackpressureError:
+            return JSONResponse(
+                status_code=429,
+                content={"code": 42902, "msg": "推理服务繁忙，请稍后重试", "data": {"feature": [], "dim": 0}},
+            )
+        except Exception:
+            deps.logger.exception("特征提取失败（/ai/extract-file）")
             return JSONResponse(
                 status_code=500,
-                content={"code": 50001, "msg": f"特征提取失败: {ex}", "data": {"feature": [], "dim": 0}},
+                content={"code": 50001, "msg": "特征提取失败，请稍后重试", "data": {"feature": [], "dim": 0}},
             )
 
     @router.post("/ai/upsert")
-    async def upsert(req: UpsertReq):
+    async def upsert(req: UpsertReq, request: Request):
+        allowed, blocked_response = _allow_operation(request)
+        if not allowed:
+            return blocked_response
         strict_mode = requires_persistent_index()
         return upsert_vector(
             vid=req.vid,
@@ -86,39 +139,57 @@ def build_api_router(deps: RouteDeps) -> APIRouter:
     @router.post("/ai/search")
     async def search(req: SearchReq, request: Request):
         request_id = getattr(request.state, "request_id", "")
-        allowed, reason = deps.retrieval_guard.allow_request()
+        allowed, blocked_response = _allow_operation(request)
         if not allowed:
-            return JSONResponse(status_code=429, content={"code": 42901, "msg": reason, "request_id": request_id})
+            return blocked_response
         strict_mode = requires_persistent_index()
         defaults = build_retrieval_defaults()
         resolved, warnings = resolve_search_params(req, defaults)
         begin = time.perf_counter()
-        result = search_vectors(
-            feature=req.feature,
-            top_k=req.top_k,
-            min_score=resolved["min_score"],
-            candidate_multiplier=resolved["candidate_multiplier"],
-            candidate_pool=resolved["candidate_pool"],
-            ann_probe=resolved["ann_probe"],
-            rerank_window=resolved["rerank_window"],
-            include_vids=req.include_vids,
-            exclude_vids=req.exclude_vids,
-            metadata_filter=req.metadata_filter,
-            explain=req.explain,
-            strict_mode=strict_mode,
-            ensure_arango_func=deps.ensure_arango,
-            get_arango_db_func=lambda: deps.arango.db,
-            mark_arango_failure_func=deps.mark_arango_failure,
-            get_arango_error_func=lambda: deps.arango.error,
-            strict_unavailable_func=deps.strict_arango_unavailable,
-            collection_name=deps.collection_name,
-            vector_dim=deps.vector_dim,
-            normalize_feature_func=deps.normalize_feature,
-            cosine_func=deps.cosine,
-            logger=deps.logger,
-            index_lock=deps.index_lock,
-            local_index=deps.local_index,
-        )
+        try:
+            result = search_vectors(
+                feature=req.feature,
+                top_k=req.top_k,
+                min_score=resolved["min_score"],
+                candidate_multiplier=resolved["candidate_multiplier"],
+                candidate_pool=resolved["candidate_pool"],
+                ann_probe=resolved["ann_probe"],
+                rerank_window=resolved["rerank_window"],
+                include_vids=req.include_vids,
+                exclude_vids=req.exclude_vids,
+                metadata_filter=req.metadata_filter,
+                explain=req.explain,
+                strict_mode=strict_mode,
+                ensure_arango_func=deps.ensure_arango,
+                get_arango_db_func=lambda: deps.arango.db,
+                mark_arango_failure_func=deps.mark_arango_failure,
+                get_arango_error_func=lambda: deps.arango.error,
+                strict_unavailable_func=deps.strict_arango_unavailable,
+                collection_name=deps.collection_name,
+                vector_dim=deps.vector_dim,
+                normalize_feature_func=deps.normalize_feature,
+                cosine_func=deps.cosine,
+                logger=deps.logger,
+                index_lock=deps.index_lock,
+                local_index=deps.local_index,
+            )
+        except Exception:
+            deps.retrieval_guard.record_result(success=False)
+            elapsed_ms = (time.perf_counter() - begin) * 1000.0
+            deps.index_runtime.record_search(
+                success=False,
+                hit_count=0,
+                latency_ms=elapsed_ms,
+                engine="unavailable",
+                strategy="exception",
+                filters_applied=bool(req.include_vids or req.exclude_vids or req.metadata_filter),
+                request_id=request_id,
+                status="failed",
+                reason="检索内部异常",
+                warnings=warnings,
+            )
+            deps.logger.exception("检索内部异常 request_id=%s", request_id)
+            return JSONResponse(status_code=500, content={"code": 50002, "msg": "检索失败，请稍后重试", "request_id": request_id})
         elapsed_ms = (time.perf_counter() - begin) * 1000.0
         if isinstance(result, JSONResponse):
             deps.retrieval_guard.record_result(success=False)
@@ -186,7 +257,10 @@ def build_api_router(deps: RouteDeps) -> APIRouter:
         return {"code": 0, "msg": "检索审计日志查询成功", "data": data}
 
     @router.post("/ai/cluster")
-    async def cluster(req: ClusterReq):
+    async def cluster(req: ClusterReq, request: Request):
+        allowed, blocked_response = _allow_operation(request)
+        if not allowed:
+            return blocked_response
         strict_mode = requires_persistent_index()
         loaded = load_vectors_for_cluster(
             max_vectors=req.max_vectors,

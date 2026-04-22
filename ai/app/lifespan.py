@@ -28,14 +28,22 @@ def build_lifespan(*, arango, inference, logger, deps, index_runtime):
 
     @asynccontextmanager
     async def lifespan(_app):
+        init_task: asyncio.Task | None = None
         with deps.index_lock:
             index_runtime.load_snapshot(
                 local_index=deps.local_index,
                 normalize_feature_func=deps.normalize_feature,
                 logger=logger,
             )
-        asyncio.create_task(background_init_and_batch())
+        init_task = asyncio.create_task(background_init_and_batch())
         yield
+        if init_task is not None and not init_task.done():
+            init_task.cancel()
+            try:
+                await init_task
+            except asyncio.CancelledError:
+                pass
+        await inference.stop_batch_loop()
         with deps.index_lock:
             index_runtime.save_snapshot(local_index=deps.local_index, logger=logger)
 

@@ -8,6 +8,10 @@ import numpy as np
 import onnxruntime as ort
 
 
+class InferenceBackpressureError(RuntimeError):
+    pass
+
+
 class InferenceService:
     def __init__(
         self,
@@ -16,15 +20,19 @@ class InferenceService:
         logger: logging.Logger,
         batch_size: int = 16,
         max_wait_seconds: float = 0.05,
+        max_queue_size: int = 256,
+        enqueue_timeout_seconds: float = 0.2,
     ):
         self._normalize_feature = normalize_feature_func
         self._logger = logger
         self._batch_size = batch_size
         self._max_wait_seconds = max_wait_seconds
+        self._max_queue_size = max(1, max_queue_size)
+        self._enqueue_timeout_seconds = max(0.01, enqueue_timeout_seconds)
         self._session = None
         self._input_name = ""
         self._model_error = ""
-        self._queue = asyncio.Queue()
+        self._queue = asyncio.Queue(maxsize=self._max_queue_size)
         self._batch_task: asyncio.Task | None = None
 
     @property
@@ -61,43 +69,78 @@ class InferenceService:
         if self._session is not None and self._batch_task is None:
             self._batch_task = asyncio.create_task(self._batch_loop())
 
+    async def stop_batch_loop(self) -> None:
+        if self._batch_task is None:
+            return
+        task = self._batch_task
+        self._batch_task = None
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
     async def extract_feature_batched(self, tensor: np.ndarray) -> list[float]:
         if self._session is None:
             raise RuntimeError(self._model_error or "onnx session not initialized")
         future = asyncio.get_running_loop().create_future()
-        await self._queue.put((tensor, future))
+        try:
+            await asyncio.wait_for(
+                self._queue.put((tensor, future)),
+                timeout=self._enqueue_timeout_seconds,
+            )
+        except asyncio.TimeoutError as ex:
+            raise InferenceBackpressureError(
+                f"推理队列繁忙，请稍后重试（队列上限={self._max_queue_size}）"
+            ) from ex
         return await future
 
+    @property
+    def queue_max_size(self) -> int:
+        return self._max_queue_size
+
+    @property
+    def queue_size(self) -> int:
+        return self._queue.qsize()
+
     async def _batch_loop(self) -> None:
-        while True:
-            item = await self._queue.get()
-            batch = [item]
-            start_time = asyncio.get_running_loop().time()
+        try:
+            while True:
+                item = await self._queue.get()
+                batch = [item]
+                start_time = asyncio.get_running_loop().time()
 
-            while len(batch) < self._batch_size:
-                time_left = self._max_wait_seconds - (asyncio.get_running_loop().time() - start_time)
-                if time_left <= 0:
-                    break
                 try:
-                    item = await asyncio.wait_for(self._queue.get(), timeout=time_left)
-                    batch.append(item)
-                except (asyncio.TimeoutError, asyncio.QueueEmpty):
-                    break
+                    while len(batch) < self._batch_size:
+                        time_left = self._max_wait_seconds - (asyncio.get_running_loop().time() - start_time)
+                        if time_left <= 0:
+                            break
+                        try:
+                            item = await asyncio.wait_for(self._queue.get(), timeout=time_left)
+                            batch.append(item)
+                        except (asyncio.TimeoutError, asyncio.QueueEmpty):
+                            break
 
-            try:
-                tensors = [tensor for tensor, _future in batch]
-                input_data = tensors[0] if len(tensors) == 1 else np.concatenate(tensors, axis=0)
-                loop = asyncio.get_running_loop()
-                outputs = await loop.run_in_executor(
-                    None,
-                    lambda: self._session.run(None, {self._input_name: input_data}),
-                )
+                    tensors = [tensor for tensor, _future in batch]
+                    input_data = tensors[0] if len(tensors) == 1 else np.concatenate(tensors, axis=0)
+                    loop = asyncio.get_running_loop()
+                    outputs = await loop.run_in_executor(
+                        None,
+                        lambda: self._session.run(None, {self._input_name: input_data}),
+                    )
 
-                feat_batch = np.asarray(outputs[0]).astype(np.float32)
-                for index, (_tensor, future) in enumerate(batch):
-                    feature = feat_batch[index].reshape(-1).tolist()
-                    future.set_result(self._normalize_feature(feature))
-            except Exception as ex:
-                for _tensor, future in batch:
-                    if not future.done():
-                        future.set_exception(ex)
+                    feat_batch = np.asarray(outputs[0]).astype(np.float32)
+                    for index, (_tensor, future) in enumerate(batch):
+                        feature = feat_batch[index].reshape(-1).tolist()
+                        if not future.done():
+                            future.set_result(self._normalize_feature(feature))
+                except Exception as ex:
+                    for _tensor, future in batch:
+                        if not future.done():
+                            future.set_exception(ex)
+        except asyncio.CancelledError:
+            while not self._queue.empty():
+                _tensor, future = self._queue.get_nowait()
+                if not future.done():
+                    future.set_exception(RuntimeError("推理服务正在关闭"))
+            raise

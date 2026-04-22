@@ -52,6 +52,25 @@
 - 新增 `backend/Aura.Api.Integration.Tests/StatsEndpointTests.cs`，覆盖统计接口中 AI 运维字段与图表载荷结构。
 - 新增 `ai/tests/test_ai_routes_and_index.py`，覆盖提特征异常状态码、缺文件状态码、检索 empty 统计口径与桶探针 explain 语义。
 
+## 0.1.22（2026-04-22）
+
+### AI 稳定性与安全加固
+
+- `ai/app/bootstrap.py`：新增环境变量安全解析（整数/浮点容错回退），避免非法值在导入期触发 `ValueError` 导致服务无法启动。
+- `ai/app/lifespan.py`、`ai/services/inference_service.py`：补齐后台初始化任务与推理批处理循环的优雅停机流程（任务句柄管理、取消与回收），降低进程退出时的悬挂任务风险。
+- `ai/utils/service_state.py`：健康状态新增诊断开关 `AURA_AI_HEALTH_VERBOSE`；生产默认不返回 `arango_error`/`model_error` 详细信息，减少内部异常暴露面。
+- `ai/routes/api_routes.py`：`/ai/search` 增加总兜底异常处理并补齐失败审计记录，未预期异常统一返回脱敏消息（`code=50002`）。
+- `ai/routes/api_routes.py`：`/ai/extract-file` 新增目录白名单约束（`AURA_AI_EXTRACT_FILE_ROOTS`），越界访问返回 `40301`。
+- `ai/routes/api_routes.py`：将限流保护扩展到 `/ai/extract`、`/ai/extract-file`、`/ai/upsert`、`/ai/search`、`/ai/cluster` 全部重负载路由。
+- `ai/models/schemas.py`：为请求模型补充长度与范围约束（如 `feature/top_k/ann_probe/max_vectors/vid`），前移输入校验边界。
+
+### 配置与测试补齐
+
+- `.env.example`：新增 AI 背压与安全相关键（`AURA_AI_INFER_*`、`AURA_AI_HEALTH_VERBOSE`、`AURA_AI_EXTRACT_FILE_ROOTS`）说明。
+- `pytest.ini`：统一 `pytest` 导入路径与测试目录，降低测试对工作目录的依赖。
+- 新增 `ai/tests/test_ai_hardening.py`，覆盖环境变量容错、生产健康脱敏与检索异常兜底审计分支。
+- `ai/tests/test_ai_routes_and_index.py` 补充路径白名单拒绝与新限流依赖桩，覆盖新增安全逻辑。
+
 ## 0.1.20（2026-04-21）
 
 ### AI 检索可观测与巡检增强（同日增量）

@@ -39,6 +39,11 @@ class RouteDeps:
         guard_state = self.retrieval_guard.get_state()
         payload["retrieval_guard"] = guard_state
         payload["backfill_state"] = self.index_runtime.get_backfill_state()
+        payload["inference_queue"] = {
+            "max_size": self.inference.queue_max_size,
+            "current_size": self.inference.queue_size,
+            "remaining": max(0, self.inference.queue_max_size - self.inference.queue_size),
+        }
         payload["熔断状态"] = guard_state.get("circuit_breaker", {})
         payload["限流状态"] = guard_state.get("rate_limiter", {})
         payload["回填状态"] = payload["backfill_state"]

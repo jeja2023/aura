@@ -24,6 +24,13 @@ def requires_persistent_index() -> bool:
     return current_environment().lower() == "production"
 
 
+def include_diagnostics() -> bool:
+    override = os.getenv("AURA_AI_HEALTH_VERBOSE", "").strip()
+    if override:
+        return truthy(override)
+    return current_environment().lower() != "production"
+
+
 def build_service_state(
     *,
     arango_enabled: bool,
@@ -31,12 +38,14 @@ def build_service_state(
     model_loaded: bool,
     model_error: str,
 ) -> dict:
+    verbose = include_diagnostics()
     return {
         "time": datetime.now().isoformat(),
         "environment": current_environment(),
         "arango_required": requires_persistent_index(),
         "arangodb_enabled": arango_enabled,
-        "arango_error": arango_error,
+        "arango_error": arango_error if verbose else "",
         "model_loaded": model_loaded,
-        "model_error": model_error,
+        "model_error": model_error if verbose else "",
+        "diagnostics_visible": verbose,
     }
