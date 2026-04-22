@@ -31,6 +31,115 @@
   margin-top: 12px;
 }
 
+.aura-data-table .capture-col-meta {
+  width: 420px;
+}
+
+.aura-data-table tbody td.capture-col-meta {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  vertical-align: top;
+}
+
+.capture-meta {
+  display: grid;
+  gap: 8px;
+}
+
+.capture-meta-badges,
+.capture-meta-fields,
+.capture-meta-extra {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.capture-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.capture-badge.is-ok {
+  color: var(--success);
+  background: rgba(var(--success-rgb), 0.12);
+  border-color: rgba(var(--success-rgb), 0.24);
+}
+
+.capture-badge.is-warn {
+  color: #b45309;
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.28);
+}
+
+:root[data-aura-theme="dark"] .capture-badge.is-warn {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.18);
+  border-color: rgba(245, 158, 11, 0.32);
+}
+
+.capture-badge.is-error {
+  color: var(--danger);
+  background: rgba(var(--danger-rgb), 0.1);
+  border-color: rgba(var(--danger-rgb), 0.24);
+}
+
+.capture-badge.is-neutral {
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--card) 76%, var(--bg) 24%);
+  border-color: var(--line);
+}
+
+.capture-meta-summary {
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.capture-meta-fields span,
+.capture-meta-extra span {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.capture-meta-details summary {
+  cursor: pointer;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.capture-meta-details pre {
+  margin-top: 8px;
+  max-height: 180px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--card) 72%, var(--bg) 28%);
+  border: 1px solid var(--line);
+  color: var(--text-muted);
+  white-space: pre-wrap;
+}
+
+.capture-image-link {
+  color: var(--primary);
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.capture-image-link:hover {
+  text-decoration: underline;
+}
+
+.capture-image-empty {
+  color: var(--text-muted);
+}
+
 .capture-modal-create.aura-modal-panel {
   width: min(100%, 580px);
 }

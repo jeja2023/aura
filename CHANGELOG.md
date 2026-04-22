@@ -2,6 +2,56 @@
 
 本文档记录仓库关键版本与阶段性改动，便于联调、回归与发布追踪。
 
+## 0.1.21（2026-04-22）
+
+### AI 链路可靠性与状态语义收敛
+
+- 新增 `backend/Aura.Api/Ai/AiMetadataComposer.cs`，统一生成抓拍元数据中的 AI 字段，补齐并标准化以下状态：`ai_status`、`ai_vector_success`、`ai_vector_msg`、`ai_vector_engine`、`ai_retry_queued`、`ai_retry_reason`。
+- `CaptureProcessingService` 改为“提特征 + 向量写入”双阶段状态机：向量写入失败会进入补偿队列并写入明确失败原因；成功后根据配置清理临时图片，避免无效文件残留。
+- `RetryProcessingService` 增强向量补偿分支：重试任务除提特征外，新增向量落库失败的重排队逻辑、失败兜底与抓拍元数据回写；并在数据库不可更新时回退更新内存态，降低状态漂移。
+- `CaptureRepository` 新增 `UpdateCaptureFeatureIdAsync`，在向量 ID 可用时及时回写 `capture_record.feature_id`，支撑后续检索与审计对齐。
+
+### AI 客户端与检索可观测增强
+
+- `AiClient` 返回模型升级：
+  - `SearchAsync`、`UpsertAsync` 由“裸 bool/列表”改为结构化结果（成功标记 + 消息 + 引擎信息），错误可携带 HTTP 状态与业务 code。
+  - 新增 `GetSearchStatsAsync(windowMinutes)`，对接 `/ai/search-stats`，用于运维面板读取检索失败率与平均延迟。
+  - 增强 JSON 解析容错与失败消息构造，降低“HTTP 200 但业务失败”时的误判。
+- `VectorApplicationService` 接入新的 `AiSearchResult` 语义，AI 检索失败时返回网关错误而非空列表，避免前端把失败误当“无结果”。
+- AI Python 侧同步收敛：
+  - `ai/routes/api_routes.py`：提特征异常返回显式 HTTP 500；缺失文件返回 HTTP 404（保留业务 code）。
+  - `ai/services/index_runtime_service.py`：仅统计“成功且 0 命中”为 empty，修复失败请求误计为空结果的问题。
+  - `ai/vector_store/index_store.py`：桶探针与 explain/meta 字段更一致，补充 `ann_probe/requested_ann_probe/rerank_window` 并明确策略名。
+
+### 统计看板与首页态势联动升级
+
+- 后端统计（`StatsApplicationService`）新增 AI 运维汇总：
+  - `GET /api/stats/overview` 新增 `data.ai`，包含 `AI失败率/补偿队列/向量异常/检索失败率/检索延迟` 等指标。
+  - `GET /api/stats/dashboard` 新增 `aiStatus`（状态分布）与 `aiDaily`（链路趋势）两组图表数据。
+- 统计页（`frontend/stats/*`）重做为“概览 KPI + 图表面板”：
+  - 新增 AI 运维 KPI 区（失败率、补偿队列、向量异常、检索失败率、检索延迟）。
+  - 新增 `AI状态分布` 与 `AI链路趋势` 两张图，图表诊断/重试逻辑同步覆盖新增容器。
+  - 布局改为紧凑化并支持统计页主内容纵向滚动，避免下方图表被首屏截断。
+- 首页态势（`frontend/index/*`）接入 AI 运维提醒：
+  - 新增 AI 指标卡与异常列表。
+  - 顶部“系统状态”新增 `AI链路风险` 文案与风险等级（低/中/高）。
+  - 新增风险升级 toast（仅升级触发），并加入 5 分钟冷却；冷却时长支持通过 `window.AURA_PAGE_CONFIG.aiRiskToastCooldownMs` 配置。
+
+### 抓拍与日志页面可读性优化
+
+- 抓拍页（`frontend/capture/*`）：
+  - 元数据列改为结构化展示（状态徽标、摘要、向量信息、补偿说明、原始元数据折叠查看）。
+  - 图片路径改为可点击链接，空路径时显示“未归档”占位。
+- 日志页（`frontend/log/*`）：
+  - 操作日志与系统日志表格改为“标签 + 详情”结构，减少低价值字段堆叠。
+  - 新增日志标签（异常/关注/AI/向量/重试）与详情单元样式，提升排障扫描效率。
+
+### 测试补齐
+
+- 新增 `backend/Aura.Api.Tests/AiClientTests.cs`，覆盖 AI 客户端在“HTTP 成功但业务失败”与 `search-stats` 解析等关键路径。
+- 新增 `backend/Aura.Api.Integration.Tests/StatsEndpointTests.cs`，覆盖统计接口中 AI 运维字段与图表载荷结构。
+- 新增 `ai/tests/test_ai_routes_and_index.py`，覆盖提特征异常状态码、缺文件状态码、检索 empty 统计口径与桶探针 explain 语义。
+
 ## 0.1.20（2026-04-21）
 
 ### AI 检索可观测与巡检增强（同日增量）
@@ -962,4 +1012,4 @@
 ## 版本规范
 
 - 版本号遵循 `MAJOR.MINOR.PATCH`
-- 当前版本：`0.1.18`
+- 当前版本：`0.1.21`

@@ -97,7 +97,8 @@ class IndexRuntimeService:
                 self._search_success += 1
             else:
                 self._search_failed += 1
-            if hit_count == 0:
+            is_empty = bool(success and hit_count == 0)
+            if is_empty:
                 self._search_empty += 1
             self._search_latency_ms_total += max(0.0, latency_ms)
             self._last_search_time = datetime.now().isoformat()
@@ -109,14 +110,14 @@ class IndexRuntimeService:
             bucket["count"] += 1
             if success:
                 bucket["success"] += 1
-            if hit_count == 0:
+            if is_empty:
                 bucket["empty"] += 1
             bucket["latency_ms_total"] += max(0.0, latency_ms)
             self._search_events.append(
                 {
                     "time": datetime.now().timestamp(),
                     "success": 1 if success else 0,
-                    "empty": 1 if hit_count == 0 else 0,
+                    "empty": 1 if is_empty else 0,
                     "latency_ms": max(0.0, latency_ms),
                 }
             )

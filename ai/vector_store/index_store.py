@@ -59,11 +59,10 @@ def _bucket_neighbor_texts(vector: list[float], probe: int) -> list[str]:
     return ["".join("1" if x else "0" for x in key) for key in _neighbor_keys(base_key)]
 
 
-def _select_bucket_probe(*, candidate_pool: int, top_k: int) -> int:
-    ratio = candidate_pool / max(1, top_k)
-    if ratio >= 18:
+def _resolve_bucket_probe(requested_probe: int) -> int:
+    if requested_probe <= 8:
         return 8
-    if ratio >= 10:
+    if requested_probe <= 16:
         return 16
     return 24
 
@@ -229,7 +228,7 @@ def search_vectors(
             if exclude_set:
                 aql += "\n  FILTER d.vid NOT IN @exclude_vids"
                 bind_vars["exclude_vids"] = list(exclude_set)
-            selected_probe = _select_bucket_probe(candidate_pool=final_candidate_pool, top_k=limited_top_k)
+            selected_probe = _resolve_bucket_probe(final_ann_probe)
             bucket_field = f"ann_bucket_{selected_probe}"
             bucket_candidates = _bucket_neighbor_texts(normalized_feature, selected_probe)
             aql += f"\n  FILTER HAS(d, '{bucket_field}') AND d.{bucket_field} IN @bucket_candidates"
@@ -262,20 +261,25 @@ def search_vectors(
                 "data": hits,
                 "meta": {
                     "engine": "arangodb",
-                    "strategy": "exact-cosine",
+                    "strategy": "bucket-prefilter-exact-cosine",
                     "candidate_pool": final_candidate_pool,
                     "candidate_multiplier": final_candidate_multiplier,
                     "ann_prefilter": f"bucket{selected_probe}-neighbors",
+                    "ann_probe": selected_probe,
+                    "requested_ann_probe": final_ann_probe,
+                    "rerank_window": 0,
                     "filters_applied": bool(include_set or exclude_set or metadata_eq),
                 },
             }
             if explain:
                 result["explain"] = {
-                    "phase": ["prefilter:ann_bucket_16", "score:exact-cosine", "sort:desc", "cut:top_k"],
+                    "phase": [f"prefilter:ann_bucket_{selected_probe}", "score:exact-cosine", "sort:desc", "cut:top_k"],
                     "candidate_pool": final_candidate_pool,
                     "top_k": limited_top_k,
                     "bucket_neighbors": len(bucket_candidates),
                     "bucket_probe": selected_probe,
+                    "requested_ann_probe": final_ann_probe,
+                    "rerank_window_applied": 0,
                     "returned": len(hits),
                 }
             return result
@@ -364,16 +368,18 @@ def search_vectors(
         "code": 0,
         "msg": "检索成功",
         "data": reranked[:limited_top_k],
-        "meta": {
-            "engine": "memory",
-            "strategy": "ann-rerank",
-            "candidates": len(candidates),
-            "rerank_size": len(rerank_items),
-            "candidate_pool": final_candidate_pool,
-            "candidate_multiplier": final_candidate_multiplier,
-            "filters_applied": bool(include_set or exclude_set or metadata_eq),
-        },
-    }
+            "meta": {
+                "engine": "memory",
+                "strategy": "ann-rerank",
+                "candidates": len(candidates),
+                "rerank_size": len(rerank_items),
+                "candidate_pool": final_candidate_pool,
+                "candidate_multiplier": final_candidate_multiplier,
+                "ann_probe": final_ann_probe,
+                "rerank_window": final_rerank_window,
+                "filters_applied": bool(include_set or exclude_set or metadata_eq),
+            },
+        }
     if explain:
         result["explain"] = {
             "phase": ["filter", "ann-bucket-recall", "approx-score", "exact-rerank"],

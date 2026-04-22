@@ -39,14 +39,17 @@ def build_api_router(deps: RouteDeps) -> APIRouter:
             feature = await deps.extract_feature_batched(tensor)
             return {"code": 0, "msg": "特征提取成功", "data": {"feature": feature, "dim": len(feature)}}
         except Exception as ex:
-            return {"code": 50001, "msg": f"特征提取失败: {ex}", "data": {"feature": [], "dim": 0}}
+            return JSONResponse(
+                status_code=500,
+                content={"code": 50001, "msg": f"特征提取失败: {ex}", "data": {"feature": [], "dim": 0}},
+            )
 
     @router.post("/ai/extract-file")
     async def extract_file(req: ImageFileReq):
         try:
             path = Path(req.image_path)
             if not path.exists():
-                return {"code": 40401, "msg": f"文件不存在: {req.image_path}"}
+                return JSONResponse(status_code=404, content={"code": 40401, "msg": f"文件不存在: {req.image_path}"})
 
             with Image.open(str(path)) as img:
                 rgb = img.convert("RGB")
@@ -55,7 +58,10 @@ def build_api_router(deps: RouteDeps) -> APIRouter:
             feature = await deps.extract_feature_batched(tensor)
             return {"code": 0, "msg": "特征提取成功", "data": {"feature": feature, "dim": len(feature)}}
         except Exception as ex:
-            return {"code": 50001, "msg": f"特征提取失败: {ex}", "data": {"feature": [], "dim": 0}}
+            return JSONResponse(
+                status_code=500,
+                content={"code": 50001, "msg": f"特征提取失败: {ex}", "data": {"feature": [], "dim": 0}},
+            )
 
     @router.post("/ai/upsert")
     async def upsert(req: UpsertReq):

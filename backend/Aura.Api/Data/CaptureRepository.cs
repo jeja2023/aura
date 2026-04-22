@@ -60,6 +60,27 @@ internal sealed class CaptureRepository
         }
     }
 
+    public async Task<bool> UpdateCaptureFeatureIdAsync(long captureId, string featureId)
+    {
+        try
+        {
+            await using var conn = CreateConnection();
+            var affected = await conn.ExecuteAsync(
+                """
+                UPDATE capture_record
+                SET feature_id = @FeatureId
+                WHERE capture_id = @CaptureId
+                """,
+                new { CaptureId = captureId, FeatureId = featureId });
+            return affected > 0;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "数据库更新抓拍向量ID失败。captureId={CaptureId}, featureId={FeatureId}", captureId, featureId);
+            return false;
+        }
+    }
+
     public async Task<List<DbCapture>> GetCapturesAsync(int limit = 500)
     {
         try

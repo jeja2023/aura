@@ -55,12 +55,17 @@ internal sealed class VectorApplicationService
         }
 
         var rows = await _aiClient.SearchAsync(req.Feature, topK);
-        if (rows.Count == 0)
+        if (!rows.Success)
         {
-            return Results.Ok(new { code = 0, msg = "查询成功", data = rows });
+            return AuraApiResults.BadGateway(rows.Message, 50271);
         }
 
-        var vids = rows
+        if (rows.Items.Count == 0)
+        {
+            return Results.Ok(new { code = 0, msg = "查询成功", data = rows.Items });
+        }
+
+        var vids = rows.Items
             .Select(x => x.vid)
             .Where(x => !string.IsNullOrWhiteSpace(x))
             .Distinct(StringComparer.Ordinal)
@@ -68,7 +73,7 @@ internal sealed class VectorApplicationService
         var imageMap = vids.Count > 0
             ? await _captureRepository.GetBestCaptureImageByVidsAsync(vids)
             : new Dictionary<string, string>(StringComparer.Ordinal);
-        var data = rows.Select(x => new
+        var data = rows.Items.Select(x => new
         {
             x.vid,
             x.score,

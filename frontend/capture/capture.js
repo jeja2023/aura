@@ -143,6 +143,96 @@ function formatTime(v) {
   return String(v ?? "-");
 }
 
+function parseMetadataJson(raw) {
+  const text = String(raw ?? "").trim();
+  if (!text) return null;
+  try {
+    const parsed = JSON.parse(text);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function buildCaptureBadge(label, tone = "neutral") {
+  return `<span class="capture-badge is-${escapeHtml(tone)}">${escapeHtml(label)}</span>`;
+}
+
+function formatKeyValueList(map) {
+  const entries = Object.entries(map || {}).filter(([key, value]) => {
+    if (!key || key.startsWith("ai_")) return false;
+    return value !== null && value !== undefined && String(value).trim() !== "";
+  });
+  if (!entries.length) return "";
+  return entries
+    .slice(0, 4)
+    .map(([key, value]) => `<span>${escapeHtml(key)}=${escapeHtml(value)}</span>`)
+    .join("");
+}
+
+function formatImageCell(pathValue) {
+  const raw = String(pathValue ?? "").trim();
+  if (!raw) return '<span class="capture-image-empty">未归档</span>';
+  const href = raw.startsWith("/") ? raw : `/${raw.replace(/^\.?\//, "")}`;
+  return `<a class="capture-image-link" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(raw)}</a>`;
+}
+
+function formatMetadataCell(row) {
+  const raw = row?.metadataJson ?? row?.MetadataJson ?? "";
+  const meta = parseMetadataJson(raw);
+  if (!meta) {
+    return `<div class="capture-meta"><div class="capture-meta-summary">原始元数据</div><div class="capture-meta-raw">${escapeHtml(raw || "-")}</div></div>`;
+  }
+
+  const aiStatus = String(meta.ai_status || "").trim();
+  const aiSuccess = meta.ai_success === true;
+  const vectorSuccess = meta.ai_vector_success === true;
+  const retryQueued = meta.ai_retry_queued === true;
+  const badges = [];
+  if (aiStatus === "ready") {
+    badges.push(buildCaptureBadge("AI+向量就绪", "ok"));
+  } else if (aiStatus === "vector_retry_pending" || aiStatus === "extract_retry_pending") {
+    badges.push(buildCaptureBadge("补偿排队中", "warn"));
+  } else if (aiStatus === "vector_failed" || aiStatus === "extract_failed") {
+    badges.push(buildCaptureBadge("链路失败", "error"));
+  } else if (aiStatus === "extract_only") {
+    badges.push(buildCaptureBadge("仅提特征", "neutral"));
+  }
+  badges.push(buildCaptureBadge(aiSuccess ? "提特征成功" : "提特征失败", aiSuccess ? "ok" : "error"));
+  if (meta.ai_vector_id) {
+    badges.push(buildCaptureBadge(vectorSuccess ? "向量已写入" : "向量待确认", vectorSuccess ? "ok" : retryQueued ? "warn" : "neutral"));
+  }
+  if (retryQueued) {
+    badges.push(buildCaptureBadge("已入重试队列", "warn"));
+  }
+
+  const summaryParts = [];
+  if (meta.ai_msg) summaryParts.push(`AI：${meta.ai_msg}`);
+  if (meta.ai_vector_msg) summaryParts.push(`向量：${meta.ai_vector_msg}`);
+  const extraFields = [];
+  if (meta.ai_vector_id) extraFields.push(`<span>向量ID：${escapeHtml(meta.ai_vector_id)}</span>`);
+  if (meta.ai_vector_engine) extraFields.push(`<span>引擎：${escapeHtml(meta.ai_vector_engine)}</span>`);
+  if (Number.isFinite(Number(meta.ai_dim)) && Number(meta.ai_dim) > 0) {
+    extraFields.push(`<span>维度：${escapeHtml(meta.ai_dim)}</span>`);
+  }
+  if (meta.ai_retry_reason) extraFields.push(`<span>补偿说明：${escapeHtml(meta.ai_retry_reason)}</span>`);
+  const customFields = formatKeyValueList(meta);
+  const rawJson = escapeHtml(JSON.stringify(meta, null, 2));
+
+  return `
+    <div class="capture-meta">
+      <div class="capture-meta-badges">${badges.join("")}</div>
+      <div class="capture-meta-summary">${escapeHtml(summaryParts.join("；") || "未写入 AI 链路摘要")}</div>
+      ${extraFields.length ? `<div class="capture-meta-fields">${extraFields.join("")}</div>` : ""}
+      ${customFields ? `<div class="capture-meta-extra">${customFields}</div>` : ""}
+      <details class="capture-meta-details">
+        <summary>查看原始元数据</summary>
+        <pre>${rawJson}</pre>
+      </details>
+    </div>
+  `;
+}
+
 function renderCaptureTable(rows) {
   const list = Array.isArray(rows) ? rows : [];
   const pagerApi = window.aura && typeof window.aura.paginateArray === "function" ? window.aura : null;
@@ -158,7 +248,7 @@ function renderCaptureTable(rows) {
     <th class="aura-col-id">设备ID</th>
     <th>通道号</th>
     <th class="aura-col-time">抓拍时间</th>
-    <th>元数据</th>
+    <th class="capture-col-meta">AI / 元数据</th>
     <th>图片路径</th>
   </tr>`;
   if (!pageData.rows.length) {
@@ -172,8 +262,8 @@ function renderCaptureTable(rows) {
         <td class="aura-col-id">${escapeHtml(row.deviceId ?? row.DeviceId ?? "-")}</td>
         <td>${escapeHtml(row.channelNo ?? row.ChannelNo ?? "-")}</td>
         <td class="aura-col-time">${escapeHtml(formatTime(row.captureTime ?? row.CaptureTime))}</td>
-        <td>${escapeHtml(row.metadataJson ?? row.MetadataJson ?? "-")}</td>
-        <td>${escapeHtml(row.imagePath ?? row.ImagePath ?? "-")}</td>
+        <td class="capture-col-meta">${formatMetadataCell(row)}</td>
+        <td>${formatImageCell(row.imagePath ?? row.ImagePath ?? "")}</td>
       </tr>`)
       .join("");
   }

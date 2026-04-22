@@ -1,13 +1,12 @@
-using System.Text.Json;
 using Aura.Api.Ai;
 using Aura.Api.Cache;
 using Aura.Api.Data;
 using Aura.Api.Internal;
 using Aura.Api.Models;
-using Aura.Api.Serialization;
 
 internal sealed class RetryProcessingService
 {
+    private readonly AppStore _store;
     private readonly CaptureRepository _captureRepository;
     private readonly AuditRepository _auditRepository;
     private readonly RedisCacheService _cache;
@@ -15,12 +14,14 @@ internal sealed class RetryProcessingService
     private readonly AiClient _aiClient;
 
     public RetryProcessingService(
+        AppStore store,
         CaptureRepository captureRepository,
         AuditRepository auditRepository,
         RedisCacheService cache,
         RetryQueueService retryQueue,
         AiClient aiClient)
     {
+        _store = store;
         _captureRepository = captureRepository;
         _auditRepository = auditRepository;
         _cache = cache;
@@ -44,7 +45,7 @@ internal sealed class RetryProcessingService
             lockToken = await _cache.TryAcquireLockAsync(processLockKey, TimeSpan.FromMinutes(processLockMinutes));
             if (lockToken is null)
             {
-                return AuraApiResults.TooManyRequests("重试任务处理正在进行中，请稍后再试（其他实例或会话可能正在执行）", 42902);
+                return AuraApiResults.TooManyRequests("重试任务处理中，请稍后再试（可能已有其他实例或会话正在执行）", 42902);
             }
         }
 
@@ -77,15 +78,49 @@ internal sealed class RetryProcessingService
 
                 if (ai.Success)
                 {
-                    success++;
-                    var newMetadata = AttachAiResult(task.MetadataJson, ai);
-                    _ = await _captureRepository.UpdateCaptureMetadataAsync(task.CaptureId, newMetadata);
+                    AiUpsertResult? upsert = null;
+                    string? vectorId = null;
                     if (ai.Feature.Count > 0)
                     {
-                        var vectorId = $"C_{task.CaptureId}";
-                        await _aiClient.UpsertAsync(vectorId, ai.Feature);
+                        vectorId = $"C_{task.CaptureId}";
+                        _ = await _captureRepository.UpdateCaptureFeatureIdAsync(task.CaptureId, vectorId);
+                        upsert = await _aiClient.UpsertAsync(vectorId, ai.Feature);
+                        if (!upsert.Success)
+                        {
+                            failed++;
+                            var retryQueued = false;
+                            if (task.RetryCount < 3)
+                            {
+                                await _retryQueue.EnqueueAsync(task with { RetryCount = task.RetryCount + 1 });
+                                retryQueued = true;
+                            }
+                            else
+                            {
+                                TryDeleteFile(task.ImagePath);
+                            }
+
+                            var vectorFailedMetadata = AiMetadataComposer.Compose(
+                                task.MetadataJson,
+                                ai,
+                                vectorId: vectorId,
+                                vectorUpsertResult: upsert,
+                                retryQueued: retryQueued,
+                                retryReason: retryQueued ? "重试补偿中" : "向量补偿失败且已达到最大重试次数");
+                            await UpdateCaptureMetadataStateAsync(task.CaptureId, vectorFailedMetadata);
+                            await _auditRepository.InsertOperationAsync("重试任务", "AI向量补偿失败", $"captureId={task.CaptureId}, 设备={task.DeviceId}, 通道={task.ChannelNo}, 原因={upsert.Message}");
+                            continue;
+                        }
                     }
 
+                    var newMetadata = AiMetadataComposer.Compose(
+                        task.MetadataJson,
+                        ai,
+                        vectorId: vectorId,
+                        vectorUpsertResult: upsert,
+                        retryQueued: false,
+                        retryReason: upsert is null ? null : "重试补偿已完成");
+                    await UpdateCaptureMetadataStateAsync(task.CaptureId, newMetadata);
+                    success++;
                     await _auditRepository.InsertOperationAsync("重试任务", "AI重试成功", $"captureId={task.CaptureId}, 设备={task.DeviceId}, 通道={task.ChannelNo}");
                     TryDeleteFile(task.ImagePath);
                     continue;
@@ -101,6 +136,14 @@ internal sealed class RetryProcessingService
                     TryDeleteFile(task.ImagePath);
                 }
 
+                var extractFailedMetadata = AiMetadataComposer.Compose(
+                    task.MetadataJson,
+                    ai,
+                    vectorId: null,
+                    vectorUpsertResult: null,
+                    retryQueued: task.RetryCount < 3,
+                    retryReason: task.RetryCount < 3 ? "AI 提取失败，继续重试中" : "AI 提取失败且已达到最大重试次数");
+                await UpdateCaptureMetadataStateAsync(task.CaptureId, extractFailedMetadata);
                 await _auditRepository.InsertOperationAsync("重试任务", "AI重试失败", $"设备={task.DeviceId}, 通道={task.ChannelNo}, 原因={ai.Message}");
             }
         }
@@ -115,33 +158,18 @@ internal sealed class RetryProcessingService
         return Results.Ok(new { code = 0, msg = "处理完成", data = new { take, success, failed } });
     }
 
-    private static string AttachAiResult(string metadataJson, AiExtractResult aiResult)
+    private async Task UpdateCaptureMetadataStateAsync(long captureId, string metadataJson)
     {
-        try
+        var updated = await _captureRepository.UpdateCaptureMetadataAsync(captureId, metadataJson);
+        if (updated)
         {
-            using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(metadataJson) ? "{}" : metadataJson);
-            var map = new Dictionary<string, object?>();
-            if (doc.RootElement.ValueKind == JsonValueKind.Object)
-            {
-                foreach (var p in doc.RootElement.EnumerateObject())
-                {
-                    map[p.Name] = p.Value.ToString();
-                }
-            }
-            map["ai_success"] = aiResult.Success;
-            map["ai_dim"] = aiResult.Dim;
-            map["ai_msg"] = aiResult.Message;
-            return JsonSerializer.Serialize(map, AuraJsonSerializerOptions.Default);
+            return;
         }
-        catch
+
+        var idx = _store.Captures.FindIndex(x => x.CaptureId == captureId);
+        if (idx >= 0)
         {
-            return JsonSerializer.Serialize(new
-            {
-                raw = metadataJson,
-                ai_success = aiResult.Success,
-                ai_dim = aiResult.Dim,
-                ai_msg = aiResult.Message
-            }, AuraJsonSerializerOptions.Default);
+            _store.Captures[idx] = _store.Captures[idx] with { MetadataJson = metadataJson };
         }
     }
 

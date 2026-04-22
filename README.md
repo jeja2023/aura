@@ -4,12 +4,12 @@
 
 ## 项目状态
 
-- 当前版本：`0.1.20`（细目见 **`CHANGELOG.md`**）
+- 当前版本：`0.1.21`（细目见 **`CHANGELOG.md`**）
 - 阶段状态：第一至第五阶段均已验收通过
 - 交付结论：计划项已全部完成并在 `开发计划.md` 归档勾选
 - 工程状态：后端可构建（推荐打开根目录 **`Aura.sln`** 或 `dotnet build backend/Aura.Api/Aura.Api.csproj`）、前端页面可访问、核心链路可联调
 - 运维状态：已提供回归脚本、联调压测脚本、部署与上线检查文档
-- 变更记录：见根目录 **`CHANGELOG.md`**（`0.1.2` 起补充后端模块化、DI 与编码修复等说明；`0.1.17` 起补充海康 alertStream、媒体规划 API、设备/联调前端与海康表单布局等；`0.1.19` 为数据库迁移工具化、统一错误响应、安全扫描与回归测试补齐等综合迭代）
+- 变更记录：见根目录 **`CHANGELOG.md`**（`0.1.2` 起补充后端模块化、DI 与编码修复等说明；`0.1.17` 起补充海康 alertStream、媒体规划 API、设备/联调前端与海康表单布局等；`0.1.19` 为数据库迁移工具化、统一错误响应、安全扫描与回归测试补齐等综合迭代；`0.1.21` 补充 AI 运维指标入统计/首页、抓拍与日志可读性优化及相关测试）
 
 ## 目录结构
 
@@ -158,7 +158,8 @@ python start_services.py
 - 抓拍接入：`POST /api/capture/push|sdk|onvif`
 - 空间碰撞：`POST /api/space/collision/check`
 - 研判执行：`POST /api/judge/run/daily`
-- 统计驾驶舱：`GET /api/stats/dashboard`
+- 统计概览（含 AI 运维指标）：`GET /api/stats/overview`
+- 统计驾驶舱（含 AI 状态分布与链路趋势）：`GET /api/stats/dashboard`
 - 导出：`GET /api/export/{type}?dataset=capture|alert|judge`
 - 外联输出：`GET /api/output/events`、`GET /api/output/persons`
 

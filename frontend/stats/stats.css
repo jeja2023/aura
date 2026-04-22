@@ -1,42 +1,147 @@
-/* 文件：统计页样式（stats.css） | File: Stats Styles */
+/* 文件：统计页样式（stats.css）| File: Stats Styles */
 .page {
   margin: 0;
   background: var(--card);
   border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 16px;
+  border-radius: 12px;
+  padding: 14px;
+}
+
+body[data-shell-title="统计看板"] .app-content {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+body[data-shell-title="统计看板"] .app-content:not(.scene-mode) > :first-child {
+  flex: 0 0 auto;
+  min-height: auto;
+}
+
+.toolbar {
+  margin-bottom: 10px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.overview-grid {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+}
+
+.overview-group-title {
+  flex: 0 0 auto;
+  margin: 0;
+  align-self: center;
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0 2px;
+  white-space: nowrap;
+}
+
+.metric-card {
+  flex: 0 0 160px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--card) 86%, var(--bg) 14%), var(--card));
+  box-shadow: var(--shadow);
+  min-height: 82px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.metric-card--ai {
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--primary) 10%, var(--card) 90%), color-mix(in srgb, var(--card) 88%, var(--bg) 12%));
+}
+
+.metric-label {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.metric-value {
+  margin: 4px 0 2px;
+  color: var(--text-main);
+  font-size: clamp(17px, 1.5vw, 24px);
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.metric-note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .grid {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   grid-template-columns: repeat(2, minmax(260px, 1fr));
 }
 
 .card {
   border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 10px;
+  border-radius: 14px;
+  padding: 12px;
+  background: color-mix(in srgb, var(--card) 90%, var(--bg) 10%);
+  min-height: 292px;
 }
 
-/* 覆盖 forms.css 的全局 .app-content .page .card{display:flex}
-   统计卡片需保持块布局，否则 .chart 会在 flex 下被压缩为 0 宽 */
 .app-content .page .grid .card {
   display: block;
 }
 
+.card--wide {
+  grid-column: 1 / -1;
+  min-height: 320px;
+}
+
+.card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed var(--line);
+}
+
 .card h2 {
-  margin: 0 0 8px;
+  margin: 0;
   font-size: 16px;
   color: var(--text-main);
 }
 
-.chart {
-  width: 100%;
-  height: 280px;
+.card-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
 }
 
-/* 仅失败时显示，成功加载后不展示原始 JSON */
+.chart {
+  width: 100%;
+  height: 244px;
+}
+
+.chart--wide {
+  height: 268px;
+}
+
 .stats-status {
   margin: 12px 0 0;
   padding: 10px 12px;
@@ -49,6 +154,68 @@
 
 .stats-status.is-error {
   color: var(--text-main);
-  border-color: rgba(var(--primary-rgb), 0.35);
-  background: rgba(var(--primary-rgb), 0.06);
+  border-color: rgba(var(--danger-rgb), 0.35);
+  background: rgba(var(--danger-rgb), 0.06);
+}
+
+@media (max-width: 1180px) {
+  .overview-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(150px, 1fr));
+    overflow: visible;
+    padding-bottom: 0;
+  }
+
+  .overview-group-title {
+    grid-column: 1 / -1;
+    padding: 0;
+    align-self: auto;
+  }
+
+  .metric-card {
+    flex: initial;
+  }
+
+  .card {
+    min-height: 286px;
+  }
+
+  .card--wide {
+    min-height: 314px;
+  }
+}
+
+@media (max-width: 980px) {
+  .overview-grid {
+    grid-template-columns: repeat(2, minmax(150px, 1fr));
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .card-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 720px) {
+  .page {
+    padding: 12px;
+  }
+
+  .overview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .chart,
+  .chart--wide {
+    height: 260px;
+  }
+
+  .card,
+  .card--wide {
+    min-height: 0;
+  }
 }

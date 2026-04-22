@@ -11,7 +11,11 @@
   <link rel="stylesheet" href="../common/forms.css" />
   <link rel="stylesheet" href="./index.css" />
 </head>
-<body class="app-body" data-shell-title="态势看板" data-aura-disable-toast="true">
+<body
+  class="app-body"
+  data-shell-title="态势看板"
+  data-aura-disable-toast="true"
+>
   <aside class="app-sidebar" id="auraSidebar" aria-label="主导航"></aside>
   <div class="app-frame">
     <header class="app-topbar">
@@ -29,6 +33,7 @@
             <span id="statusBadge" class="status-badge is-loading">加载中</span>
             <div class="status-main">
               <p id="statusText" class="status-text">正在初始化系统状态…</p>
+              <p id="statusAiRisk" class="status-ai-risk is-loading">AI链路风险：加载中</p>
               <p id="statusTime" class="status-time">--</p>
             </div>
           </div>
@@ -49,6 +54,29 @@
               <strong id="overviewDevice" class="overview-value">--</strong>
             </article>
           </div>
+          <div id="aiOpsCards" class="overview-cards ai-ops-cards" role="status" aria-live="polite">
+            <article class="overview-item">
+              <span class="overview-label">AI 失败率</span>
+              <strong id="aiFailureRate" class="overview-value">--</strong>
+            </article>
+            <article class="overview-item">
+              <span class="overview-label">补偿队列</span>
+              <strong id="aiRetryQueue" class="overview-value">--</strong>
+            </article>
+            <article class="overview-item">
+              <span class="overview-label">向量异常</span>
+              <strong id="aiVectorIssue" class="overview-value">--</strong>
+            </article>
+            <article class="overview-item">
+              <span class="overview-label">检索失败率</span>
+              <strong id="aiSearchFailureRate" class="overview-value">--</strong>
+            </article>
+            <article class="overview-item">
+              <span class="overview-label">检索延迟</span>
+              <strong id="aiSearchLatency" class="overview-value">--</strong>
+            </article>
+          </div>
+          <ul id="aiOpsAlerts" class="ai-ops-alerts" hidden></ul>
           <pre id="overviewMessage" class="aura-display-box" data-aura-no-toast hidden></pre>
         </section>
         <section class="card card-wide">
@@ -59,6 +87,11 @@
     </main>
   </div>
   <script defer src="../common/shell.js"></script>
+  <script>
+    window.AURA_PAGE_CONFIG = Object.assign({}, window.AURA_PAGE_CONFIG, {
+      aiRiskToastCooldownMs: 300000
+    });
+  </script>
   <script
     defer
     id="auraSignalrVendorLoader"

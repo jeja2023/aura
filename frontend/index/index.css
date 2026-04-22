@@ -104,6 +104,28 @@
   word-break: break-word;
 }
 
+.status-ai-risk {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.status-ai-risk.is-ok {
+  color: var(--success-text);
+}
+
+.status-ai-risk.is-warning {
+  color: var(--warning-text);
+}
+
+.status-ai-risk.is-danger {
+  color: var(--danger-text);
+}
+
+.status-ai-risk.is-loading {
+  color: var(--text-muted);
+}
+
 .status-time {
   margin: 6px 0 0;
   color: var(--text-muted);
@@ -135,6 +157,11 @@
   gap: 10px;
 }
 
+.ai-ops-cards {
+  margin-top: 10px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
 .overview-item {
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
@@ -155,6 +182,25 @@
   font-size: 24px;
   color: var(--text-main);
   line-height: 1.2;
+}
+
+.overview-value.is-warning {
+  color: var(--warning-text);
+}
+
+.overview-value.is-danger {
+  color: var(--danger-text);
+}
+
+.ai-ops-alerts {
+  margin: 12px 0 0;
+  padding-left: 20px;
+}
+
+.ai-ops-alerts li {
+  margin: 6px 0;
+  color: var(--text-main);
+  font-size: 13px;
 }
 
 .card-wide {
@@ -194,6 +240,10 @@
   }
 
   .overview-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .ai-ops-cards {
     grid-template-columns: 1fr;
   }
 }

@@ -1,4 +1,4 @@
-/* 文件：日志页脚本（log.js） | File: Log Script */
+/* 文件：日志页脚本（log.js）| File: Log Script */
 const apiBase = "";
 const resultEl = document.getElementById("result");
 const tableWrapEl = document.getElementById("tableWrap");
@@ -20,7 +20,6 @@ function setExportVisible(visible) {
   exportLogBtn.disabled = !visible;
 }
 
-/** 成功提示自动消失定时器 */
 let successStatusTimer = null;
 const SUCCESS_STATUS_MS = 5000;
 
@@ -65,7 +64,7 @@ function isErrorPayload(data, message) {
     return data.code !== 0;
   }
   if (typeof message === "string") {
-    return /失败|错误|异常|超时|拒绝|未授权|无权|禁止|非法|无效|无法|不能|不存在|已过期|已失效/.test(message);
+    return /失败|错误|异常|超时|拒绝|未授权|无权|禁止|非法|无效|无法|不能|不存在|已过期|已失效/i.test(message);
   }
   return false;
 }
@@ -104,39 +103,54 @@ function escapeHtml(value) {
     .replaceAll("\"", "&quot;");
 }
 
-function formatTableTime(v) {
+function formatTableTime(value) {
   if (typeof window.formatDateTimeDisplay === "function") {
-    return escapeHtml(window.formatDateTimeDisplay(v, "-"));
+    return escapeHtml(window.formatDateTimeDisplay(value, "-"));
   }
-  return escapeHtml(String(v ?? "-"));
+  return escapeHtml(String(value ?? "-"));
 }
 
-function parseKvText(text) {
-  const source = String(text ?? "");
-  const map = {};
-  source.split(/[，,]/).forEach((part) => {
-    const seg = part.trim();
-    if (!seg) return;
-    const idx = seg.indexOf("=");
-    if (idx <= 0) return;
-    const key = seg.slice(0, idx).trim();
-    const value = seg.slice(idx + 1).trim();
-    if (key) map[key] = value;
-  });
-  return map;
+function buildLogBadge(label, tone = "neutral") {
+  return `<span class="log-badge is-${escapeHtml(tone)}">${escapeHtml(label)}</span>`;
 }
 
-function extractUserNameFromSystemMessage(message) {
-  const text = String(message ?? "");
-  const m1 = text.match(/(?:^|[，,]\s*)用户名=([^，,\s]+)/);
-  if (m1 && m1[1]) return m1[1].trim();
-  const m2 = text.match(/(?:^|[，,]\s*)用户=([^，,\s]+)/);
-  if (m2 && m2[1]) return m2[1].trim();
-  const trimmed = text.replace(/^用户=/, "");
-  const firstCommaCn = trimmed.indexOf("，");
-  const firstCommaEn = trimmed.indexOf(",");
-  const splitAt = firstCommaCn >= 0 && firstCommaEn >= 0 ? Math.min(firstCommaCn, firstCommaEn) : Math.max(firstCommaCn, firstCommaEn);
-  return splitAt > 0 ? trimmed.slice(0, splitAt).trim() : "";
+function detectLogBadges(row, logType) {
+  const badges = [];
+  const detail = String(row?.detail ?? row?.message ?? "");
+  const action = String(row?.action ?? "");
+  const level = String(row?.level ?? "");
+  const source = String(row?.source ?? "");
+  const haystack = `${action} ${level} ${source} ${detail}`.toLowerCase();
+
+  if (logType === "system") {
+    if (/(error|fatal|critical|exception|失败|错误|异常|告警)/i.test(level) || /(error|fatal|critical|exception|失败|错误|异常|告警)/i.test(detail)) {
+      badges.push(buildLogBadge("异常", "error"));
+    } else if (/(warn|warning|超时|重试|补偿|回退)/i.test(level) || /(warn|warning|超时|重试|补偿|回退)/i.test(detail)) {
+      badges.push(buildLogBadge("关注", "warn"));
+    }
+  } else if (/(失败|错误|异常|超时|拒绝|回退|补偿失败)/i.test(haystack)) {
+    badges.push(buildLogBadge("失败", "error"));
+  } else if (/(重试|补偿|排队|待确认)/i.test(haystack)) {
+    badges.push(buildLogBadge("处理中", "warn"));
+  }
+
+  if (/(ai|向量|feature|extract|search|upsert|cluster|vid)/i.test(haystack)) {
+    badges.push(buildLogBadge("AI", "neutral"));
+  }
+  if (/(vector|向量|index|索引|ann|arango|milvus)/i.test(haystack)) {
+    badges.push(buildLogBadge("向量", "neutral"));
+  }
+  if (/(retry|重试|补偿|queue|队列)/i.test(haystack)) {
+    badges.push(buildLogBadge("重试", "neutral"));
+  }
+
+  return badges.join("");
+}
+
+function formatLogDetailCell(text) {
+  const raw = String(text ?? "").trim();
+  if (!raw) return '<span class="log-detail-empty">-</span>';
+  return `<div class="log-detail-cell" title="${escapeHtml(raw)}">${escapeHtml(raw)}</div>`;
 }
 
 function renderOperationTable(rows) {
@@ -146,29 +160,19 @@ function renderOperationTable(rows) {
       <th class="col-time">时间</th>
       <th class="col-main">操作员</th>
       <th class="col-main">动作</th>
-      <th class="col-main">页面</th>
-      <th class="col-main">标题</th>
-      <th class="col-main">停留毫秒</th>
-      <th class="col-main">会话</th>
-      <th class="col-main">IP</th>
+      <th class="col-tag">标签</th>
+      <th class="col-detail">详情</th>
     </tr>
   `;
-  tableBodyEl.innerHTML = rows.map((row) => {
-    const detail = row.detail || "";
-    const kv = parseKvText(detail);
-    return `
-      <tr>
-        <td>${formatTableTime(row.createdAt)}</td>
-        <td>${escapeHtml(row.operatorName || "-")}</td>
-        <td>${escapeHtml(row.action || "-")}</td>
-        <td>${escapeHtml(kv["页面"] || "-")}</td>
-        <td>${escapeHtml(kv["标题"] || "-")}</td>
-        <td>${escapeHtml(kv["停留毫秒"] || "-")}</td>
-        <td>${escapeHtml(kv["会话"] || "-")}</td>
-        <td>${escapeHtml(kv["IP"] || "-")}</td>
-      </tr>
-    `;
-  }).join("");
+  tableBodyEl.innerHTML = rows.map((row) => `
+    <tr>
+      <td>${formatTableTime(row.createdAt)}</td>
+      <td>${escapeHtml(row.operatorName || "-")}</td>
+      <td>${escapeHtml(row.action || "-")}</td>
+      <td>${detectLogBadges(row, "operation") || '<span class="log-detail-empty">-</span>'}</td>
+      <td>${formatLogDetailCell(row.detail)}</td>
+    </tr>
+  `).join("");
 }
 
 function renderSystemTable(rows) {
@@ -178,32 +182,19 @@ function renderSystemTable(rows) {
       <th class="col-time">时间</th>
       <th class="col-main">级别</th>
       <th class="col-main">来源</th>
-      <th class="col-main">用户</th>
-      <th class="col-main">页面</th>
-      <th class="col-main">标题</th>
-      <th class="col-main">停留毫秒</th>
-      <th class="col-main">会话</th>
-      <th class="col-main">IP</th>
+      <th class="col-tag">标签</th>
+      <th class="col-detail">内容</th>
     </tr>
   `;
-  tableBodyEl.innerHTML = rows.map((row) => {
-    const message = row.message || "";
-    const user = extractUserNameFromSystemMessage(message);
-    const kv = parseKvText(message);
-    return `
-      <tr>
-        <td>${formatTableTime(row.createdAt)}</td>
-        <td>${escapeHtml(row.level || "-")}</td>
-        <td>${escapeHtml(row.source || "-")}</td>
-        <td>${escapeHtml(user || "-")}</td>
-        <td>${escapeHtml(kv["页面"] || "-")}</td>
-        <td>${escapeHtml(kv["标题"] || "-")}</td>
-        <td>${escapeHtml(kv["停留毫秒"] || "-")}</td>
-        <td>${escapeHtml(kv["会话"] || "-")}</td>
-        <td>${escapeHtml(kv["IP"] || "-")}</td>
-      </tr>
-    `;
-  }).join("");
+  tableBodyEl.innerHTML = rows.map((row) => `
+    <tr>
+      <td>${formatTableTime(row.createdAt)}</td>
+      <td>${escapeHtml(row.level || "-")}</td>
+      <td>${escapeHtml(row.source || "-")}</td>
+      <td>${detectLogBadges(row, "system") || '<span class="log-detail-empty">-</span>'}</td>
+      <td>${formatLogDetailCell(row.message)}</td>
+    </tr>
+  `).join("");
 }
 
 function renderTable(logType, payload) {
@@ -213,7 +204,7 @@ function renderTable(logType, payload) {
   const pager = payload?.pager || {};
   if (rows.length === 0) {
     if (tableHeadEl) tableHeadEl.innerHTML = "";
-    if (tableBodyEl) tableBodyEl.innerHTML = "<tr><td>暂无日志记录。</td></tr>";
+    if (tableBodyEl) tableBodyEl.innerHTML = "<tr><td colspan=\"5\">暂无日志记录。</td></tr>";
     if (pagerEl) {
       pagerEl.hidden = true;
       pagerEl.innerHTML = "";

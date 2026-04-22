@@ -1,11 +1,9 @@
-using System.Text.Json;
 using Aura.Api.Ai;
 using Aura.Api.Cache;
 using Aura.Api.Capture;
 using Aura.Api.Data;
 using Aura.Api.Models;
 using Aura.Api.Ops;
-using Aura.Api.Serialization;
 using Microsoft.AspNetCore.Http;
 
 internal sealed class CaptureProcessingService
@@ -56,7 +54,11 @@ internal sealed class CaptureProcessingService
         string? captureImagePathForDb = null;
         string? retryImagePath = await SaveRetryImageAsync(normalized.ImageBase64);
         string? retryImageBase64ForQueue = null;
+        string? vectorId = null;
         var shouldEnqueueRetry = false;
+        var retryReason = string.Empty;
+        var retryQueued = false;
+        AiUpsertResult? vectorUpsertResult = null;
 
         var aiResult = !string.IsNullOrWhiteSpace(retryImagePath)
             ? await _aiClient.ExtractByPathAsync(retryImagePath, normalized.MetadataJson)
@@ -69,11 +71,13 @@ internal sealed class CaptureProcessingService
             {
                 shouldEnqueueRetry = true;
                 retryImageBase64ForQueue = null;
+                retryReason = "AI 提取失败，已保留图片路径等待重试";
             }
             else if (_captureRetryAllowInlineFallback)
             {
                 shouldEnqueueRetry = true;
                 retryImageBase64ForQueue = normalized.ImageBase64;
+                retryReason = "AI 提取失败，已使用内联 Base64 回退等待重试";
             }
         }
         else if (_saveCaptureImageOnSuccess)
@@ -81,12 +85,8 @@ internal sealed class CaptureProcessingService
             captureImagePathForDb = ToPublicStorageUrl(_storageRoot, retryImagePath)
                                     ?? await SaveCaptureArchiveImageAsync(normalized.DeviceId, normalized.CaptureTime, normalized.ImageBase64);
         }
-        else if (!string.IsNullOrWhiteSpace(retryImagePath))
-        {
-            TryDeleteFile(retryImagePath);
-        }
 
-        var metadata = AttachAiResult(normalized.MetadataJson, aiResult);
+        var metadata = AiMetadataComposer.Compose(normalized.MetadataJson, aiResult);
         var record = new CaptureEntity(
             Interlocked.Increment(ref _store.CaptureSeed),
             normalized.DeviceId,
@@ -103,15 +103,51 @@ internal sealed class CaptureProcessingService
 
         if (aiResult.Success && aiResult.Feature.Count > 0)
         {
-            var vectorId = $"C_{saved.CaptureId}";
-            await _aiClient.UpsertAsync(vectorId, aiResult.Feature);
+            vectorId = $"C_{saved.CaptureId}";
+            if (dbId.HasValue)
+            {
+                _ = await _captureRepository.UpdateCaptureFeatureIdAsync(saved.CaptureId, vectorId);
+            }
+
+            vectorUpsertResult = await _aiClient.UpsertAsync(vectorId, aiResult.Feature);
+            if (!vectorUpsertResult.Success)
+            {
+                await _auditRepository.InsertOperationAsync("AI向量索引", "向量写入失败", $"captureId={saved.CaptureId}, vectorId={vectorId}, 原因={vectorUpsertResult.Message}");
+                AddOperationLog("AI向量索引", "向量写入失败", $"captureId={saved.CaptureId}, vectorId={vectorId}, 原因={vectorUpsertResult.Message}");
+
+                if (!string.IsNullOrWhiteSpace(retryImagePath))
+                {
+                    shouldEnqueueRetry = true;
+                    retryImageBase64ForQueue = null;
+                    retryReason = "向量写入失败，已保留图片路径等待补偿";
+                }
+                else if (_captureRetryAllowInlineFallback)
+                {
+                    shouldEnqueueRetry = true;
+                    retryImageBase64ForQueue = normalized.ImageBase64;
+                    retryReason = "向量写入失败，已使用内联 Base64 回退等待补偿";
+                }
+            }
+            else if (!_saveCaptureImageOnSuccess && !string.IsNullOrWhiteSpace(retryImagePath))
+            {
+                TryDeleteFile(retryImagePath);
+                retryImagePath = null;
+            }
+        }
+        else if (aiResult.Success && !_saveCaptureImageOnSuccess && !string.IsNullOrWhiteSpace(retryImagePath))
+        {
+            TryDeleteFile(retryImagePath);
+            retryImagePath = null;
         }
 
-        await _auditRepository.InsertOperationAsync("采集网关", source, $"设备={normalized.DeviceId}, 通道={normalized.ChannelNo}, AI={aiResult.Message}");
-        AddOperationLog("采集网关", source, $"设备={normalized.DeviceId}, 通道={normalized.ChannelNo}, AI={aiResult.Message}");
+        var aiStatusMessage = vectorUpsertResult is null
+            ? aiResult.Message
+            : $"{aiResult.Message}; 向量={vectorUpsertResult.Message}";
+        await _auditRepository.InsertOperationAsync("采集网关", source, $"设备={normalized.DeviceId}, 通道={normalized.ChannelNo}, AI={aiStatusMessage}");
+        AddOperationLog("采集网关", source, $"设备={normalized.DeviceId}, 通道={normalized.ChannelNo}, AI={aiStatusMessage}");
         await _eventDispatchService.BroadcastRoleEventAsync("capture.received", new { saved.CaptureId, saved.DeviceId, saved.ChannelNo, saved.CaptureTime, source });
 
-        if (!aiResult.Success && shouldEnqueueRetry)
+        if ((!aiResult.Success || (vectorUpsertResult is not null && !vectorUpsertResult.Success)) && shouldEnqueueRetry)
         {
             await _retryQueue.EnqueueAsync(new RetryTask(
                 saved.CaptureId,
@@ -123,10 +159,43 @@ internal sealed class CaptureProcessingService
                 source,
                 0,
                 DateTimeOffset.Now));
+            retryQueued = true;
         }
         else if (!aiResult.Success)
         {
             await _auditRepository.InsertOperationAsync("重试任务", "AI重试入队已跳过", $"captureId={saved.CaptureId}, 原因=图片落盘失败且禁止内联Base64回退");
+            retryReason = "AI 提取失败，但没有可用重试载荷";
+        }
+        else if (vectorUpsertResult is not null && !vectorUpsertResult.Success)
+        {
+            await _auditRepository.InsertOperationAsync("重试任务", "向量补偿入队已跳过", $"captureId={saved.CaptureId}, 原因=向量写入失败且无可用图片重试载荷");
+            retryReason = "向量写入失败，但没有可用补偿载荷";
+        }
+
+        var finalMetadata = AiMetadataComposer.Compose(
+            normalized.MetadataJson,
+            aiResult,
+            vectorId: vectorId,
+            vectorUpsertResult: vectorUpsertResult,
+            retryQueued: retryQueued,
+            retryReason: string.IsNullOrWhiteSpace(retryReason) ? null : retryReason);
+
+        if (!string.Equals(finalMetadata, saved.MetadataJson, StringComparison.Ordinal))
+        {
+            if (dbId.HasValue)
+            {
+                _ = await _captureRepository.UpdateCaptureMetadataAsync(saved.CaptureId, finalMetadata);
+            }
+
+            saved = saved with { MetadataJson = finalMetadata };
+            if (!dbId.HasValue)
+            {
+                var idx = _store.Captures.FindIndex(x => x.CaptureId == saved.CaptureId);
+                if (idx >= 0)
+                {
+                    _store.Captures[idx] = saved;
+                }
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(normalized.MetadataJson) && normalized.MetadataJson.Contains("异常", StringComparison.Ordinal))
@@ -222,36 +291,6 @@ internal sealed class CaptureProcessingService
         var localPath = Path.Combine(folder, $"{captureTime:HHmmss}_{Guid.NewGuid():N}.bin");
         await File.WriteAllBytesAsync(localPath, bytes);
         return ToPublicStorageUrl(_storageRoot, localPath);
-    }
-
-    private static string AttachAiResult(string metadataJson, AiExtractResult aiResult)
-    {
-        try
-        {
-            using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(metadataJson) ? "{}" : metadataJson);
-            var map = new Dictionary<string, object?>();
-            if (doc.RootElement.ValueKind == JsonValueKind.Object)
-            {
-                foreach (var p in doc.RootElement.EnumerateObject())
-                {
-                    map[p.Name] = p.Value.ToString();
-                }
-            }
-            map["ai_success"] = aiResult.Success;
-            map["ai_dim"] = aiResult.Dim;
-            map["ai_msg"] = aiResult.Message;
-            return JsonSerializer.Serialize(map, AuraJsonSerializerOptions.Default);
-        }
-        catch
-        {
-            return JsonSerializer.Serialize(new
-            {
-                raw = metadataJson,
-                ai_success = aiResult.Success,
-                ai_dim = aiResult.Dim,
-                ai_msg = aiResult.Message
-            }, AuraJsonSerializerOptions.Default);
-        }
     }
 
     private static string? TryExtractPureBase64(string imageBase64)

@@ -1,4 +1,4 @@
-<!-- 文件：统计页（stats.html） | File: Stats Page -->
+<!-- 文件：统计页（stats.html）| File: Stats Page -->
 <!doctype html>
 <html lang="zh-CN">
 <head>
@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="../common/forms.css" />
   <link rel="stylesheet" href="./stats.css" />
 </head>
-<body class="app-body" data-shell-title="统计驾驶舱">
+<body class="app-body" data-shell-title="统计看板">
   <aside class="app-sidebar" id="auraSidebar" aria-label="主导航"></aside>
   <div class="app-frame">
     <header class="app-topbar">
@@ -25,20 +25,91 @@
         <div class="toolbar">
           <button id="load" class="btn-secondary" type="button">刷新统计</button>
         </div>
-        <section class="grid">
+
+        <section class="overview-grid" aria-label="概览指标">
+          <div class="overview-group-title">业务统计</div>
+          <article class="metric-card">
+            <p class="metric-label">抓拍总数</p>
+            <p class="metric-value" id="metricTotalCapture">-</p>
+            <p class="metric-note">系统累计抓拍记录</p>
+          </article>
+          <article class="metric-card">
+            <p class="metric-label">告警总数</p>
+            <p class="metric-value" id="metricTotalAlert">-</p>
+            <p class="metric-note">系统累计告警记录</p>
+          </article>
+          <article class="metric-card">
+            <p class="metric-label">在线设备</p>
+            <p class="metric-value" id="metricOnlineDevice">-</p>
+            <p class="metric-note">当前在线摄像设备数量</p>
+          </article>
+
+          <div class="overview-group-title">AI 运维指标</div>
+          <article class="metric-card metric-card--ai">
+            <p class="metric-label">AI 失败率</p>
+            <p class="metric-value" id="metricAiFailureRate">-</p>
+            <p class="metric-note" id="metricAiFailureNote">近 7 天 AI 链路失败占比</p>
+          </article>
+          <article class="metric-card metric-card--ai">
+            <p class="metric-label">补偿队列</p>
+            <p class="metric-value" id="metricRetryQueue">-</p>
+            <p class="metric-note" id="metricRetryQueueNote">当前待处理重试任务</p>
+          </article>
+          <article class="metric-card metric-card--ai">
+            <p class="metric-label">向量异常</p>
+            <p class="metric-value" id="metricVectorIssue">-</p>
+            <p class="metric-note" id="metricVectorIssueNote">近 7 天向量写入/补偿异常</p>
+          </article>
+          <article class="metric-card metric-card--ai">
+            <p class="metric-label">检索失败率</p>
+            <p class="metric-value" id="metricSearchFailureRate">-</p>
+            <p class="metric-note" id="metricSearchFailureNote">最近窗口内 AI 搜索失败占比</p>
+          </article>
+          <article class="metric-card metric-card--ai">
+            <p class="metric-label">检索延迟</p>
+            <p class="metric-value" id="metricSearchLatency">-</p>
+            <p class="metric-note" id="metricSearchLatencyNote">AI 搜索平均耗时</p>
+          </article>
+        </section>
+
+        <section class="grid" aria-label="业务统计图表">
           <div class="card">
-            <h2>近7日抓拍/告警</h2>
+            <div class="card-head">
+              <h2>近 7 日抓拍 / 告警</h2>
+              <span class="card-hint">查看业务波峰波谷</span>
+            </div>
             <div id="dailyChart" class="chart"></div>
           </div>
           <div class="card">
-            <h2>设备抓拍Top10</h2>
+            <div class="card-head">
+              <h2>设备抓拍 Top10</h2>
+              <span class="card-hint">快速识别高频设备</span>
+            </div>
             <div id="deviceChart" class="chart"></div>
           </div>
           <div class="card">
-            <h2>告警类型占比</h2>
+            <div class="card-head">
+              <h2>告警类型占比</h2>
+              <span class="card-hint">识别主导风险来源</span>
+            </div>
             <div id="alertChart" class="chart"></div>
           </div>
+          <div class="card">
+            <div class="card-head">
+              <h2>AI 状态分布</h2>
+              <span class="card-hint">近 7 天 AI 链路状态</span>
+            </div>
+            <div id="aiStatusChart" class="chart"></div>
+          </div>
+          <div class="card card--wide">
+            <div class="card-head">
+              <h2>AI 链路趋势</h2>
+              <span class="card-hint">就绪 / 补偿中 / 失败 / 仅提特征</span>
+            </div>
+            <div id="aiDailyChart" class="chart chart--wide"></div>
+          </div>
         </section>
+
         <p id="statsStatus" class="stats-status" role="status" hidden aria-live="polite"></p>
       </div>
     </main>

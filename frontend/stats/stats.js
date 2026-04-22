@@ -1,16 +1,34 @@
-/* 文件：统计页脚本（stats.js） | File: Stats Script */
+/* 文件：统计页脚本（stats.js）| File: Stats Script */
 const apiBase = "";
 const statusEl = document.getElementById("statsStatus");
+
+const overviewEls = {
+  totalCapture: document.getElementById("metricTotalCapture"),
+  totalAlert: document.getElementById("metricTotalAlert"),
+  onlineDevice: document.getElementById("metricOnlineDevice"),
+  aiFailureRate: document.getElementById("metricAiFailureRate"),
+  aiFailureNote: document.getElementById("metricAiFailureNote"),
+  retryQueue: document.getElementById("metricRetryQueue"),
+  retryQueueNote: document.getElementById("metricRetryQueueNote"),
+  vectorIssue: document.getElementById("metricVectorIssue"),
+  vectorIssueNote: document.getElementById("metricVectorIssueNote"),
+  searchFailureRate: document.getElementById("metricSearchFailureRate"),
+  searchFailureNote: document.getElementById("metricSearchFailureNote"),
+  searchLatency: document.getElementById("metricSearchLatency"),
+  searchLatencyNote: document.getElementById("metricSearchLatencyNote")
+};
+
 let dailyChart;
 let deviceChart;
 let alertChart;
+let aiStatusChart;
+let aiDailyChart;
 let lastDashboardData = null;
 let renderRetryTimer = null;
 let renderRetryCount = 0;
 const MAX_RENDER_RETRY = 40;
 
-/** 上线展示：成功时不输出原始 JSON，仅错误时显示简短说明 */
-function setStatus(message, isError) {
+function setStatus(message, isError = false) {
   if (!statusEl) return;
   if (!message) {
     statusEl.textContent = "";
@@ -23,15 +41,6 @@ function setStatus(message, isError) {
   statusEl.classList.toggle("is-error", Boolean(isError));
 }
 
-function setSuccessHint(message) {
-  if (!message) return;
-  // 成功提示统一走全局 Toast，不占用页面底部状态栏
-  if (window.aura && typeof window.aura.toast === "function") {
-    window.aura.toast(message, false, 1800);
-  }
-  setStatus("");
-}
-
 function clearRenderRetryTimer() {
   if (renderRetryTimer != null) {
     clearTimeout(renderRetryTimer);
@@ -39,100 +48,344 @@ function clearRenderRetryTimer() {
   }
 }
 
-function normalizeErrorMessage(err) {
-  if (!err) return "未知错误";
-  if (typeof err === "string") return err;
-  if (err.message) return err.message;
+function normalizeErrorMessage(error) {
+  if (!error) return "未知错误";
+  if (typeof error === "string") return error;
+  if (error.message) return error.message;
   try {
-    return String(err);
+    return String(error);
   } catch {
     return "未知错误";
   }
 }
 
 function installGlobalErrorHooks() {
-  window.addEventListener("error", (ev) => {
-    const msg = ev?.message || normalizeErrorMessage(ev?.error);
-    // 常见：CSP 阻止 unsafe-eval / 脚本语法错误 / 资源加载失败
-    setStatus(`页面脚本异常：${msg}`, true);
+  window.addEventListener("error", (event) => {
+    const message = event?.message || normalizeErrorMessage(event?.error);
+    setStatus(`页面脚本异常：${message}`, true);
   });
-  window.addEventListener("unhandledrejection", (ev) => {
-    const msg = normalizeErrorMessage(ev?.reason);
-    setStatus(`页面脚本异常：${msg}`, true);
+  window.addEventListener("unhandledrejection", (event) => {
+    setStatus(`页面脚本异常：${normalizeErrorMessage(event?.reason)}`, true);
   });
+}
+
+function formatNumber(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "-";
+  return new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 0 }).format(num);
+}
+
+function formatPercent(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "-";
+  return `${num.toFixed(1)}%`;
+}
+
+function formatLatency(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "-";
+  if (num < 1000) return `${num.toFixed(1)} ms`;
+  return `${(num / 1000).toFixed(2)} s`;
 }
 
 function getChartElements() {
   return {
     dailyEl: document.getElementById("dailyChart"),
     deviceEl: document.getElementById("deviceChart"),
-    alertEl: document.getElementById("alertChart")
+    alertEl: document.getElementById("alertChart"),
+    aiStatusEl: document.getElementById("aiStatusChart"),
+    aiDailyEl: document.getElementById("aiDailyChart")
   };
 }
 
 function getChartDims() {
-  const { dailyEl, deviceEl, alertEl } = getChartElements();
+  const { dailyEl, deviceEl, alertEl, aiStatusEl, aiDailyEl } = getChartElements();
   const fmt = (el) => (el ? `${el.clientWidth}x${el.clientHeight}` : "missing");
   return {
     echarts: window.echarts?.version || "unknown",
     daily: fmt(dailyEl),
     device: fmt(deviceEl),
     alert: fmt(alertEl),
-    dailyW: dailyEl ? dailyEl.clientWidth : 0,
-    deviceW: deviceEl ? deviceEl.clientWidth : 0,
-    alertW: alertEl ? alertEl.clientWidth : 0
+    aiStatus: fmt(aiStatusEl),
+    aiDaily: fmt(aiDailyEl),
+    widths: [
+      dailyEl?.clientWidth || 0,
+      deviceEl?.clientWidth || 0,
+      alertEl?.clientWidth || 0,
+      aiStatusEl?.clientWidth || 0,
+      aiDailyEl?.clientWidth || 0
+    ]
   };
 }
 
 async function waitForChartLayout(timeoutMs = 2500) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const d = getChartDims();
-    if (d.dailyW > 0 && d.deviceW > 0 && d.alertW > 0) return true;
-    // 等待布局完成（通常 sidebar / grid 在首帧后确定宽度）
-    await new Promise((r) => requestAnimationFrame(r));
+    const dims = getChartDims();
+    if (dims.widths.every((width) => width > 0)) return true;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
   }
   return false;
 }
 
-function showStatsLoadedHint(data) {
-  const daily = data.daily || [];
-  const captureSum = daily.reduce((s, x) => s + (Number(x.captureCount) || 0), 0);
-  const alertSum = daily.reduce((s, x) => s + (Number(x.alertCount) || 0), 0);
-  if (captureSum === 0 && alertSum === 0 && (data.byDevice || []).length === 0 && (data.byAlertType || []).length === 0) {
-    if (window.aura && typeof window.aura.toast === "function") {
-      window.aura.toast("暂无统计数据（近7日抓拍/告警均为 0）。", false, 2200);
-    }
-    setStatus("");
-    return;
-  }
-  setSuccessHint(`统计已加载：近7日抓拍${captureSum}次、告警${alertSum}条。`);
+function updateMetricValue(element, value) {
+  if (element) element.textContent = value;
 }
 
-async function renderWithLayoutRetry(data) {
-  const layoutOk = await waitForChartLayout();
-  if (layoutOk) {
-    const renderedOk = renderCharts(data);
-    if (renderedOk) {
+function renderOverview(data) {
+  const overview = data || {};
+  const ai = overview.ai || {};
+
+  updateMetricValue(overviewEls.totalCapture, formatNumber(overview.totalCapture));
+  updateMetricValue(overviewEls.totalAlert, formatNumber(overview.totalAlert));
+  updateMetricValue(overviewEls.onlineDevice, formatNumber(overview.onlineDevice));
+
+  updateMetricValue(overviewEls.aiFailureRate, formatPercent(ai.failureRate));
+  updateMetricValue(overviewEls.retryQueue, formatNumber(ai.retryQueuePending));
+  updateMetricValue(overviewEls.vectorIssue, formatNumber(ai.vectorIssueCount));
+  updateMetricValue(
+    overviewEls.searchFailureRate,
+    ai.searchAvailable ? formatPercent(ai.searchFailureRate) : "不可用"
+  );
+  updateMetricValue(
+    overviewEls.searchLatency,
+    ai.searchAvailable ? formatLatency(ai.searchAvgLatencyMs) : "不可用"
+  );
+
+  if (overviewEls.aiFailureNote) {
+    overviewEls.aiFailureNote.textContent = `近 ${formatNumber(ai.captureWindowDays || 7)} 天 ${formatNumber(ai.failureCount)} / ${formatNumber(ai.trackedCaptureTotal)} 条失败`;
+  }
+  if (overviewEls.retryQueueNote) {
+    overviewEls.retryQueueNote.textContent = ai.retryQueueEnabled
+      ? "当前待处理重试任务"
+      : "重试队列未启用";
+  }
+  if (overviewEls.vectorIssueNote) {
+    overviewEls.vectorIssueNote.textContent = `近 7 天异常 ${formatNumber(ai.vectorIssueCount)} 条，异常率 ${formatPercent(ai.vectorIssueRate)}`;
+  }
+  if (overviewEls.searchFailureNote) {
+    overviewEls.searchFailureNote.textContent = ai.searchAvailable
+      ? `最近 ${formatNumber(ai.searchWindowMinutes)} 分钟 ${formatNumber(ai.searchFailed)} / ${formatNumber(ai.searchTotal)} 次失败`
+      : (ai.searchMessage || "AI 检索指标暂不可用");
+  }
+  if (overviewEls.searchLatencyNote) {
+    overviewEls.searchLatencyNote.textContent = ai.searchAvailable
+      ? `空结果 ${formatNumber(ai.searchEmpty)} 次，消息：${ai.searchMessage || "正常"}`
+      : (ai.searchMessage || "AI 检索指标暂不可用");
+  }
+}
+
+function ensureCharts() {
+  if (!window.echarts) {
+    setStatus("图表组件未加载，请确认 frontend/common/vendor/echarts.min.js 可用。", true);
+    return false;
+  }
+
+  try {
+    const { dailyEl, deviceEl, alertEl, aiStatusEl, aiDailyEl } = getChartElements();
+    dailyChart = dailyChart || window.echarts.init(dailyEl);
+    deviceChart = deviceChart || window.echarts.init(deviceEl);
+    alertChart = alertChart || window.echarts.init(alertEl);
+    aiStatusChart = aiStatusChart || window.echarts.init(aiStatusEl);
+    aiDailyChart = aiDailyChart || window.echarts.init(aiDailyEl);
+    return true;
+  } catch (error) {
+    setStatus(`图表初始化失败：${normalizeErrorMessage(error)}`, true);
+    return false;
+  }
+}
+
+function renderCharts(data) {
+  if (!ensureCharts()) return false;
+
+  const daily = data?.daily || [];
+  const byDevice = data?.byDevice || [];
+  const byAlertType = data?.byAlertType || [];
+  const aiStatus = data?.aiStatus || [];
+  const aiDaily = data?.aiDaily || [];
+
+  const palette = {
+    blue: "#2563eb",
+    amber: "#f59e0b",
+    green: "#10b981",
+    red: "#ef4444",
+    slate: "#64748b"
+  };
+
+  try {
+    dailyChart.setOption({
+      tooltip: { trigger: "axis" },
+      legend: { data: ["抓拍", "告警"] },
+      grid: { left: 44, right: 24, top: 40, bottom: 28 },
+      xAxis: { type: "category", data: daily.map((item) => item.day) },
+      yAxis: { type: "value" },
+      series: [
+        {
+          name: "抓拍",
+          type: "line",
+          smooth: true,
+          data: daily.map((item) => item.captureCount),
+          itemStyle: { color: palette.blue },
+          areaStyle: { color: "rgba(37, 99, 235, 0.10)" }
+        },
+        {
+          name: "告警",
+          type: "line",
+          smooth: true,
+          data: daily.map((item) => item.alertCount),
+          itemStyle: { color: palette.amber },
+          areaStyle: { color: "rgba(245, 158, 11, 0.10)" }
+        }
+      ]
+    });
+
+    deviceChart.setOption({
+      tooltip: { trigger: "axis" },
+      grid: { left: 44, right: 24, top: 20, bottom: 44 },
+      xAxis: { type: "category", data: byDevice.map((item) => `D${item.deviceId}`), axisLabel: { interval: 0, rotate: 30 } },
+      yAxis: { type: "value" },
+      series: [
+        {
+          type: "bar",
+          data: byDevice.map((item) => item.count),
+          itemStyle: { color: palette.blue },
+          barMaxWidth: 34
+        }
+      ]
+    });
+
+    alertChart.setOption({
+      tooltip: { trigger: "item" },
+      color: [palette.blue, palette.amber, palette.green, "#8b5cf6", "#ec4899", palette.slate],
+      series: [
+        {
+          type: "pie",
+          radius: ["38%", "68%"],
+          avoidLabelOverlap: true,
+          label: { formatter: "{b}\n{d}%" },
+          data: byAlertType.map((item) => ({ name: item.alertType, value: item.count }))
+        }
+      ]
+    });
+
+    aiStatusChart.setOption({
+      tooltip: { trigger: "item" },
+      color: [palette.green, palette.slate, palette.amber, "#fb7185", palette.red, "#b91c1c"],
+      series: [
+        {
+          type: "pie",
+          radius: ["34%", "70%"],
+          label: { formatter: "{b}\n{d}%" },
+          data: aiStatus.map((item) => ({ name: item.label, value: item.count }))
+        }
+      ]
+    });
+
+    aiDailyChart.setOption({
+      tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+      legend: { data: ["就绪", "补偿中", "失败", "仅提特征"] },
+      grid: { left: 44, right: 24, top: 40, bottom: 28 },
+      xAxis: { type: "category", data: aiDaily.map((item) => item.day) },
+      yAxis: { type: "value" },
+      series: [
+        {
+          name: "就绪",
+          type: "bar",
+          stack: "ai",
+          data: aiDaily.map((item) => item.readyCount),
+          itemStyle: { color: palette.green }
+        },
+        {
+          name: "补偿中",
+          type: "bar",
+          stack: "ai",
+          data: aiDaily.map((item) => item.retryPendingCount),
+          itemStyle: { color: palette.amber }
+        },
+        {
+          name: "失败",
+          type: "bar",
+          stack: "ai",
+          data: aiDaily.map((item) => item.failedCount),
+          itemStyle: { color: palette.red }
+        },
+        {
+          name: "仅提特征",
+          type: "bar",
+          stack: "ai",
+          data: aiDaily.map((item) => item.extractOnlyCount),
+          itemStyle: { color: palette.slate }
+        }
+      ]
+    });
+
+    dailyChart.resize();
+    deviceChart.resize();
+    alertChart.resize();
+    aiStatusChart.resize();
+    aiDailyChart.resize();
+
+    const { dailyEl, deviceEl, alertEl, aiStatusEl, aiDailyEl } = getChartElements();
+    const renderedLayers =
+      (dailyEl?.querySelectorAll("canvas, svg").length || 0) +
+      (deviceEl?.querySelectorAll("canvas, svg").length || 0) +
+      (alertEl?.querySelectorAll("canvas, svg").length || 0) +
+      (aiStatusEl?.querySelectorAll("canvas, svg").length || 0) +
+      (aiDailyEl?.querySelectorAll("canvas, svg").length || 0);
+
+    if (renderedLayers === 0) {
+      setStatus("图表未生成渲染层，请检查 ECharts 加载状态。", true);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    setStatus(`图表渲染失败：${normalizeErrorMessage(error)}`, true);
+    return false;
+  }
+}
+
+function showStatsLoadedHint(overview, dashboard) {
+  const businessDaily = dashboard?.daily || [];
+  const captureSum = businessDaily.reduce((sum, item) => sum + (Number(item.captureCount) || 0), 0);
+  const alertSum = businessDaily.reduce((sum, item) => sum + (Number(item.alertCount) || 0), 0);
+  const ai = overview?.ai || {};
+  const aiFailures = Number(ai.failureCount) || 0;
+
+  if (window.aura && typeof window.aura.toast === "function") {
+    window.aura.toast(`统计已刷新：近 7 日抓拍 ${captureSum} 次、告警 ${alertSum} 条、AI 失败 ${aiFailures} 条`, false, 2200);
+  }
+}
+
+async function renderWithLayoutRetry(overview, dashboard) {
+  const layoutReady = await waitForChartLayout();
+  if (layoutReady) {
+    renderOverview(overview);
+    const rendered = renderCharts(dashboard);
+    if (rendered) {
       renderRetryCount = 0;
       clearRenderRetryTimer();
-      showStatsLoadedHint(data);
+      showStatsLoadedHint(overview, dashboard);
     }
-    return renderedOk;
+    return rendered;
   }
 
   const dims = getChartDims();
-  setStatus(`图表容器尺寸异常：daily=${dims.daily}, device=${dims.device}, alert=${dims.alert}（ECharts=${dims.echarts}）`, true);
+  setStatus(
+    `图表容器尺寸异常：daily=${dims.daily}, device=${dims.device}, alert=${dims.alert}, aiStatus=${dims.aiStatus}, aiDaily=${dims.aiDaily}, ECharts=${dims.echarts}`,
+    true
+  );
 
   if (renderRetryCount < MAX_RENDER_RETRY) {
     renderRetryCount += 1;
     clearRenderRetryTimer();
     renderRetryTimer = setTimeout(() => {
       if (lastDashboardData) {
-        renderWithLayoutRetry(lastDashboardData);
+        void renderWithLayoutRetry(lastDashboardData.overview, lastDashboardData.dashboard);
       }
     }, 200);
   }
+
   return false;
 }
 
@@ -143,13 +396,10 @@ async function load() {
 
   try {
     const [overviewRes, dashboardRes] = await Promise.all([
-      fetch(`${apiBase}/api/stats/overview`, {
-        credentials: "include"
-      }),
-      fetch(`${apiBase}/api/stats/dashboard`, {
-        credentials: "include"
-      })
+      fetch(`${apiBase}/api/stats/overview`, { credentials: "include" }),
+      fetch(`${apiBase}/api/stats/dashboard`, { credentials: "include" })
     ]);
+
     const overview = await overviewRes.json();
     const dashboard = await dashboardRes.json();
 
@@ -170,95 +420,14 @@ async function load() {
       return;
     }
 
-    const data = dashboard.data || {};
-    lastDashboardData = data;
-    await renderWithLayoutRetry(data);
+    lastDashboardData = {
+      overview: overview.data || {},
+      dashboard: dashboard.data || {}
+    };
+
+    await renderWithLayoutRetry(lastDashboardData.overview, lastDashboardData.dashboard);
   } catch (error) {
-    setStatus(`查询失败：${error.message}`, true);
-  }
-}
-
-function ensureCharts() {
-  if (!window.echarts) {
-    setStatus("图表组件未加载，请确认 frontend/common/vendor/echarts.min.js 存在。", true);
-    return false;
-  }
-  try {
-    dailyChart = dailyChart || window.echarts.init(document.getElementById("dailyChart"));
-    deviceChart = deviceChart || window.echarts.init(document.getElementById("deviceChart"));
-    alertChart = alertChart || window.echarts.init(document.getElementById("alertChart"));
-    return true;
-  } catch (err) {
-    setStatus(`图表初始化失败：${normalizeErrorMessage(err)}（常见原因：浏览器策略/CSP 拦截 unsafe-eval）`, true);
-    return false;
-  }
-}
-
-function renderCharts(data) {
-  if (!ensureCharts()) return false;
-  const daily = data.daily || [];
-  const byDevice = data.byDevice || [];
-  const byAlertType = data.byAlertType || [];
-  try {
-    const { dailyEl, deviceEl, alertEl } = getChartElements();
-    const dims = getChartDims();
-
-    dailyChart.setOption({
-      tooltip: { trigger: "axis" },
-      legend: { data: ["抓拍", "告警"] },
-      xAxis: { type: "category", data: daily.map((x) => x.day) },
-      yAxis: { type: "value" },
-      series: [
-        {
-          name: "抓拍",
-          type: "line",
-          data: daily.map((x) => x.captureCount),
-          smooth: true,
-          itemStyle: { color: "#2563eb" }
-        },
-        {
-          name: "告警",
-          type: "line",
-          data: daily.map((x) => x.alertCount),
-          smooth: true,
-          itemStyle: { color: "#f59e0b" }
-        }
-      ]
-    });
-    deviceChart.setOption({
-      tooltip: { trigger: "axis" },
-      xAxis: { type: "category", data: byDevice.map((x) => `D${x.deviceId}`) },
-      yAxis: { type: "value" },
-      series: [{ type: "bar", data: byDevice.map((x) => x.count), itemStyle: { color: "#2563eb" } }]
-    });
-    alertChart.setOption({
-      tooltip: { trigger: "item" },
-      color: ["#2563eb", "#f59e0b", "#10b981", "#8b5cf6", "#ec4899", "#64748b"],
-      series: [
-        {
-          type: "pie",
-          radius: "62%",
-          data: byAlertType.map((x) => ({ name: x.alertType, value: x.count }))
-        }
-      ]
-    });
-    // 主动触发一次 resize，避免容器首次布局导致尺寸为 0 的极端情况
-    dailyChart.resize();
-    deviceChart.resize();
-    alertChart.resize();
-
-    // 如果仍然没有图层节点，给出诊断信息（避免“看似成功但实际空白”）
-    const dailyLayers = dailyEl ? dailyEl.querySelectorAll("canvas, svg").length : 0;
-    const deviceLayers = deviceEl ? deviceEl.querySelectorAll("canvas, svg").length : 0;
-    const alertLayers = alertEl ? alertEl.querySelectorAll("canvas, svg").length : 0;
-    if (dailyLayers + deviceLayers + alertLayers === 0) {
-      setStatus(`图表未生成渲染层：daily=${dailyLayers}, device=${deviceLayers}, alert=${alertLayers}（ECharts=${dims.echarts}）`, true);
-      return false;
-    }
-    return true;
-  } catch (err) {
-    setStatus(`图表渲染失败：${normalizeErrorMessage(err)}（常见原因：浏览器策略/CSP 拦截 unsafe-eval）`, true);
-    return false;
+    setStatus(`查询失败：${normalizeErrorMessage(error)}`, true);
   }
 }
 
@@ -266,14 +435,17 @@ window.addEventListener("resize", () => {
   dailyChart?.resize();
   deviceChart?.resize();
   alertChart?.resize();
+  aiStatusChart?.resize();
+  aiDailyChart?.resize();
+
   if (lastDashboardData) {
     clearRenderRetryTimer();
     renderRetryTimer = setTimeout(() => {
-      renderWithLayoutRetry(lastDashboardData);
+      void renderWithLayoutRetry(lastDashboardData.overview, lastDashboardData.dashboard);
     }, 50);
   }
 });
 
-document.getElementById("load").addEventListener("click", load);
+document.getElementById("load")?.addEventListener("click", load);
 installGlobalErrorHooks();
-load();
+void load();
