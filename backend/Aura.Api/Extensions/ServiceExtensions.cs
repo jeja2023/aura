@@ -18,6 +18,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Options;
+using StackExchange.Redis;
 using System.Threading.RateLimiting;
 
 namespace Aura.Api.Extensions;
@@ -63,6 +64,8 @@ public static class ServiceExtensions
         var hmacSecret = configuration["Security:HmacSecret"];
         var pgsqlConn = configuration.GetConnectionString("PgSql");
         var redisConn = configuration.GetConnectionString("Redis");
+        var allowedHosts = configuration["AllowedHosts"];
+        var alertWebhookUrl = configuration["Ops:Alert:WebhookUrl"];
 
         if (IsPlaceholderValue(jwtKey, "PLEASE_", "aura-dev-jwt-key-please-change"))
         {
@@ -82,6 +85,25 @@ public static class ServiceExtensions
         if (IsPlaceholderValue(redisConn, "PLEASE_", "REPLACE_"))
         {
             throw new InvalidOperationException("生产环境缺少有效的 Redis 连接串配置。");
+        }
+
+        if (IsPlaceholderValue(allowedHosts, "PLEASE_", "REPLACE_", "please-replace", "*"))
+        {
+            throw new InvalidOperationException("生产环境缺少有效的 AllowedHosts 配置。");
+        }
+
+        if (!string.IsNullOrWhiteSpace(alertWebhookUrl))
+        {
+            if (IsPlaceholderValue(alertWebhookUrl, "PLEASE_", "REPLACE_", "please-replace"))
+            {
+                throw new InvalidOperationException("生产环境 Ops:Alert:WebhookUrl 仍为占位地址，请替换或留空改用文件告警通道。");
+            }
+
+            if (!Uri.TryCreate(alertWebhookUrl, UriKind.Absolute, out var webhookUri) ||
+                (webhookUri.Scheme != Uri.UriSchemeHttps && webhookUri.Scheme != Uri.UriSchemeHttp))
+            {
+                throw new InvalidOperationException("生产环境 Ops:Alert:WebhookUrl 必须是有效的 HTTP/HTTPS 绝对地址。");
+            }
         }
     }
 
@@ -361,8 +383,27 @@ public static class ServiceExtensions
             sp.GetRequiredService<PgSqlConnectionFactory>(),
             sp.GetRequiredService<UserAuthRepository>()));
         
-        // 多实例水平扩展时需配置 Redis Backplane，否则 SignalR 连接仅落在单节点。
-        services.AddSignalR();
+        var signalR = services.AddSignalR();
+        var signalRBackplaneEnabled = configuration.GetValue<bool>("SignalR:RedisBackplane:Enabled");
+        if (signalRBackplaneEnabled)
+        {
+            var signalRRedisConn = configuration["SignalR:RedisBackplane:ConnectionString"];
+            if (string.IsNullOrWhiteSpace(signalRRedisConn))
+            {
+                signalRRedisConn = redisConn;
+            }
+
+            if (string.IsNullOrWhiteSpace(signalRRedisConn))
+            {
+                throw new InvalidOperationException("SignalR Redis Backplane 已启用，但未配置 Redis 连接串。");
+            }
+
+            signalR.AddStackExchangeRedis(signalRRedisConn, options =>
+            {
+                options.Configuration.ChannelPrefix = RedisChannel.Literal(
+                    configuration["SignalR:RedisBackplane:ChannelPrefix"]?.Trim() ?? "aura:signalr");
+            });
+        }
         
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(options =>

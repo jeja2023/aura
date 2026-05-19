@@ -187,10 +187,9 @@
 
   async function loadCurrentSession() {
     try {
-      const res = await fetch("/api/auth/me", { credentials: "include" });
-      if (!res.ok) return null;
-      const data = await res.json();
-      return data?.data || null;
+      const result = await requestJson("/api/auth/me");
+      if (!result.ok) return null;
+      return result.data?.data || null;
     } catch {
       return null;
     }
@@ -280,6 +279,39 @@
     }, Math.max(800, durationMs));
   }
 
+  async function requestJson(url, options = {}) {
+    const headers = new Headers(options.headers || {});
+    const init = {
+      ...options,
+      credentials: options.credentials || "include",
+      headers
+    };
+    const body = options.body;
+    const isJsonBody = body && typeof body === "object" && !(body instanceof FormData) && !(body instanceof Blob) && !(body instanceof URLSearchParams);
+    if (isJsonBody) {
+      if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+      init.body = JSON.stringify(body);
+    }
+
+    const response = await fetch(url, init);
+    const text = await response.text();
+    let data = null;
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { code: response.ok ? 0 : -1, msg: text };
+      }
+    }
+
+    return {
+      ok: response.ok,
+      status: response.status,
+      data,
+      response
+    };
+  }
+
   function chooseExportFormat() {
     return new Promise((resolve) => {
       const root = document.createElement("div");
@@ -336,11 +368,9 @@
     const query = new URLSearchParams({ dataset });
     if (keyword) query.set("keyword", keyword);
     try {
-      const res = await fetch(`${apiBase}/api/export/${safeType}?${query.toString()}`, {
-        credentials: "include"
-      });
-      const data = await res.json();
-      if (!res.ok || data?.code !== 0) {
+      const result = await requestJson(`${apiBase}/api/export/${safeType}?${query.toString()}`);
+      const data = result.data;
+      if (!result.ok || data?.code !== 0) {
         if (onError) onError(data?.msg || "导出失败");
         return false;
       }
@@ -546,6 +576,7 @@
     },
     chooseExportFormat: () => chooseExportFormat(),
     exportDataset: (options) => exportDataset(options),
+    requestJson: (url, options) => requestJson(url, options),
     setElementVisible: (element, visible) => setElementVisible(element, visible),
     toast: (message, isError = false, durationMs = 2200) => showToast(message, isError, durationMs),
     animateNumber: (el, target, duration = 1000) => {

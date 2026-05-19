@@ -10,7 +10,7 @@
   - 用途：执行上线就绪巡检脚本 `上线就绪检查脚本.ps1`
   - 适用：本地联调、CI 发布前 Gate 检查
 - `docker-compose.full.example.yml`
-  - 用途：本地一键联调（后端 + AI + PostgreSQL + Redis + ArangoDB）
+  - 用途：本地一键联调（后端 + AI + PostgreSQL + Redis + ArangoDB + 数据库迁移）
   - 适用：开发环境容器化验证
 - `docker-compose.prod.template.yml`
   - 用途：生产部署模板（仅占位，不包含明文密钥）
@@ -20,7 +20,7 @@
 - `.env.prod.example`
   - 用途：`docker-compose.prod.template.yml` 的变量模板
 - `backend.Dockerfile`
-  - 用途：构建后端 API 运行镜像（多阶段构建）
+  - 用途：构建后端 API 运行镜像（多阶段构建），镜像内同时包含 `Aura.DbMigrator`
 - `ai.Dockerfile`
   - 用途：构建 AI 服务运行镜像
 - `up-full.ps1` / `down-full.ps1`
@@ -74,6 +74,8 @@
 5. 健康检查：
    - Windows：`powershell -ExecutionPolicy Bypass -File .\docker\check-full.ps1`
    - Linux/macOS：`sh ./docker/check-full.sh`
+
+说明：Full 编排会先运行一次 `db-migrate` 服务，执行 `/app/migrator/Aura.DbMigrator.dll migrate`。只有迁移成功后 `api` 服务才会启动；如果迁移失败，请先查看 `aura-db-migrate` 日志并修复数据库连接或迁移脚本。
 
 ## 镜像版本与仓库 SDK 对齐
 
@@ -148,5 +150,6 @@
 ## 生产模板说明
 
 - `docker-compose.prod.template.yml` 为占位模板，变量需由 Secret/配置中心注入；`API_IMAGE`、`AI_IMAGE` 对接私有仓库构建产物。
+- 生产模板包含一次性 `db-migrate` 服务，并让 `api` 等待迁移成功后启动；若目标平台使用 Kubernetes/Job 或 CI 独立执行迁移，可在最终编排中移除该服务并保留等价发布步骤。
 - 静态资源若不由 API 容器托管，可不设 `PATHS__FRONTENDROOT`；由 API 托管时需挂载前端目录并配置该变量（见 `docker/.env.prod.example`）。
 - `api` 已挂载 `aura-api-storage` → `/app/storage`：告警路径、导出与抓拍落盘应与该卷或外部持久化一致，避免只写在容器可写层。

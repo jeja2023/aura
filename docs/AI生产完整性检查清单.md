@@ -5,7 +5,7 @@
 ## 一、配置完整性（必须通过）
 
 - [ ] `Ai:BaseUrl` 已指向正确 AI 服务地址（与部署环境一致）。
-- [ ] AI 服务模型路径已配置，启动后健康检查返回 `model_loaded=true`。
+- [ ] AI 服务模型路径已配置，`GET /live` 返回存活，`GET /ready` 返回 `model_loaded=true`。
 - [ ] 生产环境已确认 ArangoDB 可用（若要求持久化索引，禁止仅内存模式）。
 - [ ] `.NET` 与 AI 的接口鉴权一致（已配置 `Ai:ApiKey` 与 `X-Aura-Ai-Key`）。
 - [ ] `ARANGO_URI/ARANGO_DB/ARANGO_USER/ARANGO_PASSWORD` 均为真实值，非占位值。

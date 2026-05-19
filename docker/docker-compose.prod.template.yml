@@ -1,10 +1,22 @@
 services:
+  db-migrate:
+    image: ${API_IMAGE}
+    restart: "no"
+    environment:
+      ConnectionStrings__PgSql: ${CONNECTIONSTRINGS__PGSQL}
+    entrypoint: ["dotnet", "/app/migrator/Aura.DbMigrator.dll"]
+    command: ["migrate"]
+
   api:
     image: ${API_IMAGE}
     restart: unless-stopped
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://0.0.0.0:5000
+      AllowedHosts: ${ALLOWEDHOSTS}
       ConnectionStrings__PgSql: ${CONNECTIONSTRINGS__PGSQL}
       ConnectionStrings__Redis: ${CONNECTIONSTRINGS__REDIS}
       Ai__BaseUrl: ${AI__BASEURL}

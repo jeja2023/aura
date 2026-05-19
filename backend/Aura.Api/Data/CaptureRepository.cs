@@ -332,14 +332,33 @@ internal sealed class CaptureRepository
                 ) t
                 JOIN map_camera mc ON mc.camera_id = t.camera_id
                 LEFT JOIN LATERAL (
-                  SELECT cr.image_path
-                  FROM capture_record cr
-                  WHERE cr.device_id = mc.device_id
-                    AND cr.image_path IS NOT NULL
-                    AND btrim(cr.image_path) <> ''
-                  ORDER BY ABS(EXTRACT(EPOCH FROM (cr.capture_time - t.event_time))) ASC,
-                           cr.capture_time DESC,
-                           cr.capture_id DESC
+                  SELECT candidate.image_path
+                  FROM (
+                    (
+                      SELECT cr.image_path, cr.capture_time, cr.capture_id
+                      FROM capture_record cr
+                      WHERE cr.device_id = mc.device_id
+                        AND cr.capture_time >= t.event_time
+                        AND cr.image_path IS NOT NULL
+                        AND btrim(cr.image_path) <> ''
+                      ORDER BY cr.capture_time ASC, cr.capture_id ASC
+                      LIMIT 1
+                    )
+                    UNION ALL
+                    (
+                      SELECT cr.image_path, cr.capture_time, cr.capture_id
+                      FROM capture_record cr
+                      WHERE cr.device_id = mc.device_id
+                        AND cr.capture_time <= t.event_time
+                        AND cr.image_path IS NOT NULL
+                        AND btrim(cr.image_path) <> ''
+                      ORDER BY cr.capture_time DESC, cr.capture_id DESC
+                      LIMIT 1
+                    )
+                  ) candidate
+                  ORDER BY ABS(EXTRACT(EPOCH FROM (candidate.capture_time - t.event_time))) ASC,
+                           candidate.capture_time DESC,
+                           candidate.capture_id DESC
                   LIMIT 1
                 ) c ON TRUE
                 WHERE c.image_path IS NOT NULL AND btrim(c.image_path) <> ''

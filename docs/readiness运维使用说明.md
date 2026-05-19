@@ -107,7 +107,7 @@
 - 将 `readiness` 纳入发布流水线“发布前检查”步骤。
 - 将 `ready=false` 作为发布阻断条件。
 - 将 `POST /api/ops/alert-notify-test` 纳入流水线，触发后再检查 `readiness` 的 `alertNotify` 项。
-- 与 `api/health` 组合使用：`health` 判断进程存活，`readiness` 判断配置可用。
+- 与 `api/health`、AI `/live`/`/ready` 组合使用：`live` 判断进程存活，`ready/readiness` 判断配置和依赖可用。
 - 本机联调可使用根目录一键脚本 `start_services.py`：启动成功后会自动登录“超级管理员”，并调用 `GET /api/ops/readiness` 输出 `[readiness] ready=...`。如用于 CI 预检，可执行 `python start_services.py --run-until-ready`。
 
 ---

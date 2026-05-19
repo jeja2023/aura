@@ -19,6 +19,19 @@ from utils.service_state import requires_persistent_index
 def build_api_router(deps: RouteDeps) -> APIRouter:
     router = APIRouter()
 
+    def _build_health_payload() -> tuple[int, dict]:
+        arango_enabled = deps.ensure_arango()
+        payload = deps.service_state(arango_enabled=arango_enabled)
+        if payload["arango_required"] and not arango_enabled:
+            payload["code"] = 50301
+            payload["msg"] = "ArangoDB 不可用，AI 服务处于受限状态"
+            deps.logger.critical("健康检查发现 ArangoDB 不可用且当前环境要求持久化索引")
+            return 503, payload
+
+        payload["code"] = 0
+        payload["msg"] = "AI 服务运行正常"
+        return 200, payload
+
     def _resolve_extract_file_path(raw_path: str) -> tuple[bool, str]:
         target = Path(raw_path).expanduser()
         if not target.exists():
@@ -48,16 +61,20 @@ def build_api_router(deps: RouteDeps) -> APIRouter:
 
     @router.get("/")
     def health():
-        arango_enabled = deps.ensure_arango()
-        payload = deps.service_state(arango_enabled=arango_enabled)
-        if payload["arango_required"] and not arango_enabled:
-            payload["code"] = 50301
-            payload["msg"] = "ArangoDB 不可用，AI 服务处于受限状态"
-            deps.logger.critical("健康检查发现 ArangoDB 不可用且当前环境要求持久化索引")
-            return JSONResponse(status_code=503, content=payload)
+        status_code, payload = _build_health_payload()
+        if status_code != 200:
+            return JSONResponse(status_code=status_code, content=payload)
+        return payload
 
-        payload["code"] = 0
-        payload["msg"] = "AI 服务运行正常"
+    @router.get("/live")
+    def live():
+        return {"code": 0, "msg": "AI 服务进程存活", "status": "alive"}
+
+    @router.get("/ready")
+    def ready():
+        status_code, payload = _build_health_payload()
+        if status_code != 200:
+            return JSONResponse(status_code=status_code, content=payload)
         return payload
 
     @router.post("/ai/extract")

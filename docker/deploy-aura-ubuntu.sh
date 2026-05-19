@@ -203,8 +203,12 @@ docker compose --env-file .env -f docker/docker-compose.full.example.yml ps
 echo "==> 等待服务就绪..."
 sleep 8
 
-echo "==> AI 健康检查"
-curl --max-time 10 -fsS http://127.0.0.1:8000/ || true
+echo "==> AI 存活检查"
+curl --max-time 10 -fsS http://127.0.0.1:8000/live || true
+echo
+
+echo "==> AI 就绪检查"
+curl --max-time 10 -fsS http://127.0.0.1:8000/ready || true
 echo
 
 echo "==> API 健康检查"

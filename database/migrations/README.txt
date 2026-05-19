@@ -7,11 +7,13 @@ Database migration conventions for PostgreSQL
    - `002_ensure_log_system_table.sql`
    - `003_sync_identity_sequences.sql`
    - `004_add_log_search_trgm_indexes.sql`
+   - `005_add_capture_track_lookup_indexes.sql`
 4. Starting with `003_sync_identity_sequences.sql`, the application no longer repairs `sys_role` and `sys_user` identity sequences at runtime. Upgrade existing databases with that script before deploying the new backend.
 5. `004_add_log_search_trgm_indexes.sql` enables the `pg_trgm` extension and adds GIN trigram indexes for `log_operation` and `log_system` fuzzy search.
-6. Use `backend/Aura.DbMigrator` to manage migration status and execution:
+6. `005_add_capture_track_lookup_indexes.sql` adds lookup indexes for capture image matching and VID track playback.
+7. Use `backend/Aura.DbMigrator` to manage migration status and execution:
    - `dotnet run --project backend/Aura.DbMigrator -- status`
    - `dotnet run --project backend/Aura.DbMigrator -- migrate`
    - `dotnet run --project backend/Aura.DbMigrator -- bootstrap`
-7. `bootstrap` is only for empty databases. It applies `database/schema.pgsql.sql` first and then records the current incremental scripts into `schema_migrations`.
-8. Back up the target database before running migrations. In production, apply them inside a maintenance window or a controlled deployment step.
+8. `bootstrap` is only for empty databases. It applies `database/schema.pgsql.sql` first and then records the current incremental scripts into `schema_migrations`.
+9. Back up the target database before running migrations. In production, apply them inside a maintenance window or a controlled deployment step.

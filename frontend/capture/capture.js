@@ -19,6 +19,7 @@ const captureTableHeadEl = document.getElementById("captureTableHead");
 const captureTableBodyEl = document.getElementById("captureTableBody");
 const exportCaptureBtn = document.getElementById("exportCapture");
 let latestCaptureRows = [];
+let latestCapturePager = null;
 let capturePage = 1;
 let capturePageSize = 15;
 
@@ -233,12 +234,24 @@ function formatMetadataCell(row) {
   `;
 }
 
-function renderCaptureTable(rows) {
+function normalizeServerPager(pager, rows) {
+  if (!pager || typeof pager !== "object") return null;
+  const total = Math.max(0, Number(pager.total ?? rows.length) || 0);
+  const pageSize = Math.max(1, Number(pager.pageSize ?? capturePageSize) || capturePageSize);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const page = Math.min(totalPages, Math.max(1, Number(pager.page ?? capturePage) || capturePage));
+  return { page, pageSize, total, totalPages };
+}
+
+function renderCaptureTable(rows, serverPager = latestCapturePager) {
   const list = Array.isArray(rows) ? rows : [];
   const pagerApi = window.aura && typeof window.aura.paginateArray === "function" ? window.aura : null;
-  const pageData = pagerApi
-    ? pagerApi.paginateArray(list, capturePage, capturePageSize)
-    : { rows: list, page: 1, pageSize: list.length || 20, total: list.length, totalPages: 1 };
+  const normalizedPager = normalizeServerPager(serverPager, list);
+  const pageData = normalizedPager
+    ? { rows: list, ...normalizedPager }
+    : pagerApi
+      ? pagerApi.paginateArray(list, capturePage, capturePageSize)
+      : { rows: list, page: 1, pageSize: list.length || 20, total: list.length, totalPages: 1 };
   capturePage = pageData.page;
   capturePageSize = pageData.pageSize;
   if (!captureTableHeadEl || !captureTableBodyEl) return;
@@ -277,7 +290,11 @@ function renderCaptureTable(rows) {
       onChange: (nextPage, nextPageSize) => {
         capturePage = nextPage;
         capturePageSize = nextPageSize;
-        renderCaptureTable(latestCaptureRows);
+        if (latestCapturePager) {
+          void load();
+        } else {
+          renderCaptureTable(latestCaptureRows);
+        }
       }
     });
   }
@@ -346,22 +363,29 @@ async function load() {
   setExportVisible(false);
 
   try {
-    const res = await fetch(`${apiBase}/api/capture/list?limit=500`, {
+    const query = new URLSearchParams({
+      page: String(capturePage),
+      pageSize: String(capturePageSize)
+    });
+    const res = await fetch(`${apiBase}/api/capture/list?${query.toString()}`, {
       credentials: "include"
     });
     const data = await res.json();
     if (!res.ok || data?.code !== 0) {
       setResult(data);
       latestCaptureRows = [];
+      latestCapturePager = null;
       setExportVisible(false);
       return;
     }
     latestCaptureRows = Array.isArray(data.data) ? data.data : [];
-    renderCaptureTable(latestCaptureRows);
-    setExportVisible(latestCaptureRows.length > 0);
+    latestCapturePager = normalizeServerPager(data.pagination, latestCaptureRows);
+    renderCaptureTable(latestCaptureRows, latestCapturePager);
+    setExportVisible((latestCapturePager?.total ?? latestCaptureRows.length) > 0);
   } catch (error) {
     setResult(`查询失败：${error.message}`);
     latestCaptureRows = [];
+    latestCapturePager = null;
     setExportVisible(false);
   }
 }

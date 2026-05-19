@@ -50,6 +50,7 @@ internal static class AuraEndpointsDomain
         trackGroup.MapGet("/{vid}", async (HttpRequest httpReq, string vid) =>
         {
             var limit = int.TryParse(httpReq.Query["limit"].FirstOrDefault(), out var l) ? l : 500;
+            limit = Math.Clamp(limit, 1, 2000);
             var rows = await capture.GetTrackEventsAsync(vid, limit);
             if (rows.Count > 0) return Results.Ok(new { code = 0, msg = "查询成功", data = rows });
             if (!allow) return Results.Ok(new { code = 0, msg = "查询成功", data = new List<DbTrackEvent>() });
@@ -59,6 +60,7 @@ internal static class AuraEndpointsDomain
         trackGroup.MapGet("/history/list", async (HttpRequest httpReq) =>
         {
             var limit = int.TryParse(httpReq.Query["limit"].FirstOrDefault(), out var l) ? l : 200;
+            limit = Math.Clamp(limit, 1, 2000);
             var rows = await capture.GetTrackEventsAsync(null, limit);
             if (rows.Count > 0) return Results.Ok(new { code = 0, msg = "查询成功", data = rows });
             if (!allow) return Results.Ok(new { code = 0, msg = "查询成功", data = new List<DbTrackEvent>() });
@@ -115,7 +117,8 @@ internal static class AuraEndpointsDomain
 
         judgeGroup.MapGet("/daily", async (HttpRequest httpReq, string? date) =>
         {
-            var limit = int.TryParse(httpReq.Query["limit"].FirstOrDefault(), out var l) ? l : 2000;
+            var limit = int.TryParse(httpReq.Query["limit"].FirstOrDefault(), out var l) ? l : MonitoringRepository.DefaultJudgeLimit;
+            limit = Math.Clamp(limit, 1, MonitoringRepository.MaxJudgeLimit);
             var dateFilter = string.IsNullOrWhiteSpace(date) ? DateOnly.FromDateTime(DateTime.Now) : DateOnly.Parse(date);
             var rows = await monitoring.GetJudgeResultsAsync(dateFilter, null, limit);
             if (rows.Count > 0) return Results.Ok(new { code = 0, msg = "查询成功", data = rows });
@@ -126,7 +129,8 @@ internal static class AuraEndpointsDomain
         var alertGroup = app.MapGroup("/api/alert");
         alertGroup.MapGet("/list", async (HttpRequest httpReq) =>
         {
-            var limit = int.TryParse(httpReq.Query["limit"].FirstOrDefault(), out var l) ? l : 500;
+            var limit = int.TryParse(httpReq.Query["limit"].FirstOrDefault(), out var l) ? l : MonitoringRepository.DefaultAlertLimit;
+            limit = Math.Clamp(limit, 1, MonitoringRepository.MaxAlertLimit);
             var rows = await monitoring.GetAlertsAsync(limit);
             if (rows.Count > 0) return Results.Ok(new { code = 0, msg = "查询成功", data = rows });
             if (!allow) return Results.Ok(new { code = 0, msg = "查询成功", data = new List<DbAlert>() });

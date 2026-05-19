@@ -7,6 +7,11 @@ namespace Aura.Api.Data;
 
 internal sealed class MonitoringRepository
 {
+    public const int DefaultAlertLimit = 500;
+    public const int MaxAlertLimit = 2000;
+    public const int DefaultJudgeLimit = 2000;
+    public const int MaxJudgeLimit = 5000;
+
     private readonly PgSqlConnectionFactory _connectionFactory;
     private readonly ILogger<MonitoringRepository>? _logger;
 
@@ -59,8 +64,10 @@ internal sealed class MonitoringRepository
         }
     }
 
-    public async Task<List<DbAlert>> GetAlertsAsync(int limit = 500)
+    public async Task<List<DbAlert>> GetAlertsAsync(int limit = DefaultAlertLimit)
     {
+        limit = Math.Clamp(limit, 1, MaxAlertLimit);
+
         try
         {
             await using var conn = CreateConnection();
@@ -174,8 +181,10 @@ internal sealed class MonitoringRepository
         }
     }
 
-    public async Task<List<DbJudgeResult>> GetJudgeResultsAsync(DateOnly? judgeDate, string? judgeType, int maxRows = 2000)
+    public async Task<List<DbJudgeResult>> GetJudgeResultsAsync(DateOnly? judgeDate, string? judgeType, int maxRows = DefaultJudgeLimit)
     {
+        maxRows = Math.Clamp(maxRows, 1, MaxJudgeLimit);
+
         try
         {
             await using var conn = CreateConnection();

@@ -1,0 +1,92 @@
+# Kubernetes liveness/readiness/startup probe examples for Aura.
+# Replace image names, namespaces, labels, resources, and environment values
+# before applying this manifest to a real cluster.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aura-api
+  namespace: aura
+  labels:
+    app.kubernetes.io/name: aura-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aura-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aura-api
+    spec:
+      containers:
+        - name: api
+          image: registry.example.com/aura/api:latest
+          ports:
+            - name: http
+              containerPort: 5000
+          livenessProbe:
+            httpGet:
+              path: /api/health/live
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /api/health/live
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 24
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aura-ai
+  namespace: aura
+  labels:
+    app.kubernetes.io/name: aura-ai
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aura-ai
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aura-ai
+    spec:
+      containers:
+        - name: ai
+          image: registry.example.com/aura/ai:latest
+          ports:
+            - name: http
+              containerPort: 8000
+          livenessProbe:
+            httpGet:
+              path: /live
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          startupProbe:
+            httpGet:
+              path: /live
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 24

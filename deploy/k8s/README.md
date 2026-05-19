@@ -1,6 +1,14 @@
-# Kubernetes 示例（指标与网络）
+# Kubernetes 示例（探针、指标与网络）
 
 本目录提供**示例清单**，部署前请将占位命名空间、标签与主机名替换为实际环境值。
+
+## 存活与就绪探针
+
+`deployment-probes.example.yaml` 给出 API 与 AI 服务的 `livenessProbe`、`readinessProbe`、`startupProbe` 示例。
+
+- API 存活探针使用 `GET /api/health/live`，就绪探针使用 `GET /api/health`。
+- AI 存活探针使用 `GET /live`，就绪探针使用 `GET /ready`。
+- `GET /api/ops/readiness` 包含数据库、Redis、AI 等依赖检查，适合发布门禁或运维巡检；该端点需要管理员认证，不适合作为 Kubernetes 原生探针直接调用。
 
 ## 为何 Kubernetes NetworkPolicy 难以单独「只封 /metrics」
 
@@ -24,5 +32,6 @@
 
 | 文件 | 说明 |
 |------|------|
+| `deployment-probes.example.yaml` | API 与 AI 服务的 Kubernetes 存活、就绪、启动探针示例。 |
 | `ingress-nginx-deny-public-metrics.example.yaml` | 对外域名上拒绝 `GET /metrics`，业务路径不受影响。 |
 | `network-policy-api.example.yaml` | 默认拒绝入站，放行同命名空间、Ingress 控制器与监控命名空间（可按需收紧）。 |

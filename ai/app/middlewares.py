@@ -21,6 +21,8 @@ def register_middlewares(app) -> None:
             path = request.url.path
             if (
                 path == "/"
+                or path == "/live"
+                or path == "/ready"
                 or path == "/openapi.json"
                 or path.startswith("/docs")
                 or path.startswith("/redoc")

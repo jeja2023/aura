@@ -24,7 +24,8 @@ ROOT = Path(__file__).resolve().parent
 AI_DIR = ROOT / "ai"
 API_DIR = ROOT / "backend" / "Aura.Api"
 FRONTEND_URL = "https://localhost:5001/"
-AI_HEALTH_URL = "http://127.0.0.1:8000/"
+AI_LIVE_URL = "http://127.0.0.1:8000/live"
+AI_READY_URL = "http://127.0.0.1:8000/ready"
 API_HEALTH_URL = "https://localhost:5001/api/health"
 DEV_CONFIG = API_DIR / "appsettings.Development.json"
 API_LOGIN_URL = "https://localhost:5001/api/auth/login"
@@ -285,9 +286,20 @@ def main() -> int:
     return_code = 0
 
     try:
-        print("[检查] 等待 AI 服务就绪（HTTP 2xx + code=0 + model_loaded=true）...")
+        print("[检查] 等待 AI 服务进程存活（/live HTTP 2xx + code=0）...")
         if not _wait_http_json_probe(
-            AI_HEALTH_URL,
+            AI_LIVE_URL,
+            timeout_sec=60,
+            predicate=lambda d: d.get("code") == 0,
+            progress_label="AI 服务进程",
+        ):
+            raise RuntimeError(
+                "AI 服务 60 秒内未存活。请检查：1) 8000 端口；2) ai/.venv 与依赖；3) uvicorn 控制台报错。"
+            )
+
+        print("[检查] 等待 AI 服务就绪（/ready HTTP 2xx + code=0 + model_loaded=true）...")
+        if not _wait_http_json_probe(
+            AI_READY_URL,
             timeout_sec=120,
             predicate=lambda d: d.get("code") == 0 and d.get("model_loaded") is True,
             progress_label="AI 服务（含 ONNX 加载）",

@@ -2,6 +2,95 @@
 
 本文档记录仓库关键版本与阶段性改动，便于联调、回归与发布追踪。
 
+## 0.1.23（2026-05-18）
+
+### AI 健康探针与启动就绪语义拆分
+
+- `ai/routes/api_routes.py` 新增统一健康载荷构造，并补齐：
+  - `GET /live`：仅表达 AI 服务进程存活，适合容器/Kubernetes liveness probe。
+  - `GET /ready`：表达模型、向量库与运行态就绪，适合 readiness probe 与发布门禁。
+  - `GET /` 继续保留兼容行为，但内部复用同一健康载荷，避免多处状态语义漂移。
+- `ai/app/middlewares.py` 放行匿名 `GET/HEAD /live` 与 `/ready`，避免探针依赖业务 API Key。
+- `start_services.py` 调整本机启动等待逻辑：先等待 `/live` 存活，再等待 `/ready` 且 `model_loaded=true`，避免服务进程已起但模型尚未就绪时误判成功。
+- `docker/check-full.ps1`、`docker/check-full.sh`、`docker/deploy-aura-ubuntu.sh` 同步拆分 AI `/live` 与 `/ready` 巡检。
+- `ai/tests/test_ai_routes_and_index.py` 补齐 `/live`、`/ready` 回归覆盖；`pytest.ini` 增加 `asyncio_default_fixture_loop_scope=function`，收敛 pytest-asyncio fixture loop 警告。
+
+### 后端依赖升级、SignalR 扩展与生产配置校验
+
+- `backend/Aura.Api/Aura.Api.csproj` 安全升级依赖包：
+  - `Microsoft.Extensions.Http.Resilience`、`BCrypt.Net-Next`、`Dapper`、`Microsoft.AspNetCore.*`、OpenTelemetry、`StackExchange.Redis` 等升级到当前兼容版本。
+  - 保持 `Npgsql` 在 8.x 线，避免跨大版本升级带来运行时兼容风险。
+- 新增 `Microsoft.AspNetCore.SignalR.StackExchangeRedis`，并在 `ServiceExtensions` 中支持可选 `SignalR:RedisBackplane`：
+  - 默认关闭，不影响单实例部署。
+  - 开启后可复用 Redis 连接串，为多实例 SignalR 事件广播做准备。
+- `ServiceExtensions` 增加生产配置校验：
+  - 生产环境要求显式配置 `AllowedHosts`。
+  - 对可选告警 Webhook 配置做 URL 合法性校验，降低上线后才暴露配置错误的概率。
+- `.env.example`、`docker/.env.full.example`、`docker/.env.prod.example`、`appsettings*.json` 同步补齐 SignalR、AllowedHosts 与相关生产配置项。
+
+### 数据库查询优化与迁移脚本
+
+- `database/schema.pgsql.sql` 新增查询索引：
+  - `idx_track_event_vid_time_desc`
+  - `idx_capture_device_time_image`
+  - `idx_capture_feature_time_image`
+- 新增 `database/migrations/005_add_capture_track_lookup_indexes.sql`，用于存量库增量落地上述索引。
+- `database/migrations/README.txt` 补充 `005` 迁移说明。
+- `CaptureRepository.GetBestCaptureImageByVidsAsync` 优化轨迹匹配抓拍图片查询：
+  - 由“全量候选排序取最近”改为分别取事件前后最近候选再比较。
+  - 降低 `ABS(EXTRACT(...)) ORDER BY` 对大表扫描与排序的压力。
+
+### Docker 镜像与数据库迁移闭环
+
+- `docker/backend.Dockerfile` 同时发布 `Aura.Api` 与 `Aura.DbMigrator`：
+  - 运行镜像内新增 `/app/migrator/Aura.DbMigrator.dll`。
+  - 同步复制 `Aura.sln` 与 `database/`，保证迁移工具能读取迁移脚本。
+- `docker/docker-compose.full.example.yml` 与 `docker/docker-compose.prod.template.yml` 新增 `db-migrate` 服务：
+  - API 服务改为依赖 `db-migrate: service_completed_successfully`。
+  - 避免应用启动时数据库 schema 尚未完成迁移。
+- Docker full/prod 模板中的 AI healthcheck 改为 `/live`，将容器存活检查与模型就绪检查解耦。
+- `docker/README.md` 补充 `db-migrate` 服务说明与生产部署注意事项。
+
+### 前端分页、公共请求与列表防护
+
+- `frontend/capture/capture.js` 将抓拍列表从固定 `limit=500` 改为服务端分页：
+  - 请求 `/api/capture/list?page=...&pageSize=...`。
+  - 新增服务端 pagination 解析与兼容本地分页回退逻辑。
+  - 大数据量抓拍场景下减少首屏数据传输与浏览器渲染压力。
+- `frontend/common/shell.js` 新增 `window.aura.requestJson(url, options)`：
+  - 统一 `credentials: "include"`、JSON body 序列化、JSON/text 响应解析。
+  - 先接入全站会话检查与公共导出能力，保持其它页面行为兼容。
+- `MonitoringRepository` 与 `AuraEndpointsDomain` 对告警、研判、轨迹列表补充服务端 limit 硬上限，避免异常大查询参数造成数据库或内存压力。
+
+### Kubernetes 运维样例补齐
+
+- 新增 `deploy/k8s/deployment-probes.example.yaml`：
+  - API：`/api/health/live` 作为 liveness/startup probe，`/api/health` 作为 readiness probe。
+  - AI：`/live` 作为 liveness/startup probe，`/ready` 作为 readiness probe。
+- `deploy/k8s/README.md` 更新为“探针、指标与网络”说明，并明确：
+  - `/api/ops/readiness` 适合发布门禁或运维巡检。
+  - 该端点需要管理员认证，不适合作为 Kubernetes 原生探针直接调用。
+
+### 文档与运维手册同步
+
+- `README.md` 更新 AI 启动与健康检查说明，从根路径探测调整为 `/live` + `/ready` 双阶段。
+- `docs/部署文档与运维手册.md`、`docs/AI生产完整性检查清单.md`、`docs/readiness运维使用说明.md` 同步补充 AI live/ready 语义。
+- Docker 示例环境文件、生产模板与检查脚本同步补齐本次新增配置与探针路径。
+
+### 验证记录
+
+- 已通过：
+  - `npm run lint`
+  - `dotnet test backend\Aura.Api.Tests\Aura.Api.Tests.csproj --no-build -v minimal`（9 个测试通过）
+  - `dotnet test backend\Aura.Api.Integration.Tests\Aura.Api.Integration.Tests.csproj --no-restore -v minimal`（此前完整验证 42 个测试通过）
+  - `pytest ai\tests`（此前完整验证 11 个测试通过）
+  - `docker-compose --env-file docker\.env.full.example -f docker\docker-compose.full.example.yml config`
+  - `docker-compose --env-file docker\.env.prod.example -f docker\docker-compose.prod.template.yml config`
+  - `dotnet list backend\Aura.Api\Aura.Api.csproj package --vulnerable --include-transitive`（未发现易受攻击包）
+- 受当前本机沙箱/文件锁限制：
+  - 完整 `dotnet test` 重编译在默认 `obj` 写入阶段可能遇到 `Access to the path ... is denied`，需在可写构建环境或释放占用进程后复跑。
+  - 最新一次 `pytest ai\tests` 复跑受临时目录权限影响未完成；此前提升权限运行已通过。
+
 ## 0.1.21（2026-04-22）
 
 ### AI 链路可靠性与状态语义收敛

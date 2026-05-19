@@ -11,11 +11,21 @@ from vector_store.index_store import search_vectors
 
 
 class _FakeDeps:
-    logger = SimpleNamespace(exception=lambda *args, **kwargs: None)
+    logger = SimpleNamespace(exception=lambda *args, **kwargs: None, critical=lambda *args, **kwargs: None)
     retrieval_guard = SimpleNamespace(
         allow_request=lambda: (True, ""),
         record_result=lambda **kwargs: None,
     )
+
+    def ensure_arango(self):
+        return True
+
+    def service_state(self, *, arango_enabled):
+        return {
+            "arango_required": False,
+            "arango_enabled": arango_enabled,
+            "model_loaded": True,
+        }
 
     def decode_image(self, image_base64):
         return object()
@@ -38,6 +48,30 @@ def test_extract_failure_returns_500_status():
     body = response.json()
     assert body["code"] == 50001
     assert body["msg"] == "特征提取失败，请稍后重试"
+
+
+def test_live_probe_does_not_require_model_readiness():
+    app = FastAPI()
+    app.include_router(build_api_router(_FakeDeps()))
+    client = TestClient(app)
+
+    response = client.get("/live")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "alive"
+
+
+def test_ready_probe_returns_structured_health_payload():
+    app = FastAPI()
+    app.include_router(build_api_router(_FakeDeps()))
+    client = TestClient(app)
+
+    response = client.get("/ready")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["code"] == 0
+    assert body["model_loaded"] is True
 
 
 def test_extract_file_missing_returns_404_status():

@@ -110,7 +110,7 @@ python start_services.py
 
 说明：
 - **适用范围**：本机 **AI + .NET + PostgreSQL + Redis** 全栈联调；与仅跑 `dotnet test` 的 **`Testing` 环境**（可无 Redis/PG）不同。
-- 脚本会优先读取根目录 `e:\Aura\.env`，在启动过程中轮询：**AI 根路径**须 **HTTP 2xx** 且 JSON **`code=0` 且 `model_loaded=true`**；**.NET** 须 **`GET /api/health`** 为 **2xx** 且 **`code=0`** 且 `msg` 含「寓瞳」（避免误将 404 等响应当作就绪）。
+- 脚本会优先读取根目录 `e:\Aura\.env`，在启动过程中先轮询 **AI `/live`** 进程存活，再轮询 **AI `/ready`**，要求 **HTTP 2xx** 且 JSON **`code=0` 且 `model_loaded=true`**；**.NET** 须 **`GET /api/health`** 为 **2xx** 且 **`code=0`** 且 `msg` 含「寓瞳」（避免误将 404 等响应当作就绪）。
 - 就绪后会优先使用 **`AURA_ADMIN_PASSWORD`**（或 `.env`）登录并调用 **`GET /api/ops/readiness`**（超级管理员）。
 - 若未提供 `AURA_ADMIN_PASSWORD`，脚本会尝试从启动日志里解析开发环境生成的临时密码作为兜底。
 - 若两者都拿不到，脚本会保留基础健康检查成功结果，但跳过需要登录态的 readiness 深度检查，并给出提示。
@@ -148,7 +148,8 @@ python start_services.py
 
 - 存活探针（负载均衡/K8s）：`GET /api/health/live`
 - 业务健康（中文提示）：`GET /api/health`
-- AI 健康检查：`GET /`（返回 `code/msg` 与 `model_loaded`，并新增 `熔断状态`、`限流状态`、`回填状态` 三个可视化字段；同时保留 `retrieval_guard`、`backfill_state`、`inference_queue` 结构化对象；生产环境默认脱敏 `arango_error/model_error`，可由 `AURA_AI_HEALTH_VERBOSE` 控制）
+- AI 存活探针：`GET /live`（仅证明 AI 进程存活，适合容器 healthcheck）
+- AI 就绪检查：`GET /ready` 或 `GET /`（返回 `code/msg` 与 `model_loaded`，并新增 `熔断状态`、`限流状态`、`回填状态` 三个可视化字段；同时保留 `retrieval_guard`、`backfill_state`、`inference_queue` 结构化对象；生产环境默认脱敏 `arango_error/model_error`，可由 `AURA_AI_HEALTH_VERBOSE` 控制）
 - AI 检索审计日志：`GET /ai/search-audit-logs?limit=100`（结构化 JSON，`data.items` 每条包含 `time/request_id/success/status/reason/hit_count/latency_ms/engine/strategy/filters_applied/warnings`）
 - Prometheus 抓取（可选）：`GET /metrics`，由配置 **`Ops:Metrics:ExposePrometheus`** 控制（默认 `true`；集成测试所用 **`Testing`** 环境为 `false`）。生产环境建议仅允许监控网络或反向代理访问该路径；按路径在公网 Ingress 上拒绝的示例见 **`deploy/k8s/ingress-nginx-deny-public-metrics.example.yaml`**。
 - OpenTelemetry 链路追踪（可选）：配置 **`Ops:Telemetry:EnableTracing`** 为 **`true`** 且设置 **`Ops:Telemetry:OtlpEndpoint`**（或环境变量 **`OTEL_EXPORTER_OTLP_ENDPOINT`**）；默认关闭。协议 **`Ops:Telemetry:OtlpProtocol`** 支持 **`Grpc`**（默认）与 **`HttpProtobuf`**。
