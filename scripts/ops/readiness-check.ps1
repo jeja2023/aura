@@ -1,4 +1,4 @@
-# 文件：上线就绪检查脚本（上线就绪检查脚本.ps1） | File: Go-live Readiness Check Script
+# 文件：上线就绪检查脚本（readiness-check.ps1） | File: Go-live Readiness Check Script
 # 用途：检查健康与就绪状态并输出最终结论。
 param(
     [string]$User = "",

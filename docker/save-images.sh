@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# 文件：Docker 镜像离线导出脚本（save-images.sh） | File: Docker Save Images Script
+# File: Docker Save Images Script
 
 set -eu
 
@@ -9,7 +9,7 @@ IMAGE_TAG="${IMAGE_TAG:-}"
 IMAGE_ARCHIVE_DIR="${IMAGE_ARCHIVE_DIR:-docker/dist}"
 
 if [ -z "$IMAGE_TAG" ]; then
-  echo "请先设置 IMAGE_TAG。"
+  echo "Set IMAGE_TAG first."
   exit 1
 fi
 
@@ -19,4 +19,4 @@ AI_IMAGE="${AI_IMAGE_REPO}:${IMAGE_TAG}"
 ARCHIVE="${IMAGE_ARCHIVE_DIR}/aura-images-${IMAGE_TAG}.tar"
 
 docker save -o "$ARCHIVE" "$API_IMAGE" "$AI_IMAGE"
-echo "[RESULT] 导出完成：$ARCHIVE"
+echo "[RESULT] Exported: $ARCHIVE"

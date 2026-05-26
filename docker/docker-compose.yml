@@ -1,0 +1,171 @@
+services:
+  pgsql:
+    image: ${POSTGRES_IMAGE}
+    pull_policy: ${IMAGE_PULL_POLICY:-never}
+    container_name: aura-pgsql
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${POSTGRES_BIND_ADDRESS:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - aura-pgsql-data:/var/lib/postgresql/data
+      - ../database/schema.pgsql.sql:/docker-entrypoint-initdb.d/01-schema.pgsql.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: ${REDIS_IMAGE}
+    pull_policy: ${IMAGE_PULL_POLICY:-never}
+    container_name: aura-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_BIND_ADDRESS:-127.0.0.1}:${REDIS_PORT:-6379}:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - aura-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  arangodb:
+    image: ${ARANGO_IMAGE}
+    pull_policy: ${IMAGE_PULL_POLICY:-never}
+    container_name: aura-arangodb
+    restart: unless-stopped
+    environment:
+      ARANGO_ROOT_PASSWORD: ${ARANGO_ROOT_PASSWORD}
+    ports:
+      - "${ARANGO_BIND_ADDRESS:-127.0.0.1}:${ARANGO_PORT:-8529}:8529"
+    volumes:
+      - aura-arango-data:/var/lib/arangodb3
+
+  arango-init:
+    image: ${ARANGO_IMAGE}
+    pull_policy: ${IMAGE_PULL_POLICY:-never}
+    container_name: aura-arango-init
+    restart: "no"
+    depends_on:
+      - arangodb
+    environment:
+      ARANGO_ROOT_PASSWORD: ${ARANGO_ROOT_PASSWORD}
+      ARANGO_DB: ${ARANGO_DB}
+    entrypoint: ["sh", "-c"]
+    command:
+      - "until arangosh --server.endpoint tcp://arangodb:8529 --server.username root --server.password \"$$ARANGO_ROOT_PASSWORD\" --javascript.execute-string \"db._version()\" >/dev/null 2>&1; do echo \"Waiting for ArangoDB...\"; sleep 2; done; arangosh --server.endpoint tcp://arangodb:8529 --server.username root --server.password \"$$ARANGO_ROOT_PASSWORD\" --javascript.execute-string \"const name = '$$ARANGO_DB'; if (!db._databases().includes(name)) { db._createDatabase(name); }\""
+
+  ai:
+    image: ${AI_IMAGE:-aura-ai:local}
+    pull_policy: ${IMAGE_PULL_POLICY:-never}
+    build:
+      context: ../
+      dockerfile: docker/ai.Dockerfile
+      args:
+        PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE}
+    container_name: aura-ai
+    restart: unless-stopped
+    depends_on:
+      arango-init:
+        condition: service_completed_successfully
+    environment:
+      ARANGO_URI: http://arangodb:8529
+      ARANGO_DB: ${ARANGO_DB}
+      ARANGO_USER: ${ARANGO_USER:-root}
+      ARANGO_PASSWORD: ${ARANGO_PASSWORD:-${ARANGO_ROOT_PASSWORD}}
+      AURA_AI_REQUIRE_ARANGO: ${AURA_AI_REQUIRE_ARANGO:-true}
+      AURA_MODEL_PATH: ${AURA_MODEL_PATH}
+      AURA_API_KEY: ${AURA_API_KEY:-}
+    volumes:
+      - ${AURA_MODEL_HOST_DIR:-../models}:/app/models:ro
+    ports:
+      - "${AI_BIND_ADDRESS:-127.0.0.1}:${AI_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/live').read()"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  db-migrate:
+    image: ${API_IMAGE:-aura-api:local}
+    pull_policy: ${IMAGE_PULL_POLICY:-never}
+    build:
+      context: ../
+      dockerfile: docker/backend.Dockerfile
+      args:
+        DOTNET_SDK_IMAGE: ${DOTNET_SDK_IMAGE}
+        DOTNET_ASPNET_IMAGE: ${DOTNET_ASPNET_IMAGE}
+    container_name: aura-db-migrate
+    restart: "no"
+    environment:
+      ConnectionStrings__PgSql: Host=pgsql;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
+    entrypoint: ["dotnet", "/app/migrator/Aura.DbMigrator.dll"]
+    command: ["migrate"]
+    depends_on:
+      pgsql:
+        condition: service_healthy
+
+  api:
+    image: ${API_IMAGE:-aura-api:local}
+    pull_policy: ${IMAGE_PULL_POLICY:-never}
+    build:
+      context: ../
+      dockerfile: docker/backend.Dockerfile
+      args:
+        DOTNET_SDK_IMAGE: ${DOTNET_SDK_IMAGE}
+        DOTNET_ASPNET_IMAGE: ${DOTNET_ASPNET_IMAGE}
+    container_name: aura-api
+    restart: unless-stopped
+    depends_on:
+      pgsql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ai:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://0.0.0.0:5000
+      AllowedHosts: ${ALLOWEDHOSTS}
+      ConnectionStrings__PgSql: Host=pgsql;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
+      ConnectionStrings__Redis: redis:6379
+      Ai__BaseUrl: http://ai:8000
+      Ai__ApiKey: ${AURA_API_KEY:-}
+      SignalR__RedisBackplane__Enabled: ${SIGNALR__REDISBACKPLANE__ENABLED:-false}
+      SignalR__RedisBackplane__ConnectionString: redis:6379
+      SignalR__RedisBackplane__ChannelPrefix: ${SIGNALR__REDISBACKPLANE__CHANNELPREFIX:-aura:signalr}
+      Jwt__Key: ${JWT__KEY}
+      Security__HmacSecret: ${SECURITY__HMACSECRET}
+      Ops__Alert__WebhookUrl: ${OPS__ALERT__WEBHOOKURL:-}
+      Ops__Alert__FilePath: ${OPS__ALERT__FILEPATH:-/app/storage/logs/alert-notify.log}
+      Ops__Metrics__ExposePrometheus: ${OPS__METRICS__EXPOSEPROMETHEUS:-false}
+      Ops__Telemetry__EnableTracing: ${OPS__TELEMETRY__ENABLETRACING:-false}
+      Ops__Telemetry__OtlpEndpoint: ${OPS__TELEMETRY__OTLPENDPOINT:-}
+      Ops__Telemetry__OtlpProtocol: ${OPS__TELEMETRY__OTLPPROTOCOL:-Grpc}
+      AURA_ADMIN_USER: ${AURA_ADMIN_USER}
+      AURA_ADMIN_PASSWORD: ${AURA_ADMIN_PASSWORD}
+      Paths__FrontendRoot: ${PATHS__FRONTENDROOT:-/app/frontend}
+    volumes:
+      - ${FRONTEND_HOST_DIR:-../frontend}:/app/frontend:ro
+      - aura-api-storage:/app/storage
+    ports:
+      - "${API_BIND_ADDRESS:-0.0.0.0}:${API_PORT:-5000}:5000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5000/api/health/live >/dev/null 2>&1 || curl -fsS http://127.0.0.1:5000/api/health/live >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  aura-pgsql-data:
+  aura-redis-data:
+  aura-arango-data:
+  aura-api-storage:

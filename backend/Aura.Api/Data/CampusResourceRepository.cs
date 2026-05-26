@@ -7,6 +7,13 @@ namespace Aura.Api.Data;
 
 internal sealed class CampusResourceRepository
 {
+    public const int DefaultCampusNodeLimit = 2000;
+    public const int MaxCampusNodeLimit = 10000;
+    public const int DefaultFloorLimit = 500;
+    public const int MaxFloorLimit = 5000;
+    public const int DefaultCameraLimit = 2000;
+    public const int MaxCameraLimit = 10000;
+
     private readonly PgSqlConnectionFactory _connectionFactory;
     private readonly ILogger<CampusResourceRepository>? _logger;
 
@@ -18,8 +25,10 @@ internal sealed class CampusResourceRepository
 
     private NpgsqlConnection CreateConnection() => _connectionFactory.CreateConnection();
 
-    public async Task<List<DbCampusNode>> GetCampusNodesAsync()
+    public async Task<List<DbCampusNode>> GetCampusNodesAsync(int limit = DefaultCampusNodeLimit)
     {
+        limit = Math.Clamp(limit, 1, MaxCampusNodeLimit);
+
         try
         {
             await using var conn = CreateConnection();
@@ -28,12 +37,14 @@ internal sealed class CampusResourceRepository
                 SELECT node_id AS NodeId, parent_id AS ParentId, level_type AS LevelType, node_name AS NodeName
                 FROM dict_campus
                 ORDER BY node_id ASC
-                """);
+                LIMIT @Limit
+                """,
+                new { Limit = limit });
             return rows.ToList();
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "数据库查询园区资源树失败。");
+            _logger?.LogError(ex, "数据库查询园区资源树失败。limit={Limit}", limit);
             return [];
         }
     }
@@ -92,8 +103,10 @@ internal sealed class CampusResourceRepository
         }
     }
 
-    public async Task<List<DbFloor>> GetFloorsAsync()
+    public async Task<List<DbFloor>> GetFloorsAsync(int limit = DefaultFloorLimit)
     {
+        limit = Math.Clamp(limit, 1, MaxFloorLimit);
+
         try
         {
             await using var conn = CreateConnection();
@@ -102,12 +115,14 @@ internal sealed class CampusResourceRepository
                 SELECT floor_id AS FloorId, node_id AS NodeId, file_path AS FilePath, scale_ratio AS ScaleRatio
                 FROM map_floor
                 ORDER BY floor_id DESC
-                """);
+                LIMIT @Limit
+                """,
+                new { Limit = limit });
             return rows.ToList();
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "数据库查询楼层列表失败。");
+            _logger?.LogError(ex, "数据库查询楼层列表失败。limit={Limit}", limit);
             return [];
         }
     }
@@ -132,8 +147,10 @@ internal sealed class CampusResourceRepository
         }
     }
 
-    public async Task<List<DbCamera>> GetCamerasAsync()
+    public async Task<List<DbCamera>> GetCamerasAsync(int limit = DefaultCameraLimit)
     {
+        limit = Math.Clamp(limit, 1, MaxCameraLimit);
+
         try
         {
             await using var conn = CreateConnection();
@@ -143,12 +160,14 @@ internal sealed class CampusResourceRepository
                        pos_x AS PosX, pos_y AS PosY
                 FROM map_camera
                 ORDER BY camera_id DESC
-                """);
+                LIMIT @Limit
+                """,
+                new { Limit = limit });
             return rows.ToList();
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "数据库查询摄像头列表失败。");
+            _logger?.LogError(ex, "数据库查询摄像头列表失败。limit={Limit}", limit);
             return [];
         }
     }

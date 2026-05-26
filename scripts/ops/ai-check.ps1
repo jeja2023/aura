@@ -1,4 +1,4 @@
-# 文件：AI检索巡检脚本（AI检索巡检脚本.ps1） | File: AI Retrieval Ops Check Script
+# 文件：AI检索巡检脚本（ai-check.ps1） | File: AI Retrieval Ops Check Script
 # 用途：检查 AI 健康状态与检索审计日志，并给出可执行的巡检结论。
 param(
     [string]$AiBaseUrl = "http://127.0.0.1:8000",

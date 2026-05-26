@@ -9,7 +9,7 @@ internal sealed class MonitoringRepository
 {
     public const int DefaultAlertLimit = 500;
     public const int MaxAlertLimit = 2000;
-    public const int DefaultJudgeLimit = 2000;
+    public const int DefaultJudgeLimit = 500;
     public const int MaxJudgeLimit = 5000;
 
     private readonly PgSqlConnectionFactory _connectionFactory;
@@ -45,102 +45,95 @@ internal sealed class MonitoringRepository
 
     public async Task<long?> InsertAlertWithTimeAsync(string alertType, string detail, DateTimeOffset createdAt)
     {
-        try
-        {
-            var createdAtUtc = createdAt.ToUniversalTime();
-            await using var conn = CreateConnection();
-            return await conn.ExecuteScalarAsync<long>(
+        var createdAtUtc = createdAt.ToUniversalTime();
+        return await PgSqlRepositoryHelpers.ExecuteAsync<long?>(
+            _connectionFactory,
+            _logger,
+            "数据库写入告警（含时间）",
+            conn => conn.ExecuteScalarAsync<long?>(
                 """
                 INSERT INTO alert_record(alert_type, detail_json, created_at)
                 VALUES(@AlertType, to_jsonb(@Detail::text), @CreatedAt)
                 RETURNING alert_id
                 """,
-                new { AlertType = alertType, Detail = detail, CreatedAt = createdAtUtc });
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogError(ex, "数据库写入告警失败（含时间）。alertType={AlertType}, createdAt={CreatedAt}", alertType, createdAt);
-            return null;
-        }
+                new { AlertType = alertType, Detail = detail, CreatedAt = createdAtUtc }),
+            fallback: null,
+            logContext: new { alertType, createdAt });
     }
 
     public async Task<List<DbAlert>> GetAlertsAsync(int limit = DefaultAlertLimit)
     {
         limit = Math.Clamp(limit, 1, MaxAlertLimit);
 
-        try
-        {
-            await using var conn = CreateConnection();
-            var rows = await conn.QueryAsync<DbAlert>(
-                """
-                SELECT alert_id AS AlertId, alert_type AS AlertType,
-                       COALESCE(
-                         CASE
-                           WHEN jsonb_typeof(detail_json) = 'string' THEN trim(both '"' from detail_json::text)
-                           ELSE CAST(detail_json AS TEXT)
-                         END,
-                         ''
-                       ) AS Detail,
-                       created_at AS CreatedAt
-                FROM alert_record
-                ORDER BY alert_id DESC
-                LIMIT @Limit
-                """,
-                new { Limit = limit });
-            return rows.ToList();
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogError(ex, "数据库查询告警列表失败。limit={Limit}", limit);
-            return [];
-        }
+        return await PgSqlRepositoryHelpers.ExecuteAsync(
+            _connectionFactory,
+            _logger,
+            "数据库查询告警列表",
+            async conn =>
+            {
+                var rows = await conn.QueryAsync<DbAlert>(
+                    """
+                    SELECT alert_id AS AlertId, alert_type AS AlertType,
+                           COALESCE(
+                             CASE
+                               WHEN jsonb_typeof(detail_json) = 'string' THEN trim(both '"' from detail_json::text)
+                               ELSE CAST(detail_json AS TEXT)
+                             END,
+                             ''
+                           ) AS Detail,
+                           created_at AS CreatedAt
+                    FROM alert_record
+                    ORDER BY alert_id DESC
+                    LIMIT @Limit
+                    """,
+                    new { Limit = limit });
+                return rows.ToList();
+            },
+            fallback: new List<DbAlert>(),
+            logContext: new { limit });
     }
 
     public async Task<long?> GetAlertCountAsync()
     {
-        try
-        {
-            await using var conn = CreateConnection();
-            return await conn.ExecuteScalarAsync<long>("SELECT COUNT(1) FROM alert_record");
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogError(ex, "数据库统计告警总数失败。");
-            return null;
-        }
+        return await PgSqlRepositoryHelpers.ExecuteAsync<long?>(
+            _connectionFactory,
+            _logger,
+            "数据库统计告警总数",
+            conn => conn.ExecuteScalarAsync<long?>("SELECT COUNT(1) FROM alert_record"),
+            fallback: null);
     }
 
     public async Task<List<DbAlert>> GetAlertsInRangeAsync(DateTimeOffset start, DateTimeOffset end, int maxRows = 200000)
     {
-        try
-        {
-            var startUtc = start.ToUniversalTime();
-            var endUtc = end.ToUniversalTime();
-            await using var conn = CreateConnection();
-            var rows = await conn.QueryAsync<DbAlert>(
-                """
-                SELECT alert_id AS AlertId, alert_type AS AlertType,
-                       COALESCE(
-                         CASE
-                           WHEN jsonb_typeof(detail_json) = 'string' THEN trim(both '"' from detail_json::text)
-                           ELSE CAST(detail_json AS TEXT)
-                         END,
-                         ''
-                       ) AS Detail,
-                       created_at AS CreatedAt
-                FROM alert_record
-                WHERE created_at >= @Start AND created_at < @End
-                ORDER BY created_at DESC, alert_id DESC
-                LIMIT @MaxRows
-                """,
-                new { Start = startUtc, End = endUtc, MaxRows = maxRows });
-            return rows.ToList();
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogError(ex, "数据库按时间范围查询告警失败。start={Start}, end={End}, maxRows={MaxRows}", start, end, maxRows);
-            return [];
-        }
+        var startUtc = start.ToUniversalTime();
+        var endUtc = end.ToUniversalTime();
+        return await PgSqlRepositoryHelpers.ExecuteAsync(
+            _connectionFactory,
+            _logger,
+            "数据库按时间范围查询告警",
+            async conn =>
+            {
+                var rows = await conn.QueryAsync<DbAlert>(
+                    """
+                    SELECT alert_id AS AlertId, alert_type AS AlertType,
+                           COALESCE(
+                             CASE
+                               WHEN jsonb_typeof(detail_json) = 'string' THEN trim(both '"' from detail_json::text)
+                               ELSE CAST(detail_json AS TEXT)
+                             END,
+                             ''
+                           ) AS Detail,
+                           created_at AS CreatedAt
+                    FROM alert_record
+                    WHERE created_at >= @Start AND created_at < @End
+                    ORDER BY created_at DESC, alert_id DESC
+                    LIMIT @MaxRows
+                    """,
+                    new { Start = startUtc, End = endUtc, MaxRows = maxRows });
+                return rows.ToList();
+            },
+            fallback: new List<DbAlert>(),
+            logContext: new { start, end, maxRows });
     }
 
     public async Task<long?> InsertJudgeResultAsync(string vid, long roomId, string judgeType, DateOnly judgeDate, string detailJson)

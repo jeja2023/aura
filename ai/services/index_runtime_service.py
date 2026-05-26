@@ -17,6 +17,9 @@ class IndexRuntimeService:
         self._search_latency_ms_total = 0.0
         self._last_search_time = ""
         self._bucket_stats = {}
+        # 失败原因细分计数器：键为 (status, reason)；status ∈ {success, empty, failed}
+        # reason 仅在 status != success 时有意义；search-stats 与 Prometheus 都会暴露
+        self._reason_stats: dict[tuple[str, str], int] = {}
         self._search_events = deque(maxlen=10000)
         self._search_audits = deque(maxlen=2000)
         self._backfill_rounds = 0
@@ -113,6 +116,18 @@ class IndexRuntimeService:
             if is_empty:
                 bucket["empty"] += 1
             bucket["latency_ms_total"] += max(0.0, latency_ms)
+            # 失败原因维度：success 也记录便于分母对齐；reason 缺省时归一化为 "ok"/"empty"/"unknown"
+            resolved_status = (status or ("success" if success else "failed")).strip().lower() or "unknown"
+            if resolved_status == "success" and is_empty:
+                resolved_status = "empty"
+            if resolved_status == "success":
+                resolved_reason = "ok"
+            elif resolved_status == "empty":
+                resolved_reason = reason.strip() or "no_hit"
+            else:
+                resolved_reason = reason.strip() or "unknown"
+            reason_key = (resolved_status, resolved_reason)
+            self._reason_stats[reason_key] = self._reason_stats.get(reason_key, 0) + 1
             self._search_events.append(
                 {
                     "time": datetime.now().timestamp(),
@@ -153,6 +168,10 @@ class IndexRuntimeService:
                     "empty": value["empty"],
                     "avg_latency_ms": round(bucket_avg, 3),
                 }
+            reasons = [
+                {"status": status, "reason": reason, "count": count}
+                for (status, reason), count in sorted(self._reason_stats.items())
+            ]
             return {
                 "search_total": self._search_total,
                 "search_success": self._search_success,
@@ -161,6 +180,7 @@ class IndexRuntimeService:
                 "search_avg_latency_ms": round(avg_latency, 3),
                 "last_search_time": self._last_search_time,
                 "buckets": buckets,
+                "reasons": reasons,
             }
 
     def get_search_metrics_window(self, *, window_minutes: int) -> dict:
@@ -237,6 +257,16 @@ class IndexRuntimeService:
             lines.append(f"aura_ai_search_bucket_success{{{labels}}} {value.get('success', 0)}")
             lines.append(f"aura_ai_search_bucket_empty{{{labels}}} {value.get('empty', 0)}")
             lines.append(f"aura_ai_search_bucket_avg_latency_ms{{{labels}}} {value.get('avg_latency_ms', 0.0)}")
+        if data.get("reasons"):
+            lines.append("# HELP aura_ai_search_reason_total 检索按状态与失败原因细分的累计计数")
+            lines.append("# TYPE aura_ai_search_reason_total counter")
+        for row in data.get("reasons", []):
+            status = str(row.get("status", "unknown")).replace('"', '\\"')
+            reason = str(row.get("reason", "unknown")).replace('"', '\\"')
+            count = int(row.get("count", 0))
+            lines.append(
+                f'aura_ai_search_reason_total{{status="{status}",reason="{reason}"}} {count}'
+            )
         return "\n".join(lines) + "\n"
 
     def get_backfill_state(self) -> dict:

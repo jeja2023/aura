@@ -1,4 +1,5 @@
 /* 文件：海康 ISAPI HTTP 客户端（HikvisionIsapiClient.cs） | File: Hikvision ISAPI HTTP client */
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
@@ -15,10 +16,28 @@ internal sealed class HikvisionIsapiClient
     private readonly ILogger<HikvisionIsapiClient> _logger;
     private readonly IOptions<HikvisionIsapiOptions> _options;
 
+    // 按 (host, port, scheme, skipSsl, user, password-hash) 缓存 SocketsHttpHandler，
+    // 让连接池在多次请求之间复用，避免 new HttpClient(handler) 每次重建 socket pool 与 DNS 解析。
+    // 长连接 alertStream 不走这里，仍由 CreateLongLivedHandler 独立创建。
+    private static readonly ConcurrentDictionary<string, SocketsHttpHandler> _handlerCache = new();
+
     public HikvisionIsapiClient(ILogger<HikvisionIsapiClient> logger, IOptions<HikvisionIsapiOptions> options)
     {
         _logger = logger;
         _options = options;
+    }
+
+    private static string BuildHandlerKey(Uri baseUri, string userName, string password, bool skipSslValidation)
+    {
+        // password 不直接进 key，避免日志或 dump 中泄露；使用稳定哈希区分凭据变更。
+        var pwdHash = password.Length == 0 ? 0 : password.GetHashCode(StringComparison.Ordinal);
+        return $"{baseUri.Scheme}|{baseUri.Host}|{baseUri.Port}|{(skipSslValidation ? 1 : 0)}|{userName}|{pwdHash}";
+    }
+
+    private static SocketsHttpHandler GetOrCreateHandler(Uri baseUri, string userName, string password, bool skipSslValidation)
+    {
+        var key = BuildHandlerKey(baseUri, userName, password, skipSslValidation);
+        return _handlerCache.GetOrAdd(key, _ => CreateHandler(baseUri, userName, password, skipSslValidation));
     }
 
     public async Task<IsapiTransportResult<string>> GetStringAsync(
@@ -45,8 +64,8 @@ internal sealed class HikvisionIsapiClient
         async Task<IsapiTransportResult<string>> SendCoreAsync()
         {
             var requestUri = new Uri(baseUri, pathAndQuery);
-            using var handler = CreateHandler(baseUri, userName, password, skipSslValidation);
-            using var client = new HttpClient(handler, disposeHandler: true)
+            var handler = GetOrCreateHandler(baseUri, userName, password, skipSslValidation);
+            using var client = new HttpClient(handler, disposeHandler: false)
             {
                 Timeout = timeout
             };
@@ -104,8 +123,8 @@ internal sealed class HikvisionIsapiClient
         async Task<IsapiTransportResult<byte[]>> SendCoreAsync()
         {
             var requestUri = new Uri(baseUri, pathAndQuery);
-            using var handler = CreateHandler(baseUri, userName, password, skipSslValidation);
-            using var client = new HttpClient(handler, disposeHandler: true)
+            var handler = GetOrCreateHandler(baseUri, userName, password, skipSslValidation);
+            using var client = new HttpClient(handler, disposeHandler: false)
             {
                 Timeout = timeout
             };
@@ -207,8 +226,8 @@ internal sealed class HikvisionIsapiClient
         async Task<IsapiTransportResult<HikvisionIsapiHttpPayload>> SendCoreAsync()
         {
             var requestUri = new Uri(baseUri, pathAndQuery);
-            using var handler = CreateHandler(baseUri, userName, password, skipSslValidation);
-            using var client = new HttpClient(handler, disposeHandler: true)
+            var handler = GetOrCreateHandler(baseUri, userName, password, skipSslValidation);
+            using var client = new HttpClient(handler, disposeHandler: false)
             {
                 Timeout = timeout
             };
@@ -297,8 +316,8 @@ internal sealed class HikvisionIsapiClient
         async Task<IsapiTransportResult<HikvisionIsapiHttpPayload>> SendCoreAsync()
         {
             var requestUri = new Uri(baseUri, pathAndQuery);
-            using var handler = CreateHandler(baseUri, userName, password, skipSslValidation);
-            using var client = new HttpClient(handler, disposeHandler: true)
+            var handler = GetOrCreateHandler(baseUri, userName, password, skipSslValidation);
+            using var client = new HttpClient(handler, disposeHandler: false)
             {
                 Timeout = timeout
             };

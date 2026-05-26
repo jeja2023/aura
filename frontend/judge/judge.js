@@ -253,6 +253,13 @@ function getDate() {
 }
 
 async function post(path, body) {
+  if (window.aura && typeof window.aura.requestJson === "function") {
+    const result = await window.aura.requestJson(`${apiBase}${path}`, {
+      method: "POST",
+      body
+    });
+    return result.data;
+  }
   const res = await fetch(`${apiBase}${path}`, {
     method: "POST",
     credentials: "include",
@@ -271,10 +278,15 @@ async function load(options = {}) {
 
   try {
     const date = getDate();
-    const res = await fetch(`${apiBase}/api/judge/daily?date=${encodeURIComponent(date)}&limit=2000`, {
-      credentials: "include"
-    });
-    const data = await res.json();
+    const url = `${apiBase}/api/judge/daily?date=${encodeURIComponent(date)}`;
+    let data;
+    if (window.aura && typeof window.aura.requestJson === "function") {
+      const result = await window.aura.requestJson(url);
+      data = result.data;
+    } else {
+      const res = await fetch(url, { credentials: "include" });
+      data = await res.json();
+    }
     latestJudgeRows = Array.isArray(data?.data) ? data.data : [];
     applyFilter({ keepPageInput: false });
     if (!options.silentSuccessToast || !data || data.code !== 0) {

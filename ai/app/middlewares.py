@@ -6,7 +6,23 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 
+class RetrievalQuotaExceeded(Exception):
+    """检索保护限流命中（429）。携带原始 reason 与 request_id，由统一异常处理器输出标准响应体。"""
+
+    def __init__(self, reason: str, request_id: str = ""):
+        super().__init__(reason)
+        self.reason = reason
+        self.request_id = request_id
+
+
 def register_middlewares(app) -> None:
+    @app.exception_handler(RetrievalQuotaExceeded)
+    async def _retrieval_quota_handler(_request: Request, exc: RetrievalQuotaExceeded):
+        return JSONResponse(
+            status_code=429,
+            content={"code": 42901, "msg": exc.reason, "request_id": exc.request_id},
+        )
+
     @app.middleware("http")
     async def aura_ai_api_key_guard(request: Request, call_next):
         request_id = request.headers.get("X-Request-Id", "").strip() or str(uuid.uuid4())

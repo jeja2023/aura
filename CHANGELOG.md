@@ -2,6 +2,166 @@
 
 本文档记录仓库关键版本与阶段性改动，便于联调、回归与发布追踪。
 
+## 0.1.25（2026-05-26）
+
+### Docker 部署入口收敛
+
+- `docker/` 目录由多套 `full/lan/prod/ops-check` 示例入口收敛为一套主入口：
+  - 新增 `docker/docker-compose.yml`：统一启动 API、AI、PostgreSQL、Redis、ArangoDB，以及一次性 `arango-init` 与 `db-migrate`。
+  - 新增 `docker/.env.docker.example`：作为唯一 Docker 编排环境模板，复制到仓库根目录为 `.env.docker` 后使用。
+  - 新增 `docker/up.ps1` / `docker/up.sh`、`docker/down.ps1` / `docker/down.sh`、`docker/check.ps1` / `docker/check.sh`：统一启停与健康检查入口。
+  - 删除旧入口：`docker-compose.full.example.yml`、`docker-compose.prod.template.yml`、`docker-compose.ops-check.example.yml`、`up-full.*`、`down-full.*`、`check-full.*`、`deploy-aura-ubuntu.sh`、`Jenkinsfile.docker.example`、`.env.full.example`、`.env.prod.example`。
+- `docker/build-images.*` 改为读取 `docker/docker-compose.yml` 与根目录 `.env.docker`，并按 `.env.docker` 中实际 `API_IMAGE` / `AI_IMAGE` 识别构建产物后再打 `API_IMAGE_REPO:IMAGE_TAG` / `AI_IMAGE_REPO:IMAGE_TAG` 标签。
+- `docker/save-images.*`、`docker/load-images.*`、`docker/login-registry.*`、`docker/push-images.*` 输出与错误提示改为 ASCII，减少 Windows PowerShell 编码差异带来的解析或日志问题。
+- `.gitignore` Docker env 白名单同步收敛：保留 `docker/.env.docker.example` 与 `docker/.env.registry.example`，移除旧 `.env.full/.env.prod` 示例白名单。
+
+### 临时联网部署与断网后离线更新
+
+- 明确推荐交付路径：
+  1. 部署服务器首次临时连接互联网。
+  2. `.env.docker` 设置 `IMAGE_PULL_POLICY=missing`。
+  3. 执行 `docker/up.ps1 -Build` 或 `docker/up.sh --build`，完成基础镜像拉取、业务镜像构建与容器启动。
+  4. 通过 `docker/check.*` 验证成功后，将 `.env.docker` 改回 `IMAGE_PULL_POLICY=never` 并断开互联网。
+  5. 后续升级由有网构建机生成离线包，上传到断网服务器后 `docker load` + `docker compose ... up -d --no-build` 更新。
+- `docker/up.ps1` / `docker/up.sh` 新增 `-Build` / `--build`：仅用于首次临时联网部署或本机构建；默认仍使用 `--no-build`，适合断网环境复启与更新。
+- `docker/docker-compose.yml` 的端口绑定更安全：
+  - API 默认绑定 `0.0.0.0:${API_PORT}`。
+  - AI、PostgreSQL、Redis、ArangoDB 默认绑定 `127.0.0.1`，避免临时联网部署期间将内部服务直接暴露到外部网络。
+  - 新增 `API_BIND_ADDRESS`、`AI_BIND_ADDRESS`、`POSTGRES_BIND_ADDRESS`、`REDIS_BIND_ADDRESS`、`ARANGO_BIND_ADDRESS` 环境变量，可按现场需要覆盖。
+- 新增 `docker/offline-pack.ps1` / `docker/offline-pack.sh`：生成完整离线更新包，包含：
+  - 基础镜像：PostgreSQL、Redis、ArangoDB。
+  - 业务镜像：Aura API、Aura AI。
+  - 部署文件：`docker-compose.yml`、`.env.docker`、`database/`、`frontend/`、`models/`。
+  - 离线包内 README，说明断网服务器上的 `docker load` 与 `docker compose up -d --no-build` 更新步骤。
+- `docker/.env.registry.example` 补充说明：`offline-pack.*` 生成的是完整离线部署/更新目录，不只是业务镜像 tar。
+
+### 运维脚本收拢
+
+- 根目录运维脚本移入 `scripts/ops/`，根目录不再堆放回归/巡检脚本：
+  - `AI检索巡检脚本.ps1` → `scripts/ops/ai-check.ps1`
+  - `上线就绪检查脚本.ps1` → `scripts/ops/readiness-check.ps1`
+  - `抓拍链路回归脚本.ps1` → `scripts/ops/capture-regression.ps1`
+  - `全系统联调与压测脚本.ps1` → `scripts/ops/full-check.ps1`
+- 新增 `scripts/ops/aura-ops.ps1` 作为统一入口：
+  - `readiness`
+  - `ai-check`
+  - `capture-regression`
+  - `full-check`
+- `aura-ops.ps1` 读取子脚本时使用 `Get-Content -Encoding UTF8` + `ScriptBlock` 执行，避免 Windows PowerShell 5 直接执行 UTF-8 无 BOM 中文脚本时出现乱码解析问题。
+- 新增 `scripts/ops/README.md`，说明统一入口与子脚本用途。
+
+### 文档合并与归档
+
+- 新增 `docs/运维上线手册.md`：合并部署手册、上线检查、readiness 使用说明与 AI 生产检查，作为当前上线与日常巡检统一入口。
+- 将历史/过期文档移入 `docs/archive/`：
+  - `docs/部署文档与运维手册.md`
+  - `docs/上线检查清单.md`
+  - `docs/readiness运维使用说明.md`
+  - `docs/AI生产完整性检查清单.md`
+  - `docs/最终交付清单.md`
+  - `开发计划.md`
+- 新增 `docs/archive/README.md`，明确归档文档仅用于追溯。
+- `README.md` 同步更新：
+  - Docker 化说明改为统一 `docker/docker-compose.yml` + `.env.docker` + `up/check/down`。
+  - 回归与巡检命令改为 `scripts/ops/aura-ops.ps1`。
+  - 部署建议改为参考 `docs/运维上线手册.md`。
+  - 修正部分文档路径，避免根目录/`docs/` 位置混淆。
+- `docker/README.md` 重写为当前单入口部署说明，补充“首次临时联网部署”和“断网后的升级更新”两条流程。
+
+### 验证记录
+
+- `docker-compose --env-file docker/.env.docker.example -f docker/docker-compose.yml config --quiet` 通过。
+- Docker PowerShell 脚本解析通过：`up.ps1`、`down.ps1`、`check.ps1`、`build-images.ps1`、`save-images.ps1`、`load-images.ps1`、`login-registry.ps1`、`push-images.ps1`、`offline-pack.ps1`。
+- `scripts/ops/aura-ops.ps1` 解析通过。
+- 已确认无 `Caddy`、`docker-compose.internet`、`-Internet/--internet`、旧 `full/lan/prod/ops-check` Docker 入口残留引用。
+
+## 0.1.24（2026-05-25）
+
+### 海康告警链路性能与生命周期优化
+
+- `backend/Aura.Api/Services/Hikvision/HikvisionAlertStreamHostedService.cs`：
+  - 引入 `(deviceId → cameras)` 30 秒 TTL 缓存（`ConcurrentDictionary<long, CachedCameras>`），消除每帧图片缺通道号时回查 `CampusResourceRepository.GetCamerasByDeviceIdAsync` 造成的热路径 DB 命中。
+  - 在 `ExecuteAsync` 的 `finally` 中清理缓存，避免后台服务停机时残留状态。
+  - 将 `_ = Task.Run(() => RunDeviceLoopAsync(...), CancellationToken.None)` 改为 `_ = RunDeviceLoopAsync(...)`：循环本身第一步即 `await Task.Delay`/`CreateAsyncScope`，无需再用 `Task.Run` 占用线程池工作线程。
+- `backend/Aura.Api/Services/Hikvision/HikvisionIsapiClient.cs`：
+  - 4 个一次性调用入口（`GetStringAsync`、`GetBytesAsync`、`SendMultipartPostAsync`、`SendAsync`）由「每次请求 `new SocketsHttpHandler` + `new HttpClient(handler, disposeHandler: true)`」改为按 `(scheme, host, port, skipSsl, user, pwdHash)` 缓存的 `SocketsHttpHandler`，`HttpClient` 以 `disposeHandler: false` 复用底层连接池与 DNS 解析。
+  - 长连接 `RunAlertStreamAsync` 继续使用独立 `CreateLongLivedHandler`，与短连接连接池解耦。
+  - `BuildHandlerKey` 用 `password.GetHashCode(StringComparison.Ordinal)` 入键，避免明文凭据出现在缓存键或诊断日志。
+
+### 后端列表端点 LIMIT 硬上限与生产配置加固
+
+- `backend/Aura.Api/Data/CampusResourceRepository.cs`：暴露 `DefaultCampusNodeLimit/MaxCampusNodeLimit`、`DefaultFloorLimit/MaxFloorLimit`、`DefaultCameraLimit/MaxCameraLimit`，并在 `GetCampusNodesAsync`、`GetFloorsAsync`、`GetCamerasAsync` 中 `Math.Clamp` + `LIMIT @Limit` 强制约束。
+- `backend/Aura.Api/Data/CaptureRepository.cs`：新增 `DefaultRoiLimit/MaxRoiLimit`，`GetRoisAsync` 接受 `limit` 参数并 clamp。
+- `backend/Aura.Api/Extensions/AuraEndpointsCampusFloor.cs`、`AuraEndpointsDeviceCapture.cs`、`AuraEndpointsDomain.cs`：`/api/campus/tree`、`/api/floor/list`、`/api/camera/list`、`/api/roi/list` 端点改为读取 `?limit=` 参数并 clamp 到对应仓储常量，避免恶意大查询参数压垮数据库或内存。
+- `backend/Aura.Api/Extensions/ServiceExtensions.cs` 的 `EnsureSafeProductionConfiguration` 新增两项校验：
+  - `Ai:BaseUrl` 非空时必须为 HTTP/HTTPS 绝对 URI。
+  - `Hikvision:Isapi:AlertStream:Enabled=true` 时必须配置 `DefaultUserName/DefaultPassword`（或对应环境变量入口），将「运行时仅记 warning 跳过」加固为「启动期立即失败」。
+
+### 仓储层通用化与数据库索引补齐
+
+- 新增 `backend/Aura.Api/Data/PgSqlRepositoryHelpers.cs`：抽出仓储中重复的「try { 数据库调用 } catch { 记日志返回 fallback }」样板，提供两个签名：
+  - `ExecuteAsync<T>(factory, logger, operationLabel, operation, fallback, logLevel, logContext)`：查询型，失败返回 fallback。
+  - `ExecuteVoidAsync(factory, logger, operationLabel, operation, logLevel, logContext)`：无返回值写入型，失败返回 `false`。
+- `backend/Aura.Api/Data/MonitoringRepository.cs` 中 `InsertAlertWithTimeAsync`、`GetAlertsAsync`、`GetAlertCountAsync`、`GetAlertsInRangeAsync` 迁移到上述 helper，作为后续其他仓储增量迁移的样板。
+- `backend/Aura.Api/Data/MonitoringRepository.cs`：`DefaultJudgeLimit` 由 `2000` 收敛为 `500`，与前端 `judge.js` 取消硬编码 `limit=2000` 后的实际加载量对齐，降低未指定参数时的默认成本。
+- 新增 `database/migrations/006_add_map_camera_device_id_index.sql`：为 `map_camera(device_id)` 建立索引，覆盖 `GetCamerasByDeviceIdAsync` 在海康告警流通道回退时的过滤查询。
+- `database/schema.pgsql.sql` 同步追加 `idx_map_camera_device_id`，`database/migrations/README.txt` 补充 `006` 说明。
+
+### 前端公共请求迁移与默认 limit 收敛
+
+- `frontend/track/track.js`：轨迹与摄像头列表加载改为优先调用 `window.aura.requestJson`，统一 `credentials: "include"`、JSON 解析与错误结构；不存在该工具时降级到原 `fetch` 兼容路径。`limit=500` 仍作为路径回放的合理上限保留（路径动画需完整序列）。
+- `frontend/judge/judge.js`：
+  - `post`/`load` 改为优先 `window.aura.requestJson`，与 `track.js` 一致。
+  - 去掉硬编码 `&limit=2000`，使用后端新默认值 `500`（来自 `MonitoringRepository.DefaultJudgeLimit`），既减少首屏数据量也避免前后端默认值漂移。
+
+### AI 检索指标失败原因维度与限流抽象
+
+- `ai/services/index_runtime_service.py`：
+  - `IndexRuntimeService` 新增 `_reason_stats: dict[tuple[str, str], int]`，`record_search` 按 `(status, reason)` 归一并累加（`status ∈ {success, empty, failed}`；reason 缺省时按状态归一为 `ok/no_hit/unknown`）。
+  - `get_search_metrics()` 输出新增 `reasons: [{status, reason, count}]`，便于 `search-stats` JSON 直接展示。
+  - `build_prometheus_metrics()` 新增 `aura_ai_search_reason_total{status, reason}` Counter，便于按失败原因切片告警与 PromQL 查询。
+- `ai/routes/api_routes.py`：检索失败路径的 `reason` 由中文短句改为可枚举 ASCII（`internal_exception`、`index_unavailable`），与 Prometheus 标签兼容。
+- `ai/app/middlewares.py` 新增 `RetrievalQuotaExceeded` 异常与对应 `@app.exception_handler`，统一输出 `{code: 42901, msg, request_id}` 响应体，保持与现有 429 契约一致。
+- `ai/routes/api_routes.py`：将 `/ai/extract`、`/ai/extract-file`、`/ai/upsert`、`/ai/search`、`/ai/cluster` 五个路由内手动的 `_allow_operation(request)` 改为 `Depends(require_retrieval_quota)`，依赖函数命中阈值时抛 `RetrievalQuotaExceeded`，由全局处理器输出标准响应，路由内不再重复 `if not allowed: return blocked_response` 三行样板。
+- `ai/tests/test_ai_hardening.py`：将检索异常用例的断言 `reason == "检索内部异常"` 同步改为 `reason == "internal_exception"`，与新枚举值对齐。
+
+### 编辑器工作区配置
+
+- `.vscode/settings.json`：新增 `files.associations`，将 `*.pgsql.sql` 与 `database/migrations/*.sql` 关联到 `postgres` 语言模式，避免 VS Code 内置 `mssql` 扩展把 PostgreSQL 文件按 T-SQL 解析后产生大量假阳性诊断（`CREATE EXTENSION`、`jsonb`、`gin_trgm_ops` 等）。不影响实际数据库与构建。
+
+### Docker 化完整性补齐
+
+- 复核所有 0.1.24 改动的 Docker 化路径：
+  - 新增 `backend/Aura.Api/Data/PgSqlRepositoryHelpers.cs` 由 `backend.Dockerfile` 的 `COPY backend/Aura.Api/` 通配自动入镜像。
+  - 新增 `database/migrations/006_add_map_camera_device_id_index.sql` 由 `backend/Aura.DbMigrator/Program.cs` 中 `^(?<version>\d+)_.*\.sql$` 正则自动识别，`db-migrate` 服务执行 `migrate` 时自动落地。
+  - `database/schema.pgsql.sql` 中追加的 `idx_map_camera_device_id` 由 `pgsql` 服务的 `/docker-entrypoint-initdb.d/01-schema.pgsql.sql` 在新库首次初始化时生效。
+  - AI 改动（`ai/app/middlewares.py`、`ai/routes/api_routes.py`、`ai/services/index_runtime_service.py`）由 `ai.Dockerfile` 的 `COPY ai /app/ai` 自动入镜像。
+- `docker/docker-compose.prod.template.yml` 修复既有缺口：
+  - `api` 服务补齐 `Ai__ApiKey`、`SignalR__RedisBackplane__Enabled/ConnectionString/ChannelPrefix` 四个环境变量透传，使 `.env.prod.example` 中已存在的相应变量真正生效（此前 0.1.23 引入的 SignalR Redis backplane 在 prod 模板未接通）。
+  - `api` 服务新增 `healthcheck`：基于 `/api/health/live`（无鉴权、无外部依赖），与 `deploy/k8s/deployment-probes.example.yaml` 中 liveness probe 对齐。
+  - `ai` 服务新增 `healthcheck`：基于 `/live`，与 `docker-compose.full.example.yml` 中 AI 探针对齐，补齐 prod 模板缺少的容器层就绪信号。
+  - `ai` 服务环境补 `AURA_API_KEY`，与 `api` 的 `Ai__ApiKey` 形成强一致约束。
+- `docker/.env.prod.example`：补 `AURA_API_KEY=` 注释行，与 `.env.full.example` 描述风格对齐，便于生产编排显式启用 AI API Key 校验。
+- **Docker 与本机直跑环境分离**：`docker/build-images.ps1`、`docker/build-images.sh`、`docker/up-full.ps1`、`docker/up-full.sh` 由读根目录 `.env` 改为读 **`.env.docker`**：
+  - 根目录 `.env`：服务于本机直跑（`start_services.py` / `dotnet run` / `uvicorn`），变量沿用 .NET 配置风格（`Jwt__Key`、`ConnectionStrings__PgSql`），host 为 `127.0.0.1`。
+  - `.env.docker`：服务于 Docker compose 编排（由 `docker/.env.full.example` 复制而来），变量沿用 compose 取值风格（`JWT_KEY`、`POSTGRES_PASSWORD`），host 指向容器名 `pgsql`/`redis`/`arangodb`。
+  - 两份文件互不覆盖，避免混用导致连接串或鉴权失败；`.env.docker` 由 `.gitignore` 的 `.env.*` 通配规则自动忽略。
+  - `down-full.*` 与 `check-full.*` 本就不读 env，无需调整；`deploy-aura-ubuntu.sh` 为生产 Ubuntu 一键部署脚本，在远端部署目录自生成 `.env`，独立于开发者本机配置，不在此次调整范围内。
+  - `docker/README.md` 「Full 示例使用」章节同步更新使用约定并补充「仅构建镜像」步骤。
+
+### 验证记录
+
+- 已通过：
+  - `dotnet build backend\Aura.Api\Aura.Api.csproj`：0 警告 0 错误。
+  - `dotnet test backend\Aura.Api.Integration.Tests\Aura.Api.Integration.Tests.csproj --no-build`：42/42 通过。
+  - `pytest ai\tests -q`：11/11 通过。
+  - `npm run lint`（在 `frontend/`）：通过。
+  - `docker-compose --env-file docker\.env.full.example -f docker\docker-compose.full.example.yml config`：编排合法。
+  - `docker-compose --env-file docker\.env.prod.example -f docker\docker-compose.prod.template.yml config`：编排合法，`Ai__ApiKey`、`SignalR__RedisBackplane__*`、`healthcheck` 透传渲染正确。
+- 未覆盖项（按当前沙箱限制）：
+  - 数据库 `006` 迁移仅做语法准备，需在目标 PostgreSQL 上执行 `dotnet run --project backend/Aura.DbMigrator -- migrate` 完成落地。
+  - 海康告警流 N+1 优化与 ISAPI Handler 缓存的真实收益依赖具备 NVR/抓拍硬件的联调环境观测，可在压测脚本基础上对比 `aura_ai_search_reason_total` 与设备出口 QPS。
+
 ## 0.1.23（2026-05-18）
 
 ### AI 健康探针与启动就绪语义拆分

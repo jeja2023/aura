@@ -17,10 +17,14 @@ namespace Aura.Api.Services.Hikvision;
 /// </summary>
 internal sealed class HikvisionAlertStreamHostedService : BackgroundService
 {
+    // 抓拍图片缺通道号时按设备回退查相机的小型缓存，避免热路径每帧打数据库
+    private const int CameraCacheTtlSeconds = 30;
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IOptionsMonitor<HikvisionIsapiOptions> _optionsMonitor;
     private readonly HikvisionAlertStreamRegistry _registry;
     private readonly ILogger<HikvisionAlertStreamHostedService> _logger;
+    private readonly ConcurrentDictionary<long, CachedCameras> _deviceCameraCache = new();
 
     public HikvisionAlertStreamHostedService(
         IServiceScopeFactory scopeFactory,
@@ -33,6 +37,8 @@ internal sealed class HikvisionAlertStreamHostedService : BackgroundService
         _registry = registry;
         _logger = logger;
     }
+
+    private sealed record CachedCameras(List<DbCamera> Cameras, DateTimeOffset ExpiresAtUtc);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -101,7 +107,9 @@ internal sealed class HikvisionAlertStreamHostedService : BackgroundService
                         }
 
                         var deviceId = d.DeviceId;
-                        _ = Task.Run(() => RunDeviceLoopAsync(deviceId, linked.Token), CancellationToken.None);
+                        // 直接调度异步任务（fire-and-forget）；RunDeviceLoopAsync 自身在第一处 await 立即让出，
+                        // 无需再用 Task.Run 占用线程池工作线程。
+                        _ = RunDeviceLoopAsync(deviceId, linked.Token);
                     }
                 }
 
@@ -118,6 +126,7 @@ internal sealed class HikvisionAlertStreamHostedService : BackgroundService
             }
 
             runners.Clear();
+            _deviceCameraCache.Clear();
         }
     }
 
@@ -433,9 +442,17 @@ internal sealed class HikvisionAlertStreamHostedService : BackgroundService
 
     private async Task<List<DbCamera>> ResolveCamerasByDeviceAsync(long deviceId)
     {
+        var nowUtc = DateTimeOffset.UtcNow;
+        if (_deviceCameraCache.TryGetValue(deviceId, out var cached) && cached.ExpiresAtUtc > nowUtc)
+        {
+            return cached.Cameras;
+        }
+
         await using var scope = _scopeFactory.CreateAsyncScope();
         var campusResourcesRepository = scope.ServiceProvider.GetRequiredService<CampusResourceRepository>();
-        return await campusResourcesRepository.GetCamerasByDeviceIdAsync(deviceId).ConfigureAwait(false);
+        var cameras = await campusResourcesRepository.GetCamerasByDeviceIdAsync(deviceId).ConfigureAwait(false);
+        _deviceCameraCache[deviceId] = new CachedCameras(cameras, nowUtc.AddSeconds(CameraCacheTtlSeconds));
+        return cameras;
     }
 
     private static int ChooseFallbackChannelNo(List<DbCamera> cameras, string? strategy)

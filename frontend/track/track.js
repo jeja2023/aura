@@ -133,24 +133,25 @@ async function load(options = {}) {
   }
 
   try {
-    const [trackRes, cameraRes] = await Promise.all([
-      fetch(`${apiBase}/api/track/${encodeURIComponent(vid)}?limit=500`, {
-        credentials: "include"
-      }),
-      fetch(`${apiBase}/api/camera/list`, {
-        credentials: "include"
-      })
+    const requestJson = window.aura?.requestJson;
+    const [trackResult, cameraResult] = await Promise.all([
+      requestJson
+        ? requestJson(`${apiBase}/api/track/${encodeURIComponent(vid)}?limit=500`)
+        : fetch(`${apiBase}/api/track/${encodeURIComponent(vid)}?limit=500`, { credentials: "include" }).then(async (r) => ({ ok: r.ok, status: r.status, data: await r.json() })),
+      requestJson
+        ? requestJson(`${apiBase}/api/camera/list`)
+        : fetch(`${apiBase}/api/camera/list`, { credentials: "include" }).then(async (r) => ({ ok: r.ok, status: r.status, data: await r.json() }))
     ]);
-    const trackData = await trackRes.json();
-    const cameraData = await cameraRes.json();
+    const trackData = trackResult.data;
+    const cameraData = cameraResult.data;
 
-    if (!cameraRes.ok || cameraData.code !== 0) {
-      setResult(cameraData?.msg ? cameraData : { code: cameraRes.status, msg: `摄像机列表加载失败：HTTP ${cameraRes.status}` });
+    if (!cameraResult.ok || cameraData?.code !== 0) {
+      setResult(cameraData?.msg ? cameraData : { code: cameraResult.status, msg: `摄像机列表加载失败：HTTP ${cameraResult.status}` });
       return;
     }
 
-    if (!trackRes.ok || trackData.code !== 0) {
-      setResult(trackData?.msg ? trackData : { code: trackRes.status, msg: `轨迹查询失败：HTTP ${trackRes.status}` });
+    if (!trackResult.ok || trackData?.code !== 0) {
+      setResult(trackData?.msg ? trackData : { code: trackResult.status, msg: `轨迹查询失败：HTTP ${trackResult.status}` });
       return;
     }
 

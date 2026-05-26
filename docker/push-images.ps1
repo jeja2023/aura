@@ -1,20 +1,20 @@
-# 文件：Docker 镜像推送脚本（push-images.ps1） | File: Docker Push Images Script
+# File: Docker Push Images Script
 
 $ErrorActionPreference = "Stop"
 
 $apiRepo = if ($env:API_IMAGE_REPO) { $env:API_IMAGE_REPO } else { "aura-api" }
 $aiRepo = if ($env:AI_IMAGE_REPO) { $env:AI_IMAGE_REPO } else { "aura-ai" }
-$tag = if ($env:IMAGE_TAG) { $env:IMAGE_TAG } else { throw "请先设置 IMAGE_TAG。" }
+$tag = if ($env:IMAGE_TAG) { $env:IMAGE_TAG } else { throw "Set IMAGE_TAG first." }
 
 $apiImage = "$apiRepo`:$tag"
 $aiImage = "$aiRepo`:$tag"
 
-Write-Host "推送镜像：$apiImage"
+Write-Host "Pushing image: $apiImage"
 docker push $apiImage
-if ($LASTEXITCODE -ne 0) { throw "推送失败：$apiImage" }
+if ($LASTEXITCODE -ne 0) { throw "Push failed: $apiImage" }
 
-Write-Host "推送镜像：$aiImage"
+Write-Host "Pushing image: $aiImage"
 docker push $aiImage
-if ($LASTEXITCODE -ne 0) { throw "推送失败：$aiImage" }
+if ($LASTEXITCODE -ne 0) { throw "Push failed: $aiImage" }
 
-Write-Host "[RESULT] 镜像推送完成。"
+Write-Host "[RESULT] Images pushed."

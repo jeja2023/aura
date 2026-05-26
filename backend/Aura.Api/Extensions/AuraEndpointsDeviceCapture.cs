@@ -24,12 +24,15 @@ internal static class AuraEndpointsDeviceCapture
         var captureIpWhitelist = ctx.CaptureIpWhitelist;
 
         var cameraGroup = app.MapGroup("/api/camera");
-        cameraGroup.MapGet("/list", async () =>
+        cameraGroup.MapGet("/list", async (HttpRequest httpReq) =>
         {
-            var rows = await campusResources.GetCamerasAsync();
+            var limit = int.TryParse(httpReq.Query["limit"].FirstOrDefault(), out var l)
+                ? Math.Clamp(l, 1, CampusResourceRepository.MaxCameraLimit)
+                : CampusResourceRepository.DefaultCameraLimit;
+            var rows = await campusResources.GetCamerasAsync(limit);
             if (rows.Count > 0) return Results.Ok(new { code = 0, msg = "查询成功", data = rows });
             if (!ctx.AllowInMemoryFallback) return Results.Ok(new { code = 0, msg = "查询成功", data = new List<DbCamera>() });
-            return Results.Ok(new { code = 0, msg = "查询成功", data = store.Cameras.OrderByDescending(x => x.CameraId) });
+            return Results.Ok(new { code = 0, msg = "查询成功", data = store.Cameras.OrderByDescending(x => x.CameraId).Take(limit) });
         }).RequireAuthorization("楼栋管理员");
 
         cameraGroup.MapPost("/create", async (CameraCreateReq req) =>

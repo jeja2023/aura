@@ -22,12 +22,15 @@ internal static class AuraEndpointsDomain
         var allow = ctx.AllowInMemoryFallback;
 
         var roiGroup = app.MapGroup("/api/roi");
-        roiGroup.MapGet("/list", async () =>
+        roiGroup.MapGet("/list", async (HttpRequest httpReq) =>
         {
-            var rows = await capture.GetRoisAsync();
+            var limit = int.TryParse(httpReq.Query["limit"].FirstOrDefault(), out var l)
+                ? Math.Clamp(l, 1, CaptureRepository.MaxRoiLimit)
+                : CaptureRepository.DefaultRoiLimit;
+            var rows = await capture.GetRoisAsync(limit);
             if (rows.Count > 0) return Results.Ok(new { code = 0, msg = "查询成功", data = rows });
             if (!allow) return Results.Ok(new { code = 0, msg = "查询成功", data = new List<DbRoi>() });
-            return Results.Ok(new { code = 0, msg = "查询成功", data = store.Rois.OrderByDescending(x => x.RoiId) });
+            return Results.Ok(new { code = 0, msg = "查询成功", data = store.Rois.OrderByDescending(x => x.RoiId).Take(limit) });
         }).RequireAuthorization("楼栋管理员");
 
         roiGroup.MapPost("/save", async (RoiReq req) =>

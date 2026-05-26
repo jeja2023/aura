@@ -18,9 +18,12 @@ internal static class AuraEndpointsCampusFloor
         var allow = ctx.AllowInMemoryFallback;
 
         var campusGroup = app.MapGroup("/api/campus");
-        campusGroup.MapGet("/tree", async () =>
+        campusGroup.MapGet("/tree", async (HttpRequest httpReq) =>
         {
-            var rows = await campusResources.GetCampusNodesAsync();
+            var limit = int.TryParse(httpReq.Query["limit"].FirstOrDefault(), out var l)
+                ? Math.Clamp(l, 1, CampusResourceRepository.MaxCampusNodeLimit)
+                : CampusResourceRepository.DefaultCampusNodeLimit;
+            var rows = await campusResources.GetCampusNodesAsync(limit);
             if (rows.Count > 0)
             {
                 var vmMap = rows.Select(x => new CampusNodeVm(x.NodeId, x.ParentId, x.LevelType, x.NodeName, [])).ToDictionary(x => x.NodeId);
@@ -35,7 +38,7 @@ internal static class AuraEndpointsCampusFloor
             }
 
             if (!allow) return Results.Ok(new { code = 0, msg = "查询成功", data = new List<CampusNodeVm>() });
-            return Results.Ok(new { code = 0, msg = "查询成功", data = store.CampusNodes.Where(x => x.ParentId == null) });
+            return Results.Ok(new { code = 0, msg = "查询成功", data = store.CampusNodes.Where(x => x.ParentId == null).Take(limit) });
         }).RequireAuthorization("楼栋管理员");
 
         campusGroup.MapPost("/create", async (CampusCreateReq req) =>
@@ -80,12 +83,15 @@ internal static class AuraEndpointsCampusFloor
         }).RequireAuthorization("楼栋管理员");
 
         var floorGroup = app.MapGroup("/api/floor");
-        floorGroup.MapGet("/list", async () =>
+        floorGroup.MapGet("/list", async (HttpRequest httpReq) =>
         {
-            var rows = await campusResources.GetFloorsAsync();
+            var limit = int.TryParse(httpReq.Query["limit"].FirstOrDefault(), out var l)
+                ? Math.Clamp(l, 1, CampusResourceRepository.MaxFloorLimit)
+                : CampusResourceRepository.DefaultFloorLimit;
+            var rows = await campusResources.GetFloorsAsync(limit);
             if (rows.Count > 0) return Results.Ok(new { code = 0, msg = "查询成功", data = rows });
             if (!allow) return Results.Ok(new { code = 0, msg = "查询成功", data = new List<DbFloor>() });
-            return Results.Ok(new { code = 0, msg = "查询成功", data = store.Floors.OrderByDescending(x => x.FloorId) });
+            return Results.Ok(new { code = 0, msg = "查询成功", data = store.Floors.OrderByDescending(x => x.FloorId).Take(limit) });
         }).RequireAuthorization("楼栋管理员");
 
         floorGroup.MapPost("/create", async (FloorCreateReq req) =>

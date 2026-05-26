@@ -1,4 +1,4 @@
-# 文件：全系统联调与压测脚本（全系统联调与压测脚本.ps1） | File: Full System Integration and Stress Test Script
+# 文件：全系统联调与压测脚本（full-check.ps1） | File: Full System Integration and Stress Test Script
 # 用途：登录、模拟抓拍、触发研判并校验输出。
 
 $ErrorActionPreference = "Stop"

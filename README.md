@@ -1,15 +1,15 @@
 # 寓瞳系统
 
-本仓库已按《开发计划.md》《开发规范.md》完成第一至第五阶段开发，覆盖接入网关、AI 特征链路、空间引擎、业务研判、3D/2D 态势、统计导出与外联输出。
+本仓库已按《docs/archive/开发计划.md》《开发规范.md》完成第一至第五阶段开发，覆盖接入网关、AI 特征链路、空间引擎、业务研判、3D/2D 态势、统计导出与外联输出。
 
 ## 项目状态
 
-- 当前版本：`0.1.22`（细目见 **`CHANGELOG.md`**）
+- 当前版本：`0.1.24`（细目见 **`CHANGELOG.md`**）
 - 阶段状态：第一至第五阶段均已验收通过
-- 交付结论：计划项已全部完成并在 `开发计划.md` 归档勾选
+- 交付结论：计划项已全部完成并在 `docs/archive/开发计划.md` 归档勾选
 - 工程状态：后端可构建（推荐打开根目录 **`Aura.sln`** 或 `dotnet build backend/Aura.Api/Aura.Api.csproj`）、前端页面可访问、核心链路可联调
 - 运维状态：已提供回归脚本、联调压测脚本、部署与上线检查文档
-- 变更记录：见根目录 **`CHANGELOG.md`**（`0.1.2` 起补充后端模块化、DI 与编码修复等说明；`0.1.17` 起补充海康 alertStream、媒体规划 API、设备/联调前端与海康表单布局等；`0.1.19` 为数据库迁移工具化、统一错误响应、安全扫描与回归测试补齐等综合迭代；`0.1.21` 补充 AI 运维指标入统计/首页、抓拍与日志可读性优化；`0.1.22` 补充 AI 启动容错、生命周期停机治理、健康脱敏与路由限流加固）
+- 变更记录：见根目录 **`CHANGELOG.md`**（`0.1.2` 起补充后端模块化、DI 与编码修复等说明；`0.1.17` 起补充海康 alertStream、媒体规划 API、设备/联调前端与海康表单布局等；`0.1.19` 为数据库迁移工具化、统一错误响应、安全扫描与回归测试补齐等综合迭代；`0.1.21` 补充 AI 运维指标入统计/首页、抓拍与日志可读性优化；`0.1.22` 补充 AI 启动容错、生命周期停机治理、健康脱敏与路由限流加固；`0.1.23` 补充 AI `/live` 与 `/ready` 探针拆分、后端依赖升级与 SignalR Redis backplane 选项、抓拍与轨迹索引优化；`0.1.24` 补充海康告警流相机缓存、ISAPI Handler 池化、列表端点 LIMIT 硬上限、`map_camera(device_id)` 索引、AI 检索失败原因维度与限流 FastAPI Depends 抽象）
 
 ## 目录结构
 
@@ -22,12 +22,10 @@
 - `database/schema.pgsql.sql`：PostgreSQL 表结构
 - `frontend`：Vanilla JS 前端页面（根目录含 **`package.json`**，维护者可执行 **`npm ci`** 与 **`npm run lint`** 做 ESLint 检查）。**NVR 设备**与**海康 ISAPI 联调**分别对应 `frontend/device/` 与 `frontend/device-diag/`（入口见下文「关键页面入口」）
 - `deploy/k8s`：Kubernetes 示例（Ingress 拒绝公网 **`/metrics`**、NetworkPolicy 入站基线）与说明文档
-- `抓拍链路端到端测试清单.md`：抓拍链路测试清单
-- `抓拍链路回归脚本.ps1`：抓拍链路回归脚本
-- `全系统联调与压测脚本.ps1`：全系统联调与压测脚本
-- `docs/部署文档与运维手册.md`：部署与运维手册
-- `最终交付清单.md`：最终交付范围清单
-- `docs/上线检查清单.md`：上线前检查清单
+- `docs/抓拍链路端到端测试清单.md`：抓拍链路测试清单
+- `scripts/ops/aura-ops.ps1`：统一运维脚本入口（上线就绪、AI 巡检、抓拍回归、全系统联调）
+- `docs/运维上线手册.md`：部署、上线检查、readiness 与 AI 生产检查统一手册
+- `docs/archive/最终交付清单.md`：历史交付范围清单
 
 ## 已落地核心能力
 
@@ -125,13 +123,12 @@ python start_services.py
 - **运维探针**：存活检查建议使用 **`GET /api/health/live`**（无鉴权、无外部依赖）；业务向完整自检仍用 **`GET /api/ops/readiness`**（需超级管理员）。响应头 **`X-Correlation-Id`** 与请求同名校验或自动生成，便于排障。
 - **生产主机头**：`appsettings.Production.json` 中 **`AllowedHosts`** 已改为占位域名，上线前请改为实际对外主机名（分号分隔多个）；开发环境可继续为 `*`。
 
-### Docker 化建议（脚本/巡检任务）
+### Docker 化建议
 
-- 示例文件：`docker/docker-compose.ops-check.example.yml`
-- 使用方式：
-  1. `cp .env.example .env`（Windows 可手动复制并重命名）
-  2. 在 `.env` 中填入真实 `AURA_ADMIN_PASSWORD`
-  3. `docker compose -f docker/docker-compose.ops-check.example.yml run --rm ops-check`
+- 统一入口：`docker/docker-compose.yml`
+- 环境模板：复制 `docker/.env.docker.example` 为仓库根目录 `.env.docker`，填写镜像标签、密码与密钥。
+- 启动：`powershell -ExecutionPolicy Bypass -File .\docker\up.ps1` 或 `sh ./docker/up.sh`
+- 检查：`powershell -ExecutionPolicy Bypass -File .\docker\check.ps1` 或 `sh ./docker/check.sh`
 - 建议：生产环境优先使用 CI/CD Secret 或容器编排 Secret（如 Kubernetes Secret），避免明文进入镜像和仓库。
 
 ## 关键页面入口
@@ -220,14 +217,14 @@ Ops__Telemetry__ServiceName=Aura.Api
 
 ## 回归与压测
 
-- 抓拍链路回归：`powershell -ExecutionPolicy Bypass -File "e:\Aura\抓拍链路回归脚本.ps1"`
-- 全系统联调压测：`powershell -ExecutionPolicy Bypass -File "e:\Aura\全系统联调与压测脚本.ps1"`
-- AI 检索巡检：`powershell -ExecutionPolicy Bypass -File "e:\Aura\AI检索巡检脚本.ps1"`（检查 `熔断状态/限流状态/回填状态` 与检索审计日志；可通过 `-MaxLatencyMs`、`-MinRemainingQuota` 调整阈值）
-- AI 检索巡检（CI JSON 模式）：`powershell -ExecutionPolicy Bypass -File "e:\Aura\AI检索巡检脚本.ps1" -JsonOutput`（仅输出结构化 JSON，便于流水线解析；退出码仍为 `0/2/3`）
+- 抓拍链路回归：`powershell -ExecutionPolicy Bypass -File .\scripts\ops\aura-ops.ps1 capture-regression`
+- 全系统联调压测：`powershell -ExecutionPolicy Bypass -File .\scripts\ops\aura-ops.ps1 full-check`
+- AI 检索巡检：`powershell -ExecutionPolicy Bypass -File .\scripts\ops\aura-ops.ps1 ai-check`（检查 `熔断状态/限流状态/回填状态` 与检索审计日志；可通过后续参数透传 `-MaxLatencyMs`、`-MinRemainingQuota` 调整阈值）
+- AI 检索巡检（CI JSON 模式）：`powershell -ExecutionPolicy Bypass -File .\scripts\ops\aura-ops.ps1 ai-check -JsonOutput`（仅输出结构化 JSON，便于流水线解析；退出码仍为 `0/2/3`）
 
 ## 部署建议
 
 - 参考 `backend/Aura.Api/appsettings.Production.json` 填充生产配置，并务必设置 **`AllowedHosts`** 为实际域名
-- 参考 `docs/部署文档与运维手册.md` 与 `docs/上线检查清单.md` 执行上线流程
-- Docker 化参考：`docker/README.md`（含 `full` 联调、`ops-check` 巡检与生产模板）
+- 参考 `docs/运维上线手册.md` 执行上线流程
+- Docker 化参考：`docker/README.md`（已收敛为一套 Compose、一份环境模板和一组启停/检查脚本）
 - Kubernetes：`deploy/k8s/README.md` 说明 NetworkPolicy 与按路径限制 **`/metrics`** 的关系，并提供 ingress-nginx 与 NetworkPolicy 示例清单

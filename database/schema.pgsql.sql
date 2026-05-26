@@ -270,6 +270,9 @@ CREATE INDEX IF NOT EXISTS idx_capture_feature_time_image
   ON capture_record(feature_id, capture_time DESC, capture_id DESC)
   WHERE feature_id IS NOT NULL AND image_path IS NOT NULL AND btrim(image_path) <> '';
 
+CREATE INDEX IF NOT EXISTS idx_map_camera_device_id
+  ON map_camera(device_id);
+
 CREATE INDEX IF NOT EXISTS idx_judge_date_type_desc
   ON judge_result(judge_date, judge_type, judge_id);
 

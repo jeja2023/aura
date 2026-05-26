@@ -184,8 +184,13 @@ internal sealed class CaptureRepository
         }
     }
 
-    public async Task<List<DbRoi>> GetRoisAsync()
+    public const int DefaultRoiLimit = 2000;
+    public const int MaxRoiLimit = 10000;
+
+    public async Task<List<DbRoi>> GetRoisAsync(int limit = DefaultRoiLimit)
     {
+        limit = Math.Clamp(limit, 1, MaxRoiLimit);
+
         try
         {
             await using var conn = CreateConnection();
@@ -195,12 +200,14 @@ internal sealed class CaptureRepository
                        COALESCE(CAST(vertices_json AS TEXT), '[]') AS VerticesJson, created_at AS CreatedAt
                 FROM map_roi
                 ORDER BY roi_id DESC
-                """);
+                LIMIT @Limit
+                """,
+                new { Limit = limit });
             return rows.ToList();
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "数据库查询 ROI 列表失败。");
+            _logger?.LogError(ex, "数据库查询 ROI 列表失败。limit={Limit}", limit);
             return [];
         }
     }

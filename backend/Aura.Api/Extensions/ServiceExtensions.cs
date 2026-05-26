@@ -105,6 +105,35 @@ public static class ServiceExtensions
                 throw new InvalidOperationException("生产环境 Ops:Alert:WebhookUrl 必须是有效的 HTTP/HTTPS 绝对地址。");
             }
         }
+
+        var aiBaseUrl = configuration["Ai:BaseUrl"];
+        if (!string.IsNullOrWhiteSpace(aiBaseUrl))
+        {
+            if (!Uri.TryCreate(aiBaseUrl, UriKind.Absolute, out var aiUri) ||
+                (aiUri.Scheme != Uri.UriSchemeHttp && aiUri.Scheme != Uri.UriSchemeHttps))
+            {
+                throw new InvalidOperationException("生产环境 Ai:BaseUrl 必须是有效的 HTTP/HTTPS 绝对地址。");
+            }
+        }
+
+        // 海康告警长连接启用时，必须显式配置默认凭据或环境变量入口
+        var hikAlertEnabled = configuration.GetValue<bool>("Hikvision:Isapi:AlertStream:Enabled");
+        if (hikAlertEnabled)
+        {
+            var hikUser = configuration["Hikvision:Isapi:DefaultUserName"];
+            var hikPwd = configuration["Hikvision:Isapi:DefaultPassword"];
+            var hikUserEnv = configuration["Hikvision:Isapi:DefaultUserNameEnvironmentVariable"];
+            var hikPwdEnv = configuration["Hikvision:Isapi:DefaultPasswordEnvironmentVariable"];
+            var hasUser = !string.IsNullOrWhiteSpace(hikUser)
+                || !string.IsNullOrWhiteSpace(hikUserEnv);
+            var hasPwd = !string.IsNullOrWhiteSpace(hikPwd)
+                || !string.IsNullOrWhiteSpace(hikPwdEnv);
+            if (!hasUser || !hasPwd)
+            {
+                throw new InvalidOperationException(
+                    "生产环境 Hikvision:Isapi:AlertStream:Enabled=true 但未提供 DefaultUserName/DefaultPassword（或对应环境变量入口）。");
+            }
+        }
     }
 
     public static IServiceCollection AddAuraServices(this IServiceCollection services, IConfiguration configuration, IHostEnvironment hostEnvironment, bool isDev)

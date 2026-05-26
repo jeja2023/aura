@@ -111,5 +111,5 @@ def test_search_unexpected_exception_returns_500_and_records_failed():
     assert body["code"] == 50002
     assert deps.index_runtime.records
     assert deps.index_runtime.records[-1]["status"] == "failed"
-    assert deps.index_runtime.records[-1]["reason"] == "检索内部异常"
+    assert deps.index_runtime.records[-1]["reason"] == "internal_exception"
 

@@ -1,20 +1,20 @@
 #!/usr/bin/env sh
-# 文件：Docker 仓库登录脚本（login-registry.sh） | File: Docker Registry Login Script
+# File: Docker Registry Login Script
 
 set -eu
 
 if [ -z "${REGISTRY_HOST:-}" ]; then
-  echo "请先设置 REGISTRY_HOST。"
+  echo "Set REGISTRY_HOST first."
   exit 1
 fi
 if [ -z "${REGISTRY_USER:-}" ]; then
-  echo "请先设置 REGISTRY_USER。"
+  echo "Set REGISTRY_USER first."
   exit 1
 fi
 if [ -z "${REGISTRY_PASSWORD:-}" ]; then
-  echo "请先设置 REGISTRY_PASSWORD。"
+  echo "Set REGISTRY_PASSWORD first."
   exit 1
 fi
 
 echo "$REGISTRY_PASSWORD" | docker login "$REGISTRY_HOST" -u "$REGISTRY_USER" --password-stdin
-echo "[RESULT] 已登录仓库：$REGISTRY_HOST"
+echo "[RESULT] Logged in: $REGISTRY_HOST"

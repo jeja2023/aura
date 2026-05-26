@@ -102,8 +102,7 @@ backend/**/storage/
 .env
 .env.*
 !.env.example
-!docker/.env.full.example
-!docker/.env.prod.example
+!docker/.env.docker.example
 !docker/.env.registry.example
 *.key
 *.pem

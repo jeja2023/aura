@@ -3,10 +3,11 @@ from pathlib import Path
 import os
 import time
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 from PIL import Image
 
+from app.middlewares import RetrievalQuotaExceeded
 from app.route_deps import RouteDeps
 from models.schemas import ClusterReq, ImageFileReq, ImageReq, SearchReq, UpsertReq
 from services.cluster_service import cluster_vectors, compute_cluster_cohesion
@@ -52,12 +53,14 @@ def build_api_router(deps: RouteDeps) -> APIRouter:
                 continue
         return False, "文件路径不在允许目录内"
 
-    def _allow_operation(request: Request) -> tuple[bool, JSONResponse | None]:
-        request_id = getattr(request.state, "request_id", "")
+    def require_retrieval_quota(request: Request) -> None:
+        """FastAPI 依赖：检索保护限流。命中阈值时抛 RetrievalQuotaExceeded，
+        由全局异常处理器统一格式化输出，避免每个路由重复 _allow_operation 调用。"""
         allowed, reason = deps.retrieval_guard.allow_request()
         if allowed:
-            return True, None
-        return False, JSONResponse(status_code=429, content={"code": 42901, "msg": reason, "request_id": request_id})
+            return
+        request_id = getattr(request.state, "request_id", "")
+        raise RetrievalQuotaExceeded(reason=reason, request_id=request_id)
 
     @router.get("/")
     def health():
@@ -78,10 +81,7 @@ def build_api_router(deps: RouteDeps) -> APIRouter:
         return payload
 
     @router.post("/ai/extract")
-    async def extract(req: ImageReq, request: Request):
-        allowed, blocked_response = _allow_operation(request)
-        if not allowed:
-            return blocked_response
+    async def extract(req: ImageReq, _quota: None = Depends(require_retrieval_quota)):
         try:
             img = deps.decode_image(req.image_base64)
             tensor = deps.preprocess(img)
@@ -100,10 +100,7 @@ def build_api_router(deps: RouteDeps) -> APIRouter:
             )
 
     @router.post("/ai/extract-file")
-    async def extract_file(req: ImageFileReq, request: Request):
-        allowed, blocked_response = _allow_operation(request)
-        if not allowed:
-            return blocked_response
+    async def extract_file(req: ImageFileReq, _quota: None = Depends(require_retrieval_quota)):
         try:
             path = Path(req.image_path)
             if not path.exists():
@@ -131,10 +128,7 @@ def build_api_router(deps: RouteDeps) -> APIRouter:
             )
 
     @router.post("/ai/upsert")
-    async def upsert(req: UpsertReq, request: Request):
-        allowed, blocked_response = _allow_operation(request)
-        if not allowed:
-            return blocked_response
+    async def upsert(req: UpsertReq, _quota: None = Depends(require_retrieval_quota)):
         strict_mode = requires_persistent_index()
         return upsert_vector(
             vid=req.vid,
@@ -154,11 +148,8 @@ def build_api_router(deps: RouteDeps) -> APIRouter:
         )
 
     @router.post("/ai/search")
-    async def search(req: SearchReq, request: Request):
+    async def search(req: SearchReq, request: Request, _quota: None = Depends(require_retrieval_quota)):
         request_id = getattr(request.state, "request_id", "")
-        allowed, blocked_response = _allow_operation(request)
-        if not allowed:
-            return blocked_response
         strict_mode = requires_persistent_index()
         defaults = build_retrieval_defaults()
         resolved, warnings = resolve_search_params(req, defaults)
@@ -202,7 +193,7 @@ def build_api_router(deps: RouteDeps) -> APIRouter:
                 filters_applied=bool(req.include_vids or req.exclude_vids or req.metadata_filter),
                 request_id=request_id,
                 status="failed",
-                reason="检索内部异常",
+                reason="internal_exception",
                 warnings=warnings,
             )
             deps.logger.exception("检索内部异常 request_id=%s", request_id)
@@ -221,7 +212,7 @@ def build_api_router(deps: RouteDeps) -> APIRouter:
                 filters_applied=bool(req.include_vids or req.exclude_vids or req.metadata_filter),
                 request_id=request_id,
                 status="failed",
-                reason="向量索引不可用或检索失败",
+                reason="index_unavailable",
                 warnings=warnings,
             )
             deps.logger.warning("检索失败 request_id=%s", request_id)
@@ -274,10 +265,7 @@ def build_api_router(deps: RouteDeps) -> APIRouter:
         return {"code": 0, "msg": "检索审计日志查询成功", "data": data}
 
     @router.post("/ai/cluster")
-    async def cluster(req: ClusterReq, request: Request):
-        allowed, blocked_response = _allow_operation(request)
-        if not allowed:
-            return blocked_response
+    async def cluster(req: ClusterReq, _quota: None = Depends(require_retrieval_quota)):
         strict_mode = requires_persistent_index()
         loaded = load_vectors_for_cluster(
             max_vectors=req.max_vectors,
