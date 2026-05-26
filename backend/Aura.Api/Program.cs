@@ -111,6 +111,8 @@ if (!Directory.Exists(storageRoot))
     Directory.CreateDirectory(storageRoot);
 }
 
+await AdminBootstrapper.InitializeAsync(app);
+
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider(storageRoot),
