@@ -22,6 +22,12 @@
   - `DOTNET_ASPNET_IMAGE` 由不存在的 `mcr.microsoft.com/dotnet/aspnet:10.0.201` 改为官方运行时标签 `mcr.microsoft.com/dotnet/aspnet:10.0`。
   - `PYTHON_BASE_IMAGE` 保持为 `python:3.12-slim`，并与 `docker/ai.Dockerfile` 默认值一致。
 - 生产 Docker 首次启动补齐初始管理员引导：当 `sys_user` 为空且配置了 `AURA_ADMIN_PASSWORD` 时，API 会使用 `AURA_ADMIN_USER` / `AURA_ADMIN_PASSWORD` 创建 `super_admin` 管理员；已有用户时不会重置密码。
+- Docker 时区统一为东八区：
+  - `.env.docker.example` / `.env.docker` 新增 `TZ=Asia/Shanghai` 与 `PG_TIMEZONE=Asia/Shanghai`。
+  - Compose 为 PostgreSQL、Redis、ArangoDB、AI、API、迁移容器注入 `TZ`。
+  - PostgreSQL 启动参数设置 `timezone` / `log_timezone`，API 与迁移连接串追加 `Timezone=Asia/Shanghai`。
+  - API 控制台日志正文增加 `yyyy-MM-dd HH:mm:ss zzz` 时间戳，容器 stdout 中可直接看到东八区业务日志时间。
+- 日志页标签误判修复：操作日志不再因为页面标题包含“异常研判”等业务词而标记为“失败”。
 
 ### 临时联网部署与断网后离线更新
 

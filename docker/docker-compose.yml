@@ -5,9 +5,12 @@ services:
     container_name: aura-pgsql
     restart: unless-stopped
     environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      PGTZ: ${PG_TIMEZONE:-Asia/Shanghai}
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    command: ["postgres", "-c", "timezone=${PG_TIMEZONE:-Asia/Shanghai}", "-c", "log_timezone=${PG_TIMEZONE:-Asia/Shanghai}"]
     ports:
       - "${POSTGRES_BIND_ADDRESS:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
     volumes:
@@ -24,6 +27,8 @@ services:
     pull_policy: ${IMAGE_PULL_POLICY:-never}
     container_name: aura-redis
     restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
     ports:
       - "${REDIS_BIND_ADDRESS:-127.0.0.1}:${REDIS_PORT:-6379}:6379"
     command: ["redis-server", "--appendonly", "yes"]
@@ -41,6 +46,7 @@ services:
     container_name: aura-arangodb
     restart: unless-stopped
     environment:
+      TZ: ${TZ:-Asia/Shanghai}
       ARANGO_ROOT_PASSWORD: ${ARANGO_ROOT_PASSWORD}
     ports:
       - "${ARANGO_BIND_ADDRESS:-127.0.0.1}:${ARANGO_PORT:-8529}:8529"
@@ -55,6 +61,7 @@ services:
     depends_on:
       - arangodb
     environment:
+      TZ: ${TZ:-Asia/Shanghai}
       ARANGO_ROOT_PASSWORD: ${ARANGO_ROOT_PASSWORD}
       ARANGO_DB: ${ARANGO_DB}
     entrypoint: ["sh", "-c"]
@@ -75,6 +82,7 @@ services:
       arango-init:
         condition: service_completed_successfully
     environment:
+      TZ: ${TZ:-Asia/Shanghai}
       ARANGO_URI: http://arangodb:8529
       ARANGO_DB: ${ARANGO_DB}
       ARANGO_USER: ${ARANGO_USER:-root}
@@ -104,7 +112,8 @@ services:
     container_name: aura-db-migrate
     restart: "no"
     environment:
-      ConnectionStrings__PgSql: Host=pgsql;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
+      TZ: ${TZ:-Asia/Shanghai}
+      ConnectionStrings__PgSql: Host=pgsql;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Timezone=${PG_TIMEZONE:-Asia/Shanghai}
     entrypoint: ["dotnet", "/app/migrator/Aura.DbMigrator.dll"]
     command: ["migrate"]
     depends_on:
@@ -132,10 +141,11 @@ services:
       db-migrate:
         condition: service_completed_successfully
     environment:
+      TZ: ${TZ:-Asia/Shanghai}
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://0.0.0.0:5000
       AllowedHosts: ${ALLOWEDHOSTS}
-      ConnectionStrings__PgSql: Host=pgsql;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
+      ConnectionStrings__PgSql: Host=pgsql;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Timezone=${PG_TIMEZONE:-Asia/Shanghai}
       ConnectionStrings__Redis: redis:6379
       Ai__BaseUrl: http://ai:8000
       Ai__ApiKey: ${AURA_API_KEY:-}

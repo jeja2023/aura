@@ -123,14 +123,14 @@ function detectLogBadges(row, logType) {
   const haystack = `${action} ${level} ${source} ${detail}`.toLowerCase();
 
   if (logType === "system") {
-    if (/(error|fatal|critical|exception|失败|错误|异常|告警)/i.test(level) || /(error|fatal|critical|exception|失败|错误|异常|告警)/i.test(detail)) {
+    if (/(error|fatal|critical|exception|失败|错误|告警)/i.test(level) || /(error|fatal|critical|exception|失败|错误|告警)/i.test(detail)) {
       badges.push(buildLogBadge("异常", "error"));
     } else if (/(warn|warning|超时|重试|补偿|回退)/i.test(level) || /(warn|warning|超时|重试|补偿|回退)/i.test(detail)) {
       badges.push(buildLogBadge("关注", "warn"));
     }
-  } else if (/(失败|错误|异常|超时|拒绝|回退|补偿失败)/i.test(haystack)) {
+  } else if (/(失败|错误|超时|拒绝|补偿失败)/i.test(haystack)) {
     badges.push(buildLogBadge("失败", "error"));
-  } else if (/(重试|补偿|排队|待确认)/i.test(haystack)) {
+  } else if (/(重试|补偿|回退|排队|待确认)/i.test(haystack)) {
     badges.push(buildLogBadge("处理中", "warn"));
   }
 

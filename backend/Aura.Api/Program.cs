@@ -227,6 +227,7 @@ internal sealed class PureConsoleFormatter : ConsoleFormatter
             }
         }, null);
 
+        var timestampPrefix = $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss zzz} ";
         var correlationPrefix = string.IsNullOrEmpty(correlationId) ? "" : $"[{correlationId}] ";
         var levelPrefix = logEntry.LogLevel switch
         {
@@ -238,7 +239,7 @@ internal sealed class PureConsoleFormatter : ConsoleFormatter
             _ => ""
         };
 
-        textWriter.WriteLine($"{correlationPrefix}{levelPrefix}{message}");
+        textWriter.WriteLine($"{timestampPrefix}{correlationPrefix}{levelPrefix}{message}");
         if (logEntry.Exception is not null)
         {
             textWriter.WriteLine(logEntry.Exception.ToString());
