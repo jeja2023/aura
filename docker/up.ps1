@@ -9,7 +9,7 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $envFile = Join-Path $root ".env.docker"
 $composeFile = Join-Path $root "docker\docker-compose.yml"
-$templateFile = Join-Path $root "docker\.env.docker.example"
+$templateFile = Join-Path $root ".env.docker.example"
 
 if (-not (Test-Path $envFile)) {
     throw "Missing $envFile. Copy $templateFile to .env.docker, then fill image tags and secrets."

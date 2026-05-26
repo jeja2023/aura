@@ -11,7 +11,7 @@ $databaseDir = Join-Path $root "database"
 $dockerDir = Join-Path $root "docker"
 
 if (-not (Test-Path $envFile)) {
-    throw "Missing $envFile. Copy docker\.env.docker.example to .env.docker first."
+    throw "Missing $envFile. Copy .env.docker.example to .env.docker first."
 }
 
 function Get-EnvValue([string]$Name, [string]$DefaultValue = "") {

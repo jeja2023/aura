@@ -126,7 +126,7 @@ python start_services.py
 ### Docker 化建议
 
 - 统一入口：`docker/docker-compose.yml`
-- 环境模板：复制 `docker/.env.docker.example` 为仓库根目录 `.env.docker`，填写镜像标签、密码与密钥。
+- 环境模板：复制根目录 `.env.docker.example` 为 `.env.docker`，填写镜像标签、密码与密钥。
 - 启动：`powershell -ExecutionPolicy Bypass -File .\docker\up.ps1` 或 `sh ./docker/up.sh`
 - 检查：`powershell -ExecutionPolicy Bypass -File .\docker\check.ps1` 或 `sh ./docker/check.sh`
 - 建议：生产环境优先使用 CI/CD Secret 或容器编排 Secret（如 Kubernetes Secret），避免明文进入镜像和仓库。

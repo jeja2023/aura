@@ -5,7 +5,7 @@ Docker 目录已收敛为一套主入口：一份 Compose、一份 Docker 环境
 ## 文件结构
 
 - `docker-compose.yml`：统一编排，启动 API、AI、PostgreSQL、Redis、ArangoDB，以及一次性 `arango-init` / `db-migrate`。
-- `.env.docker.example`：Docker 编排唯一环境模板，复制到仓库根目录为 `.env.docker` 后填写。
+- `../.env.docker.example`：Docker 编排唯一环境模板，复制到仓库根目录为 `.env.docker` 后填写。
 - `up.ps1` / `up.sh`：按 `.env.docker` 启动；默认不构建，首次联网部署可加 `-Build` / `--build`。
 - `down.ps1` / `down.sh`：停止容器，默认保留命名卷。
 - `check.ps1` / `check.sh`：检查 AI `/live`、AI `/ready`、API `/api/health`。
@@ -18,8 +18,8 @@ Docker 目录已收敛为一套主入口：一份 Compose、一份 Docker 环境
 ## 首次联网部署
 
 1. 准备环境文件：
-   - Windows：`Copy-Item docker\.env.docker.example .env.docker`
-   - Linux/macOS：`cp docker/.env.docker.example .env.docker`
+   - Windows：`Copy-Item .env.docker.example .env.docker`
+   - Linux/macOS：`cp .env.docker.example .env.docker`
 2. 编辑 `.env.docker`：
    - 首次联网部署时设置 `IMAGE_PULL_POLICY=missing`，允许 Docker 拉取缺失基础镜像。
    - 替换 `POSTGRES_PASSWORD`、`ARANGO_ROOT_PASSWORD`、`JWT__KEY`、`SECURITY__HMACSECRET`、`AURA_ADMIN_PASSWORD`。

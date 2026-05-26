@@ -6,7 +6,7 @@ set -eu
 ROOT_DIR="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
 ENV_FILE="$ROOT_DIR/.env.docker"
 COMPOSE_FILE="$ROOT_DIR/docker/docker-compose.yml"
-TEMPLATE_FILE="$ROOT_DIR/docker/.env.docker.example"
+TEMPLATE_FILE="$ROOT_DIR/.env.docker.example"
 
 if [ ! -f "$ENV_FILE" ]; then
   echo "Missing $ENV_FILE. Copy $TEMPLATE_FILE to .env.docker, then fill image tags and build base images."

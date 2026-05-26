@@ -8,7 +8,7 @@ ENV_FILE="$ROOT_DIR/.env.docker"
 COMPOSE_FILE="$ROOT_DIR/docker/docker-compose.yml"
 
 if [ ! -f "$ENV_FILE" ]; then
-  echo "Missing $ENV_FILE. Copy docker/.env.docker.example to .env.docker first."
+  echo "Missing $ENV_FILE. Copy .env.docker.example to .env.docker first."
   exit 1
 fi
 
