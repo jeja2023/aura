@@ -14,6 +14,10 @@
 - `docker/build-images.*` 改为读取 `docker/docker-compose.yml` 与根目录 `.env.docker`，并按 `.env.docker` 中实际 `API_IMAGE` / `AI_IMAGE` 识别构建产物后再打 `API_IMAGE_REPO:IMAGE_TAG` / `AI_IMAGE_REPO:IMAGE_TAG` 标签。
 - `docker/save-images.*`、`docker/load-images.*`、`docker/login-registry.*`、`docker/push-images.*` 输出与错误提示改为 ASCII，减少 Windows PowerShell 编码差异带来的解析或日志问题。
 - `.gitignore` Docker env 白名单同步收敛：保留 `docker/.env.docker.example` 与 `docker/.env.registry.example`，移除旧 `.env.full/.env.prod` 示例白名单。
+- 环境变量文件职责重新对齐：
+  - `.env` 与 `.env.example` 保持同一套“本机直跑/开发调试”配置键。
+  - `.env.docker` 与 `docker/.env.docker.example` 保持同一套“Docker Compose 部署”配置键。
+  - 两组配置允许数量不同，因为本机直跑使用双下划线应用配置键，Docker 部署额外包含镜像名、端口绑定、挂载路径与离线更新策略等编排参数。
 
 ### 临时联网部署与断网后离线更新
 
@@ -71,6 +75,8 @@
 ### 验证记录
 
 - `docker-compose --env-file docker/.env.docker.example -f docker/docker-compose.yml config --quiet` 通过。
+- `.env` / `.env.example` 键集合一致，`.env.docker` / `docker/.env.docker.example` 键集合一致。
+- `docker-compose --env-file .env.docker -f docker/docker-compose.yml config --quiet` 通过。
 - Docker PowerShell 脚本解析通过：`up.ps1`、`down.ps1`、`check.ps1`、`build-images.ps1`、`save-images.ps1`、`load-images.ps1`、`login-registry.ps1`、`push-images.ps1`、`offline-pack.ps1`。
 - `scripts/ops/aura-ops.ps1` 解析通过。
 - 已确认无 `Caddy`、`docker-compose.internet`、`-Internet/--internet`、旧 `full/lan/prod/ops-check` Docker 入口残留引用。
