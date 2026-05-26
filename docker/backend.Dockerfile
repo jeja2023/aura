@@ -1,6 +1,6 @@
-# 与仓库根目录 global.json 中 sdk.version 对齐（当前 10.0.201）；升级 SDK 时请同步修改此处与 docker/.env*.example
+# SDK 镜像与仓库根目录 global.json 中 sdk.version 对齐；ASP.NET 运行时镜像使用官方运行时标签。
 ARG DOTNET_SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:10.0.201
-ARG DOTNET_ASPNET_IMAGE=mcr.microsoft.com/dotnet/aspnet:10.0.201
+ARG DOTNET_ASPNET_IMAGE=mcr.microsoft.com/dotnet/aspnet:10.0
 
 FROM ${DOTNET_SDK_IMAGE} AS build
 WORKDIR /src

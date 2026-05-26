@@ -18,6 +18,9 @@
   - `.env` 与 `.env.example` 保持同一套“本机直跑/开发调试”配置键。
   - `.env.docker` 与 `.env.docker.example` 保持同一套“Docker Compose 部署”配置键。
   - 两组配置允许数量不同，因为本机直跑使用双下划线应用配置键，Docker 部署额外包含镜像名、端口绑定、挂载路径与离线更新策略等编排参数。
+- 修正 Docker 构建基础镜像默认值：
+  - `DOTNET_ASPNET_IMAGE` 由不存在的 `mcr.microsoft.com/dotnet/aspnet:10.0.201` 改为官方运行时标签 `mcr.microsoft.com/dotnet/aspnet:10.0`。
+  - `PYTHON_BASE_IMAGE` 保持为 `python:3.12-slim`，并与 `docker/ai.Dockerfile` 默认值一致。
 
 ### 临时联网部署与断网后离线更新
 
