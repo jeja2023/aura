@@ -106,13 +106,17 @@ public static class ServiceExtensions
             }
         }
 
+        var aiBaseUrls = configuration["Ai:BaseUrls"];
         var aiBaseUrl = configuration["Ai:BaseUrl"];
-        if (!string.IsNullOrWhiteSpace(aiBaseUrl))
+        if (!string.IsNullOrWhiteSpace(aiBaseUrls) || !string.IsNullOrWhiteSpace(aiBaseUrl))
         {
-            if (!Uri.TryCreate(aiBaseUrl, UriKind.Absolute, out var aiUri) ||
-                (aiUri.Scheme != Uri.UriSchemeHttp && aiUri.Scheme != Uri.UriSchemeHttps))
+            try
             {
-                throw new InvalidOperationException("生产环境 Ai:BaseUrl 必须是有效的 HTTP/HTTPS 绝对地址。");
+                _ = AiClient.ResolveBaseUrls(aiBaseUrls, aiBaseUrl);
+            }
+            catch (ArgumentException ex)
+            {
+                throw new InvalidOperationException("生产环境 Ai:BaseUrls/Ai:BaseUrl 必须是有效的 HTTP/HTTPS 绝对地址。", ex);
             }
         }
 
@@ -183,6 +187,8 @@ public static class ServiceExtensions
             new MonitoringRepository(sp.GetRequiredService<PgSqlConnectionFactory>(), sp.GetRequiredService<ILogger<MonitoringRepository>>()));
         services.AddSingleton<CampusResourceRepository>(sp =>
             new CampusResourceRepository(sp.GetRequiredService<PgSqlConnectionFactory>(), sp.GetRequiredService<ILogger<CampusResourceRepository>>()));
+        services.AddSingleton<SystemConfigRepository>(sp =>
+            new SystemConfigRepository(sp.GetRequiredService<PgSqlConnectionFactory>(), sp.GetRequiredService<ILogger<SystemConfigRepository>>()));
         services.AddSingleton<PgSqlStore>(sp =>
             new PgSqlStore(
                 sp.GetRequiredService<PgSqlConnectionFactory>(),
@@ -235,11 +241,22 @@ public static class ServiceExtensions
                 options.Retry.MaxRetryAttempts = aiMaxRetries;
                 options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(Math.Max(120, aiAttemptTimeout * 2 + 30));
             });
+        services.AddSingleton<AiRuntimeOptionsProvider>(sp =>
+        {
+            var baseUrls = AiClient.ResolveBaseUrls(configuration["Ai:BaseUrls"], configuration["Ai:BaseUrl"]);
+            return new AiRuntimeOptionsProvider(
+                sp.GetRequiredService<SystemConfigRepository>(),
+                baseUrls,
+                sp.GetRequiredService<ILogger<AiRuntimeOptionsProvider>>());
+        });
         services.AddSingleton<AiClient>(sp =>
         {
             var factory = sp.GetRequiredService<IHttpClientFactory>();
             var client = factory.CreateClient(AuraHttpClientNames.AiService);
-            return new AiClient(client, configuration["Ai:BaseUrl"] ?? "http://127.0.0.1:8000", sp.GetRequiredService<ILogger<AiClient>>());
+            return new AiClient(
+                client,
+                sp.GetRequiredService<AiRuntimeOptionsProvider>(),
+                sp.GetRequiredService<ILogger<AiClient>>());
         });
 
         services.AddSingleton<FeatureClusteringService>();

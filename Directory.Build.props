@@ -1,5 +1,12 @@
 <Project>
   <PropertyGroup>
+    <Version>0.1.26</Version>
+    <AssemblyVersion>0.1.26.0</AssemblyVersion>
+    <FileVersion>0.1.26.0</FileVersion>
+    <InformationalVersion>0.1.26</InformationalVersion>
+  </PropertyGroup>
+
+  <PropertyGroup>
     <AuraIntermediateRoot Condition="'$(AuraIntermediateRoot)' == '' and '$(AURA_INTERMEDIATE_ROOT)' != ''">$(AURA_INTERMEDIATE_ROOT)</AuraIntermediateRoot>
     <AuraIntermediateRoot Condition="'$(AuraIntermediateRoot)' == '' and '$(CI)' == 'true'">$(MSBuildThisFileDirectory).verify_build\$(MSBuildProjectName)\$(Configuration)\</AuraIntermediateRoot>
     <BaseIntermediateOutputPath Condition="'$(AuraIntermediateRoot)' != ''">$(AuraIntermediateRoot)obj\</BaseIntermediateOutputPath>

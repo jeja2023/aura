@@ -4,12 +4,15 @@
 
 ## 项目状态
 
-- 当前版本：`0.1.24`（细目见 **`CHANGELOG.md`**）
+- 当前版本：`0.1.26`（细目见 **`CHANGELOG.md`**）
 - 阶段状态：第一至第五阶段均已验收通过
 - 交付结论：计划项已全部完成并在 `docs/archive/开发计划.md` 归档勾选
 - 工程状态：后端可构建（推荐打开根目录 **`Aura.sln`** 或 `dotnet build backend/Aura.Api/Aura.Api.csproj`）、前端页面可访问、核心链路可联调
 - 运维状态：已提供回归脚本、联调压测脚本、部署与上线检查文档
-- 变更记录：见根目录 **`CHANGELOG.md`**（`0.1.2` 起补充后端模块化、DI 与编码修复等说明；`0.1.17` 起补充海康 alertStream、媒体规划 API、设备/联调前端与海康表单布局等；`0.1.19` 为数据库迁移工具化、统一错误响应、安全扫描与回归测试补齐等综合迭代；`0.1.21` 补充 AI 运维指标入统计/首页、抓拍与日志可读性优化；`0.1.22` 补充 AI 启动容错、生命周期停机治理、健康脱敏与路由限流加固；`0.1.23` 补充 AI `/live` 与 `/ready` 探针拆分、后端依赖升级与 SignalR Redis backplane 选项、抓拍与轨迹索引优化；`0.1.24` 补充海康告警流相机缓存、ISAPI Handler 池化、列表端点 LIMIT 硬上限、`map_camera(device_id)` 索引、AI 检索失败原因维度与限流 FastAPI Depends 抽象）
+- 变更记录：见根目录 **`CHANGELOG.md`**。近期重点：
+  - `0.1.24`：海康告警流相机缓存、ISAPI Handler 池化、列表端点 LIMIT 硬上限、`map_camera(device_id)` 索引、AI 检索失败原因维度与限流 FastAPI Depends 抽象。
+  - `0.1.25`：Docker 部署入口收敛、临时联网部署/断网离线更新流程、运维脚本归档与上线手册合并。
+  - `0.1.26`：局域网无 nginx 多 AI worker 直连，前端“运行配置”热更新 AI 节点，readiness 集群节点诊断，以及版本/镜像标签统一升级。
 
 ## 目录结构
 
@@ -95,7 +98,7 @@ dotnet run
   - `export AURA_ADMIN_USER=admin`
   - `export AURA_ADMIN_PASSWORD='你的密码'`
 - 模板文件：仓库已提供 **`.env.example`**，与根目录 **`.env` 结构完全一致**（同一批注释与键、同一顺序），仅将口令与密钥等替换为 **`REPLACE_*`** 占位符；复制为 `.env` 后填写真实值。`.env` 已在 `.gitignore` 中忽略，勿提交真实密码。维护仓库时若调整 `.env`，请同步更新 **`.env.example`**。Docker 编排专用变量仍以 **`docker/.env*.example`** 为准。
-- AI 新增可选键（见 `.env.example` 注释）：`AURA_AI_INFER_BATCH_SIZE`、`AURA_AI_INFER_MAX_WAIT_SECONDS`、`AURA_AI_INFER_QUEUE_MAX_SIZE`、`AURA_AI_INFER_ENQUEUE_TIMEOUT_SECONDS`（推理批处理与背压）；`AURA_AI_HEALTH_VERBOSE`（健康接口是否输出详细内部错误，生产建议 `false`）；`AURA_AI_EXTRACT_FILE_ROOTS`（`;` 分隔允许目录，限制 `/ai/extract-file` 可访问路径）。
+- AI 新增可选键（见 `.env.example` 注释）：`Ai__BaseUrls`（启动兜底，运行后建议在前端“运行配置”页面维护）、`AURA_AI_INFER_BATCH_SIZE`、`AURA_AI_INFER_MAX_WAIT_SECONDS`、`AURA_AI_INFER_QUEUE_MAX_SIZE`、`AURA_AI_INFER_ENQUEUE_TIMEOUT_SECONDS`（推理批处理与背压）；`AURA_AI_HEALTH_VERBOSE`（健康接口是否输出详细内部错误，生产建议 `false`）；`AURA_AI_EXTRACT_FILE_ROOTS`（`;` 分隔允许目录，限制 `/ai/extract-file` 可访问路径）。
 
 ### 本机一键启动与就绪检查
 
@@ -131,6 +134,15 @@ python start_services.py
 - 检查：`powershell -ExecutionPolicy Bypass -File .\docker\check.ps1` 或 `sh ./docker/check.sh`
 - 建议：生产环境优先使用 CI/CD Secret 或容器编排 Secret（如 Kubernetes Secret），避免明文进入镜像和仓库。
 
+### 多 AI 节点（无 nginx）
+
+- 生产环境推荐用前端 **运行配置** 页面维护多个 AI worker 地址：超级管理员登录后进入 `运行配置 -> AI 推理节点`，每行填写一个地址并保存，配置会写入 PostgreSQL 的 `sys_config`，下一次 AI 请求立即生效，无需重启 API。
+- `.env` / `.env.docker` 中的 **`Ai__BaseUrls` / `AI_BASE_URLS`** 仅作为启动兜底，建议保持为空；当数据库运行时配置为空或不可用时，后端才回退到配置文件中的默认节点。
+- 局域网双 GPU worker 示例：在前端填写 `http://127.0.0.1:9001` 与 `http://127.0.0.1:9002`。API 会按节点轮询请求，并在连接异常、`429`、`5xx` 时切换到下一个节点。
+- `GET /api/ops/readiness` 与“运行配置”页面会返回 AI 节点总数、可达节点数、模型就绪节点数和节点列表，便于定位某个 worker 是否掉线或模型未加载。
+- 多 worker 部署必须共用同一个 ArangoDB；生产建议保持 `AURA_AI_REQUIRE_ARANGO=true`，避免节点退回各自内存索引后检索结果不一致。
+- 如使用 `/ai/extract-file`，API 保存图片的路径必须在所有 AI worker 容器内同路径可读；否则请改用内联 Base64 或为 API 与 AI worker 统一挂载共享卷。
+
 ## 关键页面入口
 
 - 首页看板：`frontend/index/index.html`
@@ -140,6 +152,7 @@ python start_services.py
 - 统计驾驶舱：`frontend/stats/stats.html`
 - 报表导出：`frontend/export/export.html`
 - 以图搜轨：`frontend/search/search.html`
+- 运行配置：`frontend/ops-settings/ops-settings.html`
 
 ## 关键接口（示例）
 
@@ -150,6 +163,7 @@ python start_services.py
 - AI 检索审计日志：`GET /ai/search-audit-logs?limit=100`（结构化 JSON，`data.items` 每条包含 `time/request_id/success/status/reason/hit_count/latency_ms/engine/strategy/filters_applied/warnings`）
 - Prometheus 抓取（可选）：`GET /metrics`，由配置 **`Ops:Metrics:ExposePrometheus`** 控制（默认 `true`；集成测试所用 **`Testing`** 环境为 `false`）。生产环境建议仅允许监控网络或反向代理访问该路径；按路径在公网 Ingress 上拒绝的示例见 **`deploy/k8s/ingress-nginx-deny-public-metrics.example.yaml`**。
 - OpenTelemetry 链路追踪（可选）：配置 **`Ops:Telemetry:EnableTracing`** 为 **`true`** 且设置 **`Ops:Telemetry:OtlpEndpoint`**（或环境变量 **`OTEL_EXPORTER_OTLP_ENDPOINT`**）；默认关闭。协议 **`Ops:Telemetry:OtlpProtocol`** 支持 **`Grpc`**（默认）与 **`HttpProtobuf`**。
+- AI 推理节点运行时配置：`GET /api/ops/ai-settings`、`PUT /api/ops/ai-settings`（超级管理员），用于前端热更新多 worker 地址。
 - AI 服务访问控制（可选）：AI 进程读取 **`AURA_API_KEY`** 时，除根路径健康检查与 OpenAPI 文档外须在请求头携带 **`X-Aura-Ai-Key`**；.NET 侧配置 **`Ai:ApiKey`** 后由命名 **`HttpClient` 自动附加同名请求头。
 - AI 重负载路由限流：`/ai/extract`、`/ai/extract-file`、`/ai/upsert`、`/ai/search`、`/ai/cluster` 统一接入检索保护限流；超过阈值时返回 `HTTP 429` 与 `code=42901`。
 - AI 文件提取路径约束：`/ai/extract-file` 在配置 `AURA_AI_EXTRACT_FILE_ROOTS` 后仅允许访问白名单目录内文件；越界返回 `HTTP 403` 与 `code=40301`。

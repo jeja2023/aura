@@ -66,4 +66,5 @@ internal sealed record JudgeAbnormalReq(string? Date, int GroupThreshold, int St
 internal sealed record JudgeNightReq(string? Date, int CutoffHour);
 internal sealed record JudgeRunResult(DateOnly JudgeDate, string JudgeType, int SourceCount, int ResultCount);
 internal sealed record OpsAlertNotifyTestReq(string? AlertType, string? Detail);
+internal sealed record OpsAiSettingsUpdateReq(string? BaseUrls);
 internal sealed record PageViewAuditReq(string? PagePath, string? PageTitle, string? EventType, long? StayMs, string? SessionId);

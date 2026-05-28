@@ -1,0 +1,172 @@
+/* 文件：运行配置页样式（ops-settings.css） | File: Runtime Settings Styles */
+.ops-settings-page {
+  margin: 0;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.ops-settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ops-settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ops-settings-head h2,
+.ops-settings-panel h3 {
+  margin: 0;
+  color: var(--text);
+}
+
+.ops-settings-head h2 {
+  font-size: 18px;
+}
+
+.ops-settings-panel h3 {
+  font-size: 15px;
+}
+
+.ops-settings-actions,
+.ops-settings-inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.ops-settings-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.ops-settings-field-wide {
+  width: 100%;
+}
+
+.ops-settings-textarea {
+  min-height: 118px;
+  resize: vertical;
+  font-family: ui-monospace, "Cascadia Code", "Consolas", "Microsoft YaHei UI", monospace;
+}
+
+.ops-settings-side,
+.ops-settings-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--card) 76%, var(--bg) 24%);
+  padding: 12px;
+}
+
+.ops-settings-side {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+}
+
+.ops-settings-kv {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ops-settings-kv span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.ops-settings-kv strong {
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.ops-settings-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.ops-node-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+
+.ops-node-list li,
+.ops-health-item {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  padding: 9px 10px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.ops-health-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.ops-health-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.ops-health-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.ops-health-status.is-ok {
+  color: var(--primary);
+  border-color: rgba(var(--primary-rgb), 0.42);
+  background: rgba(var(--primary-rgb), 0.08);
+}
+
+.ops-health-status.is-error {
+  color: var(--danger);
+  border-color: rgba(var(--danger-rgb), 0.28);
+  background: rgba(var(--danger-rgb), 0.08);
+}
+
+@media (max-width: 920px) {
+  .ops-settings-head,
+  .ops-settings-grid,
+  .ops-settings-columns {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .ops-settings-head {
+    align-items: stretch;
+  }
+}

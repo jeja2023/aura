@@ -6,6 +6,7 @@ internal sealed record DbCapture(long CaptureId, long DeviceId, int ChannelNo, D
 internal sealed record DbAlert(long AlertId, string AlertType, string Detail, DateTime CreatedAt);
 internal sealed record DbOperation(long OperationId, string OperatorName, string Action, string Detail, DateTime CreatedAt);
 internal sealed record DbSystemLog(long SystemLogId, string Level, string Source, string Message, DateTime CreatedAt);
+internal sealed record DbSystemConfig(string ConfigKey, string ConfigValue, string? UpdatedBy, DateTimeOffset UpdatedAt);
 internal sealed record DbRole(long RoleId, string RoleName, string PermissionJson);
 internal sealed record DbUserListItem(long UserId, string UserName, long Status, string DisplayName, string? RoleName, long RoleId, DateTime CreatedAt, DateTime? LastLoginAt, bool MustChangePassword);
 internal sealed record DbCampusNode(long NodeId, long? ParentId, string LevelType, string NodeName);

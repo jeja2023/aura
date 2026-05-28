@@ -18,11 +18,13 @@ internal sealed class CaptureRepository
 
     private NpgsqlConnection CreateConnection() => _connectionFactory.CreateConnection();
 
+    private static DateTime ToLocalTimestamp(DateTimeOffset value) => value.LocalDateTime;
+
     public async Task<long?> InsertCaptureAsync(long deviceId, int channelNo, DateTimeOffset captureTime, string metadataJson, string? imagePath)
     {
         try
         {
-            var captureTimeUtc = captureTime.ToUniversalTime();
+            var captureTimeLocal = ToLocalTimestamp(captureTime);
             await using var conn = CreateConnection();
             return await conn.ExecuteScalarAsync<long>(
                 """
@@ -30,7 +32,7 @@ internal sealed class CaptureRepository
                 VALUES(@DeviceId, @ChannelNo, @CaptureTime, @ImagePath, CAST(@MetadataJson AS jsonb), NOW())
                 RETURNING capture_id
                 """,
-                new { DeviceId = deviceId, ChannelNo = channelNo, CaptureTime = captureTimeUtc, ImagePath = imagePath, MetadataJson = metadataJson });
+                new { DeviceId = deviceId, ChannelNo = channelNo, CaptureTime = captureTimeLocal, ImagePath = imagePath, MetadataJson = metadataJson });
         }
         catch (Exception ex)
         {
@@ -123,8 +125,8 @@ internal sealed class CaptureRepository
     {
         try
         {
-            var startUtc = start.ToUniversalTime();
-            var endUtc = end.ToUniversalTime();
+            var startLocal = ToLocalTimestamp(start);
+            var endLocal = ToLocalTimestamp(end);
             await using var conn = CreateConnection();
             var rows = await conn.QueryAsync<DbCapture>(
                 """
@@ -136,7 +138,7 @@ internal sealed class CaptureRepository
                 ORDER BY capture_time DESC, capture_id DESC
                 LIMIT @MaxRows
                 """,
-                new { Start = startUtc, End = endUtc, MaxRows = maxRows });
+                new { Start = startLocal, End = endLocal, MaxRows = maxRows });
             return rows.ToList();
         }
         catch (Exception ex)
@@ -153,14 +155,14 @@ internal sealed class CaptureRepository
 
         try
         {
-            var fromUtc = from?.ToUniversalTime();
-            var toUtc = to?.ToUniversalTime();
+            var fromLocal = from.HasValue ? ToLocalTimestamp(from.Value) : (DateTime?)null;
+            var toLocal = to.HasValue ? ToLocalTimestamp(to.Value) : (DateTime?)null;
             await using var conn = CreateConnection();
             var where = " WHERE 1=1 ";
             if (from.HasValue) where += " AND capture_time >= @From ";
             if (to.HasValue) where += " AND capture_time <= @To ";
 
-            var total = await conn.ExecuteScalarAsync<int>($"SELECT COUNT(1) FROM capture_record {where}", new { From = fromUtc, To = toUtc });
+            var total = await conn.ExecuteScalarAsync<int>($"SELECT COUNT(1) FROM capture_record {where}", new { From = fromLocal, To = toLocal });
 
             var offset = (page - 1) * pageSize;
             var rows = await conn.QueryAsync<DbCapture>(
@@ -173,7 +175,7 @@ internal sealed class CaptureRepository
                 ORDER BY capture_time DESC, capture_id DESC
                 LIMIT @PageSize OFFSET @Offset
                 """,
-                new { From = fromUtc, To = toUtc, Offset = offset, PageSize = pageSize });
+                new { From = fromLocal, To = toLocal, Offset = offset, PageSize = pageSize });
 
             return (rows.ToList(), total);
         }
@@ -236,7 +238,7 @@ internal sealed class CaptureRepository
     {
         try
         {
-            var eventTimeUtc = eventTime.ToUniversalTime();
+            var eventTimeLocal = ToLocalTimestamp(eventTime);
             await using var conn = CreateConnection();
             return await conn.ExecuteScalarAsync<long>(
                 """
@@ -244,7 +246,7 @@ internal sealed class CaptureRepository
                 VALUES(@Vid, @CameraId, @RoiId, @EventTime, NOW())
                 RETURNING event_id
                 """,
-                new { Vid = vid, CameraId = cameraId, RoiId = roiId, EventTime = eventTimeUtc });
+                new { Vid = vid, CameraId = cameraId, RoiId = roiId, EventTime = eventTimeLocal });
         }
         catch (Exception ex)
         {
@@ -285,8 +287,8 @@ internal sealed class CaptureRepository
     {
         try
         {
-            var startUtc = start.ToUniversalTime();
-            var endUtc = end.ToUniversalTime();
+            var startLocal = ToLocalTimestamp(start);
+            var endLocal = ToLocalTimestamp(end);
             await using var conn = CreateConnection();
             var rows = await conn.QueryAsync<DbTrackEvent>(
                 """
@@ -297,7 +299,7 @@ internal sealed class CaptureRepository
                 ORDER BY event_id DESC
                 LIMIT @MaxRows
                 """,
-                new { Start = startUtc, End = endUtc, MaxRows = maxRows });
+                new { Start = startLocal, End = endLocal, MaxRows = maxRows });
             return rows.ToList();
         }
         catch (Exception ex)

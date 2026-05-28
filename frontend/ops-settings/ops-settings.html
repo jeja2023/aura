@@ -1,0 +1,79 @@
+<!-- 文件：运行配置页（ops-settings.html） | File: Runtime Settings Page -->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>运行配置</title>
+  <script src="../common/theme-pref.js"></script>
+  <link rel="stylesheet" href="../common/theme.css" />
+  <link rel="stylesheet" href="../common/shell.css" />
+  <link rel="stylesheet" href="../common/forms.css" />
+  <link rel="stylesheet" href="./ops-settings.css" />
+</head>
+<body class="app-body" data-shell-title="运行配置">
+  <aside class="app-sidebar" id="auraSidebar" aria-label="主导航"></aside>
+  <div class="app-frame">
+    <header class="app-topbar">
+      <button type="button" class="app-sidebar-toggle" id="auraSidebarToggle" aria-label="展开或收起导航">菜单</button>
+      <h1 class="app-page-title"></h1>
+      <div class="app-topbar-actions"></div>
+    </header>
+    <main class="app-content">
+      <div class="page ops-settings-page">
+        <section class="ops-settings-section" aria-labelledby="aiWorkerTitle">
+          <div class="ops-settings-head">
+            <h2 id="aiWorkerTitle">AI 推理节点</h2>
+            <div class="ops-settings-actions">
+              <button id="refreshSettings" class="btn-secondary" type="button">刷新</button>
+              <button id="saveSettings" class="btn-primary" type="button">保存配置</button>
+            </div>
+          </div>
+
+          <div class="ops-settings-grid">
+            <label class="ops-settings-field ops-settings-field-wide">
+              <span>GPU worker 地址</span>
+              <textarea id="aiBaseUrls" class="aura-input ops-settings-textarea" rows="4" spellcheck="false" placeholder="http://192.168.10.20:9001&#10;http://192.168.10.20:9002"></textarea>
+            </label>
+            <div class="ops-settings-side">
+              <div class="ops-settings-kv">
+                <span>运行时覆盖</span>
+                <strong id="runtimeOverrideState">-</strong>
+              </div>
+              <div class="ops-settings-kv">
+                <span>最后更新</span>
+                <strong id="updatedMeta">-</strong>
+              </div>
+            </div>
+          </div>
+
+          <div class="ops-settings-inline-actions">
+            <button id="useFallbackSettings" class="btn-secondary" type="button">恢复启动默认</button>
+            <button id="checkReadiness" class="btn-secondary" type="button">检查节点状态</button>
+          </div>
+
+          <div class="ops-settings-columns">
+            <section class="ops-settings-panel" aria-labelledby="effectiveNodesTitle">
+              <h3 id="effectiveNodesTitle">当前生效节点</h3>
+              <ul id="effectiveNodes" class="ops-node-list"></ul>
+            </section>
+            <section class="ops-settings-panel" aria-labelledby="fallbackNodesTitle">
+              <h3 id="fallbackNodesTitle">启动默认节点</h3>
+              <ul id="fallbackNodes" class="ops-node-list"></ul>
+            </section>
+          </div>
+
+          <section class="ops-settings-panel" aria-labelledby="readinessNodesTitle">
+            <h3 id="readinessNodesTitle">节点健康</h3>
+            <div id="readinessNodes" class="ops-health-list" role="status" aria-live="polite"></div>
+          </section>
+
+          <pre id="result" class="aura-status aura-display-box" role="status" hidden aria-live="polite"></pre>
+        </section>
+      </div>
+    </main>
+  </div>
+  <script defer src="../common/shell.js"></script>
+  <script defer src="./ops-settings.js"></script>
+</body>
+</html>

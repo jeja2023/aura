@@ -23,6 +23,8 @@ internal sealed class MonitoringRepository
 
     private NpgsqlConnection CreateConnection() => _connectionFactory.CreateConnection();
 
+    private static DateTime ToLocalTimestamp(DateTimeOffset value) => value.LocalDateTime;
+
     public async Task<long?> InsertAlertAsync(string alertType, string detail)
     {
         try
@@ -45,7 +47,7 @@ internal sealed class MonitoringRepository
 
     public async Task<long?> InsertAlertWithTimeAsync(string alertType, string detail, DateTimeOffset createdAt)
     {
-        var createdAtUtc = createdAt.ToUniversalTime();
+        var createdAtLocal = ToLocalTimestamp(createdAt);
         return await PgSqlRepositoryHelpers.ExecuteAsync<long?>(
             _connectionFactory,
             _logger,
@@ -56,7 +58,7 @@ internal sealed class MonitoringRepository
                 VALUES(@AlertType, to_jsonb(@Detail::text), @CreatedAt)
                 RETURNING alert_id
                 """,
-                new { AlertType = alertType, Detail = detail, CreatedAt = createdAtUtc }),
+                new { AlertType = alertType, Detail = detail, CreatedAt = createdAtLocal }),
             fallback: null,
             logContext: new { alertType, createdAt });
     }
@@ -105,8 +107,8 @@ internal sealed class MonitoringRepository
 
     public async Task<List<DbAlert>> GetAlertsInRangeAsync(DateTimeOffset start, DateTimeOffset end, int maxRows = 200000)
     {
-        var startUtc = start.ToUniversalTime();
-        var endUtc = end.ToUniversalTime();
+        var startLocal = ToLocalTimestamp(start);
+        var endLocal = ToLocalTimestamp(end);
         return await PgSqlRepositoryHelpers.ExecuteAsync(
             _connectionFactory,
             _logger,
@@ -129,7 +131,7 @@ internal sealed class MonitoringRepository
                     ORDER BY created_at DESC, alert_id DESC
                     LIMIT @MaxRows
                     """,
-                    new { Start = startUtc, End = endUtc, MaxRows = maxRows });
+                    new { Start = startLocal, End = endLocal, MaxRows = maxRows });
                 return rows.ToList();
             },
             fallback: new List<DbAlert>(),
@@ -230,15 +232,15 @@ internal sealed class MonitoringRepository
     {
         try
         {
-            var firstSeenUtc = firstSeen.ToUniversalTime();
-            var lastSeenUtc = lastSeen.ToUniversalTime();
+            var firstSeenLocal = ToLocalTimestamp(firstSeen);
+            var lastSeenLocal = ToLocalTimestamp(lastSeen);
             await using var conn = CreateConnection();
             await conn.ExecuteAsync(
                 """
                 INSERT INTO virtual_person(v_id, first_seen, last_seen, device_id, capture_count, created_at)
                 VALUES(@Vid, @FirstSeen, @LastSeen, @DeviceId, @CaptureCount, NOW())
                 """,
-                new { Vid = vid, FirstSeen = firstSeenUtc, LastSeen = lastSeenUtc, DeviceId = deviceId, CaptureCount = captureCount });
+                new { Vid = vid, FirstSeen = firstSeenLocal, LastSeen = lastSeenLocal, DeviceId = deviceId, CaptureCount = captureCount });
         }
         catch (Exception ex)
         {

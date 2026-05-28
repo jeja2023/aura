@@ -1,4 +1,5 @@
 /* 文件：数据库迁移工具入口（Program.cs） | File: Database migrator entrypoint */
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -11,6 +12,7 @@ internal static class MigrationCli
 {
     private const string BaselineVersion = "000_baseline_schema";
     private const string BaselineScriptName = "schema.pgsql.sql";
+    private const long MigrationLockKey = 0x417572614D494752; // "AuraMIGR"
 
     public static async Task<int> RunAsync(string[] args)
     {
@@ -38,11 +40,19 @@ internal static class MigrationCli
             await using var connection = new NpgsqlConnection(connectionString);
             await connection.OpenAsync();
 
+            await ConfigureSessionAsync(connection, options.CommandTimeoutSeconds);
+
             return options.Command switch
             {
-                MigrationCommand.Status => await PrintStatusAsync(connection, migrationScripts),
-                MigrationCommand.Migrate => await ApplyPendingMigrationsAsync(connection, migrationScripts, options.Verbose),
-                MigrationCommand.Bootstrap => await BootstrapAsync(connection, schemaFile, migrationScripts, options.Verbose),
+                MigrationCommand.Status => await PrintStatusAsync(connection, migrationScripts, options.FailOnPending, options.FailOnDrift),
+                MigrationCommand.Migrate => await WithMigrationLockAsync(
+                    connection,
+                    options.LockTimeoutSeconds,
+                    () => ApplyPendingMigrationsAsync(connection, migrationScripts, options.Verbose)),
+                MigrationCommand.Bootstrap => await WithMigrationLockAsync(
+                    connection,
+                    options.LockTimeoutSeconds,
+                    () => BootstrapAsync(connection, schemaFile, migrationScripts, options.Verbose)),
                 _ => 2
             };
         }
@@ -76,6 +86,10 @@ internal static class MigrationCli
         Console.WriteLine("  --connection <value>      PostgreSQL connection string. Falls back to ConnectionStrings__PgSql.");
         Console.WriteLine("  --migrations-dir <path>   Migration directory. Default: database/migrations");
         Console.WriteLine("  --schema-file <path>      Baseline schema file. Default: database/schema.pgsql.sql");
+        Console.WriteLine("  --fail-on-pending         Status exits with code 1 when pending migrations exist.");
+        Console.WriteLine("  --fail-on-drift           Status exits with code 1 when database has unknown applied migrations.");
+        Console.WriteLine("  --command-timeout <sec>   PostgreSQL statement timeout in seconds. Default: 300.");
+        Console.WriteLine("  --lock-timeout <sec>      Advisory lock wait timeout for migrate/bootstrap. Default: 60.");
         Console.WriteLine("  --verbose                 Print detailed execution output.");
         Console.WriteLine("  -h, --help                Show help.");
     }
@@ -122,7 +136,7 @@ internal static class MigrationCli
     private static List<MigrationScript> LoadMigrationScripts(string migrationsDirectory)
     {
         var regex = new Regex(@"^(?<version>\d+)_.*\.sql$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-        return Directory
+        var scripts = Directory
             .EnumerateFiles(migrationsDirectory, "*.sql", SearchOption.TopDirectoryOnly)
             .Select(path =>
             {
@@ -144,6 +158,17 @@ internal static class MigrationCli
             .OrderBy(x => x.Version, StringComparer.Ordinal)
             .ThenBy(x => x.ScriptName, StringComparer.OrdinalIgnoreCase)
             .ToList();
+
+        var duplicate = scripts
+            .GroupBy(x => x.Version, StringComparer.Ordinal)
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicate is not null)
+        {
+            var names = string.Join(", ", duplicate.Select(x => x.ScriptName));
+            throw new ArgumentException($"Duplicate migration version {duplicate.Key}: {names}.");
+        }
+
+        return scripts;
     }
 
     private static string ComputeChecksum(string content)
@@ -152,7 +177,11 @@ internal static class MigrationCli
         return Convert.ToHexString(bytes);
     }
 
-    private static async Task<int> PrintStatusAsync(NpgsqlConnection connection, IReadOnlyList<MigrationScript> scripts)
+    private static async Task<int> PrintStatusAsync(
+        NpgsqlConnection connection,
+        IReadOnlyList<MigrationScript> scripts,
+        bool failOnPending,
+        bool failOnDrift)
     {
         var tableExists = await HistoryTableExistsAsync(connection);
         var applied = tableExists
@@ -160,6 +189,7 @@ internal static class MigrationCli
             : new Dictionary<string, AppliedMigration>(StringComparer.Ordinal);
 
         ValidateAppliedChecksums(applied, scripts);
+        var unknown = FindUnknownAppliedMigrations(applied, scripts);
 
         Console.WriteLine(tableExists
             ? $"schema_migrations exists with {applied.Count} applied record(s)."
@@ -180,8 +210,23 @@ internal static class MigrationCli
         }
 
         var pendingCount = scripts.Count(script => !applied.ContainsKey(script.Version));
+        if (unknown.Count > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine("Unknown applied migrations:");
+            foreach (var row in unknown)
+            {
+                Console.WriteLine($"  [unknown] {row.Version} {row.ScriptName} ({row.ExecutionKind}, {row.AppliedAt:yyyy-MM-dd HH:mm:ss zzz})");
+            }
+        }
+
         Console.WriteLine();
-        Console.WriteLine($"Summary: applied {scripts.Count - pendingCount}, pending {pendingCount}.");
+        Console.WriteLine($"Summary: applied {scripts.Count - pendingCount}, pending {pendingCount}, unknown {unknown.Count}.");
+        if ((failOnPending && pendingCount > 0) || (failOnDrift && unknown.Count > 0))
+        {
+            return 1;
+        }
+
         return 0;
     }
 
@@ -309,6 +354,75 @@ internal static class MigrationCli
         }
     }
 
+    private static List<AppliedMigration> FindUnknownAppliedMigrations(
+        IReadOnlyDictionary<string, AppliedMigration> applied,
+        IReadOnlyList<MigrationScript> scripts)
+    {
+        var known = scripts.Select(x => x.Version).ToHashSet(StringComparer.Ordinal);
+        known.Add(BaselineVersion);
+        return applied.Values
+            .Where(row => !known.Contains(row.Version))
+            .OrderBy(row => row.Version, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static async Task ConfigureSessionAsync(NpgsqlConnection connection, int commandTimeoutSeconds)
+    {
+        var timeoutMilliseconds = Math.Max(1, commandTimeoutSeconds) * 1000;
+        await using var command = new NpgsqlCommand("SELECT set_config('statement_timeout', @statement_timeout, false)", connection);
+        command.Parameters.AddWithValue("statement_timeout", timeoutMilliseconds.ToString());
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task<int> WithMigrationLockAsync(
+        NpgsqlConnection connection,
+        int lockTimeoutSeconds,
+        Func<Task<int>> action)
+    {
+        var lockAcquired = await TryAcquireMigrationLockAsync(connection, lockTimeoutSeconds);
+        if (!lockAcquired)
+        {
+            Console.Error.WriteLine("Could not acquire database migration lock. Another migration may be running.");
+            return 3;
+        }
+
+        try
+        {
+            return await action();
+        }
+        finally
+        {
+            await ReleaseMigrationLockAsync(connection);
+        }
+    }
+
+    private static async Task<bool> TryAcquireMigrationLockAsync(NpgsqlConnection connection, int lockTimeoutSeconds)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var timeout = TimeSpan.FromSeconds(Math.Max(1, lockTimeoutSeconds));
+        while (stopwatch.Elapsed < timeout)
+        {
+            await using var command = new NpgsqlCommand("SELECT pg_try_advisory_lock(@lock_key)", connection);
+            command.Parameters.AddWithValue("lock_key", MigrationLockKey);
+            var acquired = (bool)(await command.ExecuteScalarAsync() ?? false);
+            if (acquired)
+            {
+                return true;
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(1));
+        }
+
+        return false;
+    }
+
+    private static async Task ReleaseMigrationLockAsync(NpgsqlConnection connection)
+    {
+        await using var command = new NpgsqlCommand("SELECT pg_advisory_unlock(@lock_key)", connection);
+        command.Parameters.AddWithValue("lock_key", MigrationLockKey);
+        await command.ExecuteNonQueryAsync();
+    }
+
     private static async Task<bool> HistoryTableExistsAsync(NpgsqlConnection connection)
     {
         const string sql = """
@@ -424,6 +538,10 @@ internal sealed record MigrationOptions
     public string? ConnectionString { get; private init; }
     public string? MigrationsDirectory { get; private init; }
     public string? SchemaFile { get; private init; }
+    public bool FailOnPending { get; private init; }
+    public bool FailOnDrift { get; private init; }
+    public int CommandTimeoutSeconds { get; private init; } = 300;
+    public int LockTimeoutSeconds { get; private init; } = 60;
     public bool Verbose { get; private init; }
     public bool ShowHelp { get; private init; }
 
@@ -461,6 +579,20 @@ internal sealed record MigrationOptions
                 case "--schema-file":
                     options = options with { SchemaFile = ReadNextValue(args, ref index, token) };
                     break;
+                case "--fail-on-pending":
+                    options = options with { FailOnPending = true };
+                    index++;
+                    break;
+                case "--fail-on-drift":
+                    options = options with { FailOnDrift = true };
+                    index++;
+                    break;
+                case "--command-timeout":
+                    options = options with { CommandTimeoutSeconds = ReadPositiveInt(args, ref index, token) };
+                    break;
+                case "--lock-timeout":
+                    options = options with { LockTimeoutSeconds = ReadPositiveInt(args, ref index, token) };
+                    break;
                 case "--verbose":
                     options = options with { Verbose = true };
                     index++;
@@ -490,5 +622,16 @@ internal sealed record MigrationOptions
 
         index += 2;
         return args[index - 1];
+    }
+
+    private static int ReadPositiveInt(string[] args, ref int index, string option)
+    {
+        var raw = ReadNextValue(args, ref index, option);
+        if (!int.TryParse(raw, out var value) || value <= 0)
+        {
+            throw new ArgumentException($"Option {option} requires a positive integer.");
+        }
+
+        return value;
     }
 }

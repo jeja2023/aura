@@ -90,6 +90,21 @@ services:
       AURA_AI_REQUIRE_ARANGO: ${AURA_AI_REQUIRE_ARANGO:-true}
       AURA_MODEL_PATH: ${AURA_MODEL_PATH}
       AURA_API_KEY: ${AURA_API_KEY:-}
+      AURA_AI_INFER_BATCH_SIZE: ${AURA_AI_INFER_BATCH_SIZE:-16}
+      AURA_AI_INFER_MAX_WAIT_SECONDS: ${AURA_AI_INFER_MAX_WAIT_SECONDS:-0.05}
+      AURA_AI_INFER_QUEUE_MAX_SIZE: ${AURA_AI_INFER_QUEUE_MAX_SIZE:-256}
+      AURA_AI_INFER_ENQUEUE_TIMEOUT_SECONDS: ${AURA_AI_INFER_ENQUEUE_TIMEOUT_SECONDS:-0.2}
+      AURA_AI_SEARCH_RATE_LIMIT_PER_MINUTE: ${AURA_AI_SEARCH_RATE_LIMIT_PER_MINUTE:-600}
+      AURA_AI_BREAKER_FAIL_THRESHOLD: ${AURA_AI_BREAKER_FAIL_THRESHOLD:-8}
+      AURA_AI_BREAKER_OPEN_SECONDS: ${AURA_AI_BREAKER_OPEN_SECONDS:-20}
+      AURA_AI_HEALTH_VERBOSE: ${AURA_AI_HEALTH_VERBOSE:-false}
+      AURA_AI_EXTRACT_FILE_ROOTS: ${AURA_AI_EXTRACT_FILE_ROOTS:-}
+      AURA_AI_INDEX_SNAPSHOT_PATH: ${AURA_AI_INDEX_SNAPSHOT_PATH:-data/ai/local_index_snapshot.json}
+      AURA_AI_MIN_SCORE_DEFAULT: ${AURA_AI_MIN_SCORE_DEFAULT:--1.0}
+      AURA_AI_CANDIDATE_MULTIPLIER_DEFAULT: ${AURA_AI_CANDIDATE_MULTIPLIER_DEFAULT:-8}
+      AURA_AI_CANDIDATE_POOL_DEFAULT: ${AURA_AI_CANDIDATE_POOL_DEFAULT:-0}
+      AURA_AI_ANN_PROBE_DEFAULT: ${AURA_AI_ANN_PROBE_DEFAULT:-16}
+      AURA_AI_RERANK_WINDOW_DEFAULT: ${AURA_AI_RERANK_WINDOW_DEFAULT:-30}
     volumes:
       - ${AURA_MODEL_HOST_DIR:-../models}:/app/models:ro
     ports:
@@ -115,7 +130,7 @@ services:
       TZ: ${TZ:-Asia/Shanghai}
       ConnectionStrings__PgSql: Host=pgsql;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Timezone=${PG_TIMEZONE:-Asia/Shanghai}
     entrypoint: ["dotnet", "/app/migrator/Aura.DbMigrator.dll"]
-    command: ["migrate"]
+    command: ["migrate", "--command-timeout", "${DB_MIGRATION_COMMAND_TIMEOUT_SECONDS:-300}", "--lock-timeout", "${DB_MIGRATION_LOCK_TIMEOUT_SECONDS:-60}"]
     depends_on:
       pgsql:
         condition: service_healthy
@@ -148,6 +163,7 @@ services:
       ConnectionStrings__PgSql: Host=pgsql;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Timezone=${PG_TIMEZONE:-Asia/Shanghai}
       ConnectionStrings__Redis: redis:6379
       Ai__BaseUrl: http://ai:8000
+      Ai__BaseUrls: ${AI_BASE_URLS:-}
       Ai__ApiKey: ${AURA_API_KEY:-}
       SignalR__RedisBackplane__Enabled: ${SIGNALR__REDISBACKPLANE__ENABLED:-false}
       SignalR__RedisBackplane__ConnectionString: redis:6379

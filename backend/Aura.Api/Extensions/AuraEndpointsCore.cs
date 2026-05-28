@@ -1,7 +1,9 @@
+using Aura.Api.Ai;
 using Aura.Api.Hubs;
 using Aura.Api.Internal;
 using Aura.Api.Models;
 using Aura.Api.Ops;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -21,6 +23,7 @@ internal static class AuraEndpointsCore
         var allow = ctx.AllowInMemoryFallback;
         var alertNotifier = ctx.AlertNotifier;
         var ai = ctx.Ai;
+        var aiRuntimeOptions = ctx.AiRuntimeOptions;
         var readinessLogger = ctx.ReadinessLogger;
 
         app.MapHub<EventHub>("/hubs/events");
@@ -82,14 +85,12 @@ internal static class AuraEndpointsCore
 
             var aiReady = false;
             var aiModelLoaded = false;
+            AiClusterHealth? aiHealth = null;
             try
             {
-                var aiHealth = await ai.GetHealthAsync();
-                aiReady = aiHealth != null;
-                if (aiHealth.HasValue)
-                {
-                    aiModelLoaded = aiHealth.Value.TryGetProperty("model_loaded", out var p) && p.GetBoolean();
-                }
+                aiHealth = await ai.GetClusterHealthAsync();
+                aiReady = aiHealth.AnyReachable;
+                aiModelLoaded = aiHealth.AnyModelLoaded;
             }
             catch (Exception ex)
             {
@@ -122,7 +123,21 @@ internal static class AuraEndpointsCore
             {
                 code = 0,
                 msg = ready ? "就绪检查通过" : "就绪检查未通过",
-                data = new { environment = isDev ? "开发环境" : "生产环境", ready, checks },
+                data = new
+                {
+                    environment = isDev ? "开发环境" : "生产环境",
+                    ready,
+                    checks,
+                    ai = aiHealth is null
+                        ? null
+                        : new
+                        {
+                            configuredNodes = aiHealth.ConfiguredNodeCount,
+                            reachableNodes = aiHealth.ReachableNodeCount,
+                            modelLoadedNodes = aiHealth.ModelLoadedNodeCount,
+                            nodes = aiHealth.Nodes
+                        }
+                },
                 time = now
             });
         }).RequireAuthorization("超级管理员");
@@ -137,5 +152,70 @@ internal static class AuraEndpointsCore
 
         app.MapGet("/api/ops/alert-notify-stats", () => Results.Ok(new { code = 0, msg = "获取统计成功", data = alertNotifier.GetStats(), time = DateTimeOffset.Now }))
             .RequireAuthorization("超级管理员");
+
+        app.MapGet("/api/ops/ai-settings", async () =>
+        {
+            var options = await aiRuntimeOptions.GetAsync(forceRefresh: true);
+            return Results.Ok(new
+            {
+                code = 0,
+                msg = "查询成功",
+                data = new
+                {
+                    baseUrls = options.ConfiguredValue,
+                    effectiveBaseUrls = options.BaseUrls,
+                    fallbackBaseUrls = aiRuntimeOptions.FallbackBaseUrls,
+                    hasRuntimeOverride = options.HasRuntimeOverride,
+                    updatedBy = options.UpdatedBy,
+                    updatedAt = options.UpdatedAt
+                },
+                time = DateTimeOffset.Now
+            });
+        }).RequireAuthorization("超级管理员");
+
+        app.MapPut("/api/ops/ai-settings", async (HttpContext http, OpsAiSettingsUpdateReq req) =>
+        {
+            var raw = (req.BaseUrls ?? string.Empty).Trim();
+            IReadOnlyList<string> normalized = [];
+            if (!string.IsNullOrWhiteSpace(raw))
+            {
+                try
+                {
+                    normalized = AiClient.NormalizeBaseUrls([raw]);
+                }
+                catch (ArgumentException ex)
+                {
+                    return AuraApiResults.BadRequest(ex.Message, 40081);
+                }
+            }
+
+            var userName = http.User.Identity?.Name ?? http.User.FindFirstValue(ClaimTypes.Name) ?? "unknown";
+            var normalizedValue = string.Join(";", normalized);
+            var saved = await ctx.SystemConfig.SetAsync(AiRuntimeOptionsProvider.BaseUrlsConfigKey, normalizedValue, userName);
+            if (!saved)
+            {
+                return AuraApiResults.InternalServerError("保存 AI 推理节点配置失败", 50081);
+            }
+
+            aiRuntimeOptions.Invalidate();
+            await audit.InsertOperationAsync(userName, "AI推理节点配置", string.IsNullOrWhiteSpace(normalizedValue) ? "清空运行时配置，使用启动默认节点" : $"节点={normalizedValue}");
+            var options = await aiRuntimeOptions.GetAsync(forceRefresh: true);
+
+            return Results.Ok(new
+            {
+                code = 0,
+                msg = "AI 推理节点配置已更新",
+                data = new
+                {
+                    baseUrls = options.ConfiguredValue,
+                    effectiveBaseUrls = options.BaseUrls,
+                    fallbackBaseUrls = aiRuntimeOptions.FallbackBaseUrls,
+                    hasRuntimeOverride = options.HasRuntimeOverride,
+                    updatedBy = options.UpdatedBy,
+                    updatedAt = options.UpdatedAt
+                },
+                time = DateTimeOffset.Now
+            });
+        }).RequireAuthorization("超级管理员");
     }
 }

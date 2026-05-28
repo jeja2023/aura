@@ -2,6 +2,69 @@
 
 本文档记录仓库关键版本与阶段性改动，便于联调、回归与发布追踪。
 
+## 0.1.26（2026-05-28）
+### 抓拍与事件时间时区修复
+
+- 修复抓拍记录、三维空间态势事件流在前端显示时多加 8 小时的问题：全局 `formatDateTimeDisplay` 对 `yyyy-MM-dd HH:mm:ss` / 无时区 ISO 字符串按后端展示时间原样格式化，不再交给浏览器 `Date` 二次本地化。
+- 三维空间态势事件流排序改为显式按本地无时区时间解析，避免展示时间正确但排序时间又被浏览器按 UTC/本地规则差异化处理。
+- `capture_record.capture_time`、`track_event.event_time`、`alert_record.created_at`、`virtual_person.first_seen/last_seen` 这类 PostgreSQL `TIMESTAMP` 字段写入与范围查询统一使用本地墙钟时间，避免将 UTC instant 写入无时区字段后造成后续展示漂移。
+- `DateTimeOffset` JSON 展示序列化统一转换为 API 所在时区的本地时间后输出 `yyyy-MM-dd HH:mm:ss`，与 `DateTime` 展示语义保持一致。
+- 开发环境近 7 日种子数据不再为“今天”生成当前时间之后的抓拍、告警与轨迹；启动时会自动修正已存在的 dev-seed 当日未来记录，避免中午启动后页面出现 18:00、19:00 等疑似时区加 8 小时的数据。
+
+
+### 局域网多 AI worker 直连适配
+
+- 后端 AI 客户端由单一 `Ai:BaseUrl` 升级为多节点运行时配置，新增 `sys_config` 表保存 `ai.base_urls`，超级管理员可在前端“运行配置”页面热更新多个 AI worker 地址，无需重启 API。
+- `AiClient` 增加节点归一化、运行时配置读取、轮询调度与故障转移能力，请求会在当前生效节点间轮询分配，并在连接异常、超时、`429`、`500`、`502`、`503`、`504` 等可重试故障下自动尝试下一个节点。
+- AI 调用失败信息补充 `endpoint=...`，便于在无 nginx 的局域网部署中快速定位具体异常节点。
+- 保留旧的 `Ai__BaseUrl` / `Ai:BaseUrl` 单节点配置与 `Ai__BaseUrls` / `AI_BASE_URLS` 多节点配置作为启动兜底；运行时数据库配置为空或不可用时才回退启动配置。
+
+### 就绪检查与生产配置加固
+
+- `/api/ops/readiness` 从单 AI 健康检查升级为集群视角，新增 `ai.configuredNodes`、`ai.reachableNodes`、`ai.modelLoadedNodes` 与 `ai.nodes` 详情；只要至少一个节点可达即认为 `ai_service` 可用，至少一个节点模型加载成功即认为 `ai_model` 可用。
+- 新增 `GetClusterHealthAsync`、`AiClusterHealth`、`AiEndpointHealth`，保留 `GetHealthAsync` 兼容旧调用，并优先返回健康节点的响应。
+- 生产启动校验改为同时识别 `Ai:BaseUrls` 与 `Ai:BaseUrl`，对多节点 URL 执行 HTTP/HTTPS 绝对地址校验，避免发布后才暴露配置错误。
+- 新增 `GET /api/ops/ai-settings` 与 `PUT /api/ops/ai-settings`，仅超级管理员可访问；保存时校验 URL、刷新运行时缓存并写入操作日志。
+- 兼容未执行 `007_add_sys_config.sql` 的存量库：读取运行时配置遇到 `sys_config` 缺表时回退启动配置，保存运行时配置时仍明确提示先执行迁移。
+
+### Docker 与环境模板
+
+- `.env` 与 `.env.example` 同步保留 `Ai__BaseUrls` 启动兜底项，推荐保持为空并在前端“运行配置”页面维护现场 GPU worker。
+- `.env.docker` 与 `.env.docker.example` 同步保留 `AI_BASE_URLS` 启动兜底项，`docker/docker-compose.yml` 仍为 API 注入 `Ai__BaseUrls` 以兼容数据库运行时配置不可用的场景。
+- `.env.docker` 与 `.env.docker.example` 重新对齐键集合，补齐 AI 推理批处理、队列背压、检索限流、熔断、健康脱敏、检索默认值与数据库迁移超时参数，避免现场配置文件缺键导致 Compose 只能使用隐式默认值。
+- `docker/docker-compose.yml` 为 AI 容器显式透传 `AURA_AI_INFER_*`、`AURA_AI_SEARCH_RATE_LIMIT_PER_MINUTE`、`AURA_AI_BREAKER_*`、`AURA_AI_HEALTH_VERBOSE`、`AURA_AI_EXTRACT_FILE_ROOTS`、`AURA_AI_INDEX_SNAPSHOT_PATH` 与检索策略默认值，便于企业现场按 CPU/GPU worker 能力和抓拍峰值压测结果调优。
+- `db-migrate` 服务启动命令改为带 `--command-timeout` 与 `--lock-timeout` 参数执行，参数由 `.env.docker` / `.env.docker.example` 中的 `DB_MIGRATION_COMMAND_TIMEOUT_SECONDS` 与 `DB_MIGRATION_LOCK_TIMEOUT_SECONDS` 控制。
+- `backend/Aura.Api/appsettings*.json` 增加 `Ai:BaseUrls` 占位项，使开发、测试、生产配置结构保持一致。
+- 新增 `database/migrations/007_add_sys_config.sql`，基线 schema 同步增加 `sys_config` 运行时配置表。
+- `docker/.env.registry.example` 的默认业务镜像标签与离线包文件名升级到 `v0.1.26`。
+
+### 数据库升级迁移企业级加固
+
+- `backend/Aura.DbMigrator` 新增 PostgreSQL advisory lock，`migrate` 与 `bootstrap` 执行前会先获取迁移锁，防止多实例 API、重复发布任务或多个 `db-migrate` 容器并发升级同一数据库。
+- 新增 `--command-timeout <sec>`，通过 `statement_timeout` 约束单次 SQL 执行时长，避免发布窗口内长时间无界等待；默认值为 300 秒。
+- 新增 `--lock-timeout <sec>`，迁移锁等待超时后以退出码 `3` 失败，便于流水线识别“已有迁移正在执行”与普通 SQL 错误。
+- `status` 命令新增 `--fail-on-pending` 与 `--fail-on-drift`，可分别用于发布后确认无待执行脚本，以及发布前发现数据库存在当前交付包未知的迁移历史。
+- 迁移脚本加载阶段新增重复版本检测，遇到两个相同版本号的 `*.sql` 会直接失败，避免 `007_xxx.sql` 与 `007_yyy.sql` 同时进入交付包。
+- `status` 输出补充 unknown applied migrations 统计，用于识别目标库 schema 版本领先于当前制品、交付包不完整或人工改写迁移历史的风险。
+- 已执行过的迁移继续通过 `schema_migrations.checksum` 做不可变校验；生产升级要求新增脚本向前追加，不改写已落地脚本。
+- `database/migrations/README.txt` 补充企业发布用命令：`status --fail-on-drift`、`migrate --command-timeout 300 --lock-timeout 60`、`status --fail-on-pending --fail-on-drift`，并明确 `bootstrap` 只允许用于空库。
+
+### 文档同步
+
+- `README.md` 更新当前版本号与“多 AI 节点（无 nginx）”部署说明，补充前端热更新、轮询、故障转移、readiness 节点统计、共享 ArangoDB 与 `/ai/extract-file` 共享路径注意事项。
+- `docker/README.md` 增加“外部多 AI worker”部署说明，明确生产优先通过前端运行配置维护地址，`AI_BASE_URLS` 仅作为启动兜底。
+- `docs/运维上线手册.md` 同步 readiness 返回字段与生产检查清单，强调 `sys_config` 迁移、多 worker 运行时配置、共享 ArangoDB、共享卷路径一致性，以及路径不可共享时回退 Base64 的取舍。
+- `docs/运维上线手册.md` 新增“数据库升级迁移”章节，明确 PostgreSQL 升级迁移不是服务器迁移，并补充备份、预检、执行、后验、失败回滚与漂移处理流程。
+
+### 版本与验证
+
+- 启用版本 `0.1.26`：`.NET` 统一版本写入 `Directory.Build.props`，AI FastAPI OpenAPI 版本同步为 `0.1.26`，README 与离线镜像模板同步更新。
+- 新增 `AiClientTests` 覆盖多节点配置解析（含换行分隔输入）、非法 URL 拒绝、轮询分发、故障转移、运行时热更新与集群健康统计。
+- 验证记录：`dotnet test backend\Aura.Api.Tests\Aura.Api.Tests.csproj --no-build` 基于现有构建产物通过；完整重编译需释放本机 `dotnet.exe` 对 `obj/bin` 产物的占用后复跑。
+- 验证记录：`.env.docker` 与 `.env.docker.example` 键集合一致，无缺失或多余键；`docker-compose --env-file .env.docker -f docker\docker-compose.yml config --quiet` 通过。
+- 验证记录：`git diff --check -- backend\Aura.DbMigrator\Program.cs docker\docker-compose.yml .env.docker.example database\migrations\README.txt docs\运维上线手册.md` 通过。
+- 未完成项：`dotnet build backend\Aura.DbMigrator\Aura.DbMigrator.csproj` 在当前本机环境被 MSBuild/NuGet 临时文件写入权限阻塞，错误为 `Access to the path ... is denied`；已尝试隔离中间目录，仍需在释放/修复本机工作区权限后复跑完整编译。
+
 ## 0.1.25（2026-05-26）
 
 ### Docker 部署入口收敛
@@ -1296,4 +1359,4 @@
 ## 版本规范
 
 - 版本号遵循 `MAJOR.MINOR.PATCH`
-- 当前版本：`0.1.21`
+- 当前版本：`0.1.26`

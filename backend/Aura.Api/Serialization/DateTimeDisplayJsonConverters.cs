@@ -58,6 +58,6 @@ internal sealed class DateTimeOffsetDisplayJsonConverter : JsonConverter<DateTim
 
     public override void Write(Utf8JsonWriter writer, DateTimeOffset value, JsonSerializerOptions options)
     {
-        writer.WriteStringValue(value.ToString(Format, CultureInfo.InvariantCulture));
+        writer.WriteStringValue(value.ToLocalTime().ToString(Format, CultureInfo.InvariantCulture));
     }
 }

@@ -32,6 +32,13 @@ Docker 目录已收敛为一套主入口：一份 Compose、一份 Docker 环境
    - Linux/macOS：`sh ./docker/check.sh`
 5. 部署成功后，可断开互联网，并将 `.env.docker` 改回 `IMAGE_PULL_POLICY=never`，避免后续误拉远程镜像。
 
+### 外部多 AI worker
+
+- 如不使用 Compose 内置 `ai` 服务、而是让 API 直连局域网多个 AI worker，推荐在系统前端 `运行配置 -> AI 推理节点` 中维护地址；保存后写入 PostgreSQL，后端下一次 AI 请求立即生效，无需重启 API。
+- `.env.docker` 中的 `AI_BASE_URLS` 只作为启动兜底，建议保持为空；当数据库运行时配置为空或不可用时，API 才回退到该值或 Compose 内置 `ai` 服务。
+- 运行时配置支持英文分号、逗号或换行输入多个节点，后端会轮询这些节点，并在连接异常、`429`、`5xx` 时切换到下一个节点。
+- 多 worker 仍需共用同一个 ArangoDB；如使用 `/ai/extract-file`，API 写入的图片路径必须在所有 AI worker 中同路径可读。
+
 `down` 默认保留 PostgreSQL、Redis、ArangoDB 与 API storage 命名卷。确实要清空数据时才使用 `.\docker\down.ps1 -Volumes` 或 `sh ./docker/down.sh --volumes`。
 
 ## 构建镜像

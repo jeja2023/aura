@@ -123,12 +123,15 @@ internal static class DevInitializer
         // 幂等：若近 7 日已有一定量数据，则不重复灌入
         await using var conn = pg.CreateConnection();
         await conn.OpenAsync();
+        await RepairFutureDevSeedRowsAsync(conn, now, logger);
+        var startLocal = start.LocalDateTime;
+        var endLocal = end.LocalDateTime;
         var captureRecent = await conn.ExecuteScalarAsync<long?>(
             "SELECT COUNT(1) FROM capture_record WHERE capture_time >= @Start AND capture_time < @End",
-            new { Start = start.ToUniversalTime(), End = end.ToUniversalTime() }) ?? 0;
+            new { Start = startLocal, End = endLocal }) ?? 0;
         var alertRecent = await conn.ExecuteScalarAsync<long?>(
             "SELECT COUNT(1) FROM alert_record WHERE created_at >= @Start AND created_at < @End",
-            new { Start = start.ToUniversalTime(), End = end.ToUniversalTime() }) ?? 0;
+            new { Start = startLocal, End = endLocal }) ?? 0;
         if (captureRecent >= 80 && alertRecent >= 20)
         {
             logger.LogInformation("开发环境近 7 日测试数据已存在（抓拍={CaptureCount}, 告警={AlertCount}），跳过重复灌入。", captureRecent, alertRecent);
@@ -214,7 +217,7 @@ internal static class DevInitializer
                 var count = Math.Max(1, baseCount + rand.Next(-6, 7));
                 for (var i = 0; i < count; i++)
                 {
-                    var t = new DateTimeOffset(dayStart.AddHours(8).AddMinutes(rand.Next(0, 720))).ToOffset(now.Offset);
+                    if (!TryBuildSeedTime(dayStart, 8, 720, now, rand, out var t)) continue;
                     var channelNo = 1 + rand.Next(0, 2);
                     var meta = JsonSerializer.Serialize(new
                     {
@@ -239,7 +242,7 @@ internal static class DevInitializer
             var alertCount = Math.Max(2, 6 + rand.Next(-2, 5));
             for (var i = 0; i < alertCount; i++)
             {
-                var t = new DateTimeOffset(dayStart.AddHours(9).AddMinutes(rand.Next(0, 660))).ToOffset(now.Offset);
+                if (!TryBuildSeedTime(dayStart, 9, 660, now, rand, out var t)) continue;
                 var type = alertTypes[rand.Next(0, alertTypes.Length)];
                 var detail = $"dev-seed：类型={type}，房间={roomNodeId}，时间={t:yyyy-MM-dd HH:mm}";
                 var id = await monitoringRepo.InsertAlertWithTimeAsync(type, detail, t);
@@ -254,7 +257,7 @@ internal static class DevInitializer
             var dayStart = start.Date.AddDays(Math.Max(0, day + 1));
             for (var i = 0; i < 12; i++)
             {
-                var t = new DateTimeOffset(dayStart.AddHours(10).AddMinutes(rand.Next(0, 600))).ToOffset(now.Offset);
+                if (!TryBuildSeedTime(dayStart, 10, 600, now, rand, out var t)) continue;
                 var vid = $"V{1000 + rand.Next(0, 40)}";
                 var eid = await captureRepo.InsertTrackEventAsync(vid, cameraId, roiId, t);
                 if (eid.HasValue) trackInserted++;
@@ -332,7 +335,7 @@ internal static class DevInitializer
                 var count = Math.Max(1, baseCount + rand.Next(-6, 7));
                 for (var i = 0; i < count; i++)
                 {
-                    var t = new DateTimeOffset(dayStart.AddHours(8).AddMinutes(rand.Next(0, 720))).ToOffset(now.Offset);
+                    if (!TryBuildSeedTime(dayStart, 8, 720, now, rand, out var t)) continue;
                     var channelNo = 1 + rand.Next(0, 2);
                     var meta = JsonSerializer.Serialize(new
                     {
@@ -362,7 +365,7 @@ internal static class DevInitializer
             var alertCount = Math.Max(2, 6 + rand.Next(-2, 5));
             for (var i = 0; i < alertCount; i++)
             {
-                var t = new DateTimeOffset(dayStart.AddHours(9).AddMinutes(rand.Next(0, 660))).ToOffset(now.Offset);
+                if (!TryBuildSeedTime(dayStart, 9, 660, now, rand, out var t)) continue;
                 var type = alertTypes[rand.Next(0, alertTypes.Length)];
                 store.Alerts.Add(new AlertEntity(
                     AlertId: Interlocked.Increment(ref store.AlertSeed),
@@ -374,6 +377,69 @@ internal static class DevInitializer
         }
 
         logger.LogInformation("已补齐内存库近 7 日测试数据：抓拍新增={CaptureCount}，告警新增={AlertCount}。", totalCapturesInserted, totalAlertsInserted);
+    }
+
+    private static bool TryBuildSeedTime(DateTime dayStart, int startHour, int windowMinutes, DateTimeOffset now, Random rand, out DateTimeOffset timestamp)
+    {
+        var min = dayStart.AddHours(startHour);
+        var max = min.AddMinutes(windowMinutes);
+        var localNow = now.LocalDateTime;
+        if (dayStart.Date == localNow.Date && max > localNow)
+        {
+            max = localNow;
+        }
+
+        if (max <= min)
+        {
+            timestamp = default;
+            return false;
+        }
+
+        var minutes = Math.Max(1, (int)(max - min).TotalMinutes);
+        timestamp = new DateTimeOffset(min.AddMinutes(rand.Next(0, minutes))).ToOffset(now.Offset);
+        return true;
+    }
+
+    private static async Task RepairFutureDevSeedRowsAsync(Npgsql.NpgsqlConnection conn, DateTimeOffset now, ILogger logger)
+    {
+        var localNow = now.LocalDateTime;
+        var todayEnd = localNow.Date.AddDays(1);
+        var captureFixed = await conn.ExecuteAsync(
+            """
+            UPDATE capture_record
+            SET capture_time = capture_time - INTERVAL '8 hours'
+            WHERE capture_time > @Now
+              AND capture_time < @TodayEnd
+              AND metadata_json->>'source' = 'dev-seed'
+            """,
+            new { Now = localNow, TodayEnd = todayEnd });
+        var alertFixed = await conn.ExecuteAsync(
+            """
+            UPDATE alert_record
+            SET created_at = created_at - INTERVAL '8 hours'
+            WHERE created_at > @Now
+              AND created_at < @TodayEnd
+              AND CAST(detail_json AS TEXT) LIKE '%dev-seed%'
+            """,
+            new { Now = localNow, TodayEnd = todayEnd });
+        var trackFixed = await conn.ExecuteAsync(
+            """
+            UPDATE track_event
+            SET event_time = event_time - INTERVAL '8 hours'
+            WHERE event_time > @Now
+              AND event_time < @TodayEnd
+              AND vid >= 'V1000'
+              AND vid <= 'V1039'
+            """,
+            new { Now = localNow, TodayEnd = todayEnd });
+        if (captureFixed > 0 || alertFixed > 0 || trackFixed > 0)
+        {
+            logger.LogInformation(
+                "已修正开发环境未来测试数据时间：抓拍={CaptureCount}，告警={AlertCount}，轨迹={TrackCount}。",
+                captureFixed,
+                alertFixed,
+                trackFixed);
+        }
     }
 
     private static string ResolveDevAdminPassword()

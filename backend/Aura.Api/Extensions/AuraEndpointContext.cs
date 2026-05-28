@@ -27,6 +27,8 @@ internal sealed class AuraEndpointContext
         AlertNotifier = app.ServiceProvider.GetRequiredService<IAlertNotifier>();
         Store = app.ServiceProvider.GetRequiredService<AppStore>();
         Ai = app.ServiceProvider.GetRequiredService<AiClient>();
+        AiRuntimeOptions = app.ServiceProvider.GetRequiredService<AiRuntimeOptionsProvider>();
+        SystemConfig = app.ServiceProvider.GetRequiredService<SystemConfigRepository>();
         ReadinessLogger = app.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("OpsReadiness");
         GlobalHmacSecret = configuration["Security:HmacSecret"] ?? "demo-hmac-secret";
         CaptureIpWhitelist = configuration.GetSection("Security:CaptureIpWhitelist").Get<string[]>();
@@ -46,6 +48,8 @@ internal sealed class AuraEndpointContext
     public IAlertNotifier AlertNotifier { get; }
     public AppStore Store { get; }
     public AiClient Ai { get; }
+    public AiRuntimeOptionsProvider AiRuntimeOptions { get; }
+    public SystemConfigRepository SystemConfig { get; }
     public ILogger ReadinessLogger { get; }
     public string GlobalHmacSecret { get; }
     public string[]? CaptureIpWhitelist { get; }

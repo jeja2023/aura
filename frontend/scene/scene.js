@@ -126,6 +126,17 @@ function toDisplayTime(value) {
   return d.toLocaleString("zh-CN", { hour12: false });
 }
 
+function parseEventTimeMs(value) {
+  if (value === null || value === undefined || value === "") return NaN;
+  if (value instanceof Date) return value.getTime();
+  const s = String(value).trim();
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})(?:\.\d+)?$/);
+  if (m) {
+    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]), Number(m[6])).getTime();
+  }
+  return new Date(value).getTime();
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -138,7 +149,7 @@ function escapeHtml(value) {
 function normalizeEventItem(item) {
   const type = String(item?.eventType || item?.type || "event").toLowerCase();
   const timeRaw = item?.eventTime || item?.captureTime || item?.createdAt || item?.at || new Date().toISOString();
-  const timeValue = new Date(timeRaw).getTime();
+  const timeValue = parseEventTimeMs(timeRaw);
   return {
     type,
     title: String(item?.title || item?.alertType || (type === "capture" ? "抓拍事件" : type === "alert" ? "告警事件" : "态势事件")),

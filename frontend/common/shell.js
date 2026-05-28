@@ -44,9 +44,15 @@
         { href: "/user/", label: "用户管理" }
       ]
     },
-    { title: "审计与运维", items: [{ href: "/log/", label: "操作日志" }] }
+    {
+      title: "审计与运维",
+      items: [
+        { href: "/log/", label: "操作日志" },
+        { href: "/ops-settings/", label: "运行配置" }
+      ]
+    }
   ];
-  const SUPER_ADMIN_ONLY_PATHS = new Set(["/role/", "/user/", "/log/"]);
+  const SUPER_ADMIN_ONLY_PATHS = new Set(["/role/", "/user/", "/log/", "/ops-settings/"]);
   const ROLE_SCOPED_HREFS = Object.freeze({
     "/device-diag/": new Set(["super_admin", "building_admin"])
   });
@@ -504,12 +510,15 @@
   /** 全局：时间展示统一为 yyyy-MM-dd HH:mm:ss，不出现 ISO 中的字母 T */
   window.formatDateTimeDisplay = function formatDateTimeDisplay(v, empty) {
     if (v === null || v === undefined || v === "") return empty === undefined ? "—" : empty;
+    const s = String(v).trim();
+    const localDateTime = s.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})(?:\.\d+)?$/);
+    if (localDateTime) return `${localDateTime[1]} ${localDateTime[2]}`;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
     const d = new Date(v);
     if (!Number.isNaN(d.getTime())) {
       const pad = (n) => String(n).padStart(2, "0");
       return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
     }
-    const s = String(v);
     const m = s.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})/);
     if (m) return `${m[1]} ${m[2]}`;
     return s.replace("T", " ").replace(/\.\d+/, "").trim();

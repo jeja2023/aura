@@ -121,3 +121,9 @@ credentials.json
 pytest-cache-files-*/
 frontend/test-results/
 frontend/playwright-report/
+
+# Codex 与临时缓存
+.codex-artifacts/
+.codex-build/
+codex-push-tmp/
+ai/data/
