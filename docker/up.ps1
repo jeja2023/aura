@@ -25,6 +25,9 @@ function Invoke-DockerCompose([string[]]$ComposeArgs) {
 
 Write-Host "Env file: $envFile"
 Write-Host "Compose file: $composeFile"
+if ([string]::IsNullOrWhiteSpace($env:COMPOSE_IGNORE_ORPHANS)) {
+    $env:COMPOSE_IGNORE_ORPHANS = "true"
+}
 $composeArgs = @("--env-file", "$envFile", "-f", "$composeFile")
 if ($Build) {
     $composeArgs += @("up", "-d", "--build")

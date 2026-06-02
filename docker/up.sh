@@ -30,6 +30,7 @@ compose() {
 
 echo "Env file: $ENV_FILE"
 echo "Compose file: $COMPOSE_FILE"
+export COMPOSE_IGNORE_ORPHANS="${COMPOSE_IGNORE_ORPHANS:-true}"
 set -- --env-file "$ENV_FILE" -f "$COMPOSE_FILE"
 if [ "$BUILD" = "true" ]; then
   compose "$@" up -d --build
