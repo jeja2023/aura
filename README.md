@@ -143,6 +143,13 @@ python start_services.py
 - 多 worker 部署必须共用同一个 ArangoDB；生产建议保持 `AURA_AI_REQUIRE_ARANGO=true`，避免节点退回各自内存索引后检索结果不一致。
 - 如使用 `/ai/extract-file`，API 保存图片的路径必须在所有 AI worker 容器内同路径可读；否则请改用内联 Base64 或为 API 与 AI worker 统一挂载共享卷。
 
+### 对接服务器 GPU worker
+
+- 服务器 GPU 服务使用外部 Docker 网络 `gpu-bridge` 时，先确认网络已存在：`docker network ls | grep gpu-bridge`。主 `docker/docker-compose.yml` 已让 `ai` 容器加入 `gpu-bridge`，无需额外 override 文件。
+- `docker/docker-compose.yml` 已内置默认 GPU 配置：`http://gpu-worker-0:8000/predict;http://gpu-worker-1:8000/predict`、`project_name=person_reid`、`model_name=osnet_x1_0_v1.onnx`。现场不需要在 `.env.docker` 重复填写；只有服务名、项目名或模型名不一致时才覆盖同名环境变量。
+- GPU 共享模型目录仍按 GPU 服务约定放置：`<shared-models>/<project_name>/<model_name>`，例如 `shared-models/person_reid/osnet_x1_0_v1.onnx`。本项目只传 `project_name`、`model_name` 和预处理后的 `tensor_data`，模型文件不再放在本项目 `models` 目录。
+- 启用后，AI `/ready` 会返回 `inference_backend=gpu-worker`；未配置 GPU 时继续使用本地 ONNX，返回 `inference_backend=onnx`。
+
 ## 关键页面入口
 
 - 首页看板：`frontend/index/index.html`

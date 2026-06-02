@@ -1,5 +1,5 @@
-# 文件：抓拍链路回归脚本（capture-regression.ps1） | File: Capture Pipeline Regression Script
-# 用途：快速回归登录、抓拍、查询、向量检索与重试队列。
+# File: Capture Pipeline Regression Script
+# Usage: run a quick login, capture, search, alert, retry, and operation-log regression.
 
 $ErrorActionPreference = "Stop"
 [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
@@ -8,7 +8,7 @@ $base = "https://localhost:5001"
 $user = "admin"
 $pass = $env:AURA_ADMIN_PASSWORD
 if ([string]::IsNullOrWhiteSpace($pass)) {
-    throw "请先设置环境变量 AURA_ADMIN_PASSWORD（不再内置默认密码）。"
+    throw "Please set environment variable AURA_ADMIN_PASSWORD. No built-in default password is used."
 }
 
 function Invoke-Api([string]$Method, [string]$Path, $Body = $null, [string]$Token = "") {

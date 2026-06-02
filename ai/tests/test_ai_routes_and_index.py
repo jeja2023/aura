@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from routes.api_routes import build_api_router
 from services.inference_service import InferenceBackpressureError
+from services.inference_service import InferenceService
 from services.index_runtime_service import IndexRuntimeService
 from vector_store.index_store import search_vectors
 
@@ -171,3 +172,20 @@ def test_extract_file_rejects_path_outside_allowed_roots(tmp_path):
 
     assert response.status_code == 403
     assert response.json()["code"] == 40301
+
+
+def test_gpu_predict_response_parser_accepts_nested_feature_payloads():
+    payload = {
+        "code": 0,
+        "data": {
+            "model": "osnet_x1_0_v1.onnx",
+            "outputs": [[[0.1, 0.2, 0.3]]],
+        },
+    }
+
+    assert InferenceService._extract_feature_from_payload(payload) == [0.1, 0.2, 0.3]
+
+
+def test_gpu_predict_url_defaults_to_predict_path():
+    assert InferenceService._normalize_predict_url("http://gpu-worker-0:8000") == "http://gpu-worker-0:8000/predict"
+    assert InferenceService._normalize_predict_url("http://gpu-worker-0:8000/predict") == "http://gpu-worker-0:8000/predict"

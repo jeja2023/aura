@@ -1,8 +1,11 @@
 # 文件：推理批处理服务（inference_service.py） | File: Inference batch service
 import asyncio
+import json
 import logging
 import os
 from pathlib import Path
+from urllib.parse import urlparse
+import urllib.request
 
 import numpy as np
 import onnxruntime as ort
@@ -32,18 +35,32 @@ class InferenceService:
         self._session = None
         self._input_name = ""
         self._model_error = ""
+        self._remote_enabled = False
+        self._remote_predict_urls: list[str] = []
+        self._remote_project_name = ""
+        self._remote_model_name = ""
+        self._remote_api_token = ""
+        self._remote_timeout_seconds = 10.0
+        self._remote_next_endpoint_index = -1
         self._queue = asyncio.Queue(maxsize=self._max_queue_size)
         self._batch_task: asyncio.Task | None = None
 
     @property
     def model_loaded(self) -> bool:
-        return self._session is not None
+        return self._remote_enabled or self._session is not None
 
     @property
     def model_error(self) -> str:
         return self._model_error
 
+    @property
+    def backend(self) -> str:
+        return "gpu-worker" if self._remote_enabled else "onnx"
+
     def init_model(self) -> None:
+        if self._init_remote_model():
+            return
+
         root = Path(__file__).resolve().parents[2]
         model_path = Path(os.getenv("AURA_MODEL_PATH", str(root / "models" / "osnet_ibn_x1_0.onnx")))
         try:
@@ -66,6 +83,8 @@ class InferenceService:
             self._model_error = f"模型加载失败: {ex}"
 
     async def start_batch_loop(self) -> None:
+        if self._remote_enabled:
+            return
         if self._session is not None and self._batch_task is None:
             self._batch_task = asyncio.create_task(self._batch_loop())
 
@@ -81,6 +100,9 @@ class InferenceService:
             pass
 
     async def extract_feature_batched(self, tensor: np.ndarray) -> list[float]:
+        if self._remote_enabled:
+            return await self._extract_feature_remote(tensor)
+
         if self._session is None:
             raise RuntimeError(self._model_error or "onnx session not initialized")
         future = asyncio.get_running_loop().create_future()
@@ -102,6 +124,166 @@ class InferenceService:
     @property
     def queue_size(self) -> int:
         return self._queue.qsize()
+
+    def _init_remote_model(self) -> bool:
+        raw_urls = os.getenv("AURA_GPU_PREDICT_URLS", os.getenv("AURA_GPU_PREDICT_URL", "")).strip()
+        if not raw_urls:
+            return False
+
+        try:
+            urls = [self._normalize_predict_url(item) for item in self._split_config_values(raw_urls)]
+        except ValueError as ex:
+            self._remote_enabled = False
+            self._model_error = str(ex)
+            return True
+
+        project_name = os.getenv("AURA_GPU_PROJECT_NAME", "").strip()
+        model_name = os.getenv("AURA_GPU_MODEL_NAME", "").strip()
+        if not urls or not project_name or not model_name:
+            self._remote_enabled = False
+            self._model_error = "GPU 推理已配置但缺少 AURA_GPU_PREDICT_URLS、AURA_GPU_PROJECT_NAME 或 AURA_GPU_MODEL_NAME"
+            return True
+
+        self._remote_predict_urls = urls
+        self._remote_project_name = project_name
+        self._remote_model_name = model_name
+        self._remote_api_token = os.getenv("AURA_GPU_API_TOKEN", "").strip()
+        self._remote_timeout_seconds = self._parse_remote_timeout()
+        self._remote_enabled = True
+        self._session = None
+        self._input_name = ""
+        self._model_error = ""
+        self._logger.info(
+            "GPU worker 推理已启用，endpoints=%s project=%s model=%s",
+            len(self._remote_predict_urls),
+            self._remote_project_name,
+            self._remote_model_name,
+        )
+        return True
+
+    async def _extract_feature_remote(self, tensor: np.ndarray) -> list[float]:
+        if not self._remote_predict_urls:
+            raise RuntimeError(self._model_error or "GPU worker endpoint is not configured")
+
+        loop = asyncio.get_running_loop()
+        start = (self._remote_next_endpoint_index + 1) % len(self._remote_predict_urls)
+        self._remote_next_endpoint_index = start
+        last_error: Exception | None = None
+
+        for offset in range(len(self._remote_predict_urls)):
+            url = self._remote_predict_urls[(start + offset) % len(self._remote_predict_urls)]
+            try:
+                feature = await loop.run_in_executor(
+                    None,
+                    lambda endpoint=url: self._post_remote_predict(endpoint, tensor),
+                )
+                return self._normalize_feature(feature)
+            except Exception as ex:
+                last_error = ex
+                if offset + 1 < len(self._remote_predict_urls):
+                    self._logger.warning("GPU worker 调用失败，切换到下一个节点。endpoint=%s error=%s", url, ex)
+
+        raise RuntimeError(f"GPU worker 推理调用失败: {last_error}")
+
+    def _post_remote_predict(self, url: str, tensor: np.ndarray) -> list[float]:
+        payload = {
+            "project_name": self._remote_project_name,
+            "model_name": self._remote_model_name,
+            "tensor_data": tensor.astype(np.float32, copy=False).tolist(),
+        }
+        headers = {"Content-Type": "application/json"}
+        if self._remote_api_token:
+            headers["Authorization"] = f"Bearer {self._remote_api_token}"
+
+        body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        request = urllib.request.Request(url, data=body, headers=headers, method="POST")
+        with urllib.request.urlopen(request, timeout=self._remote_timeout_seconds) as response:
+            response_body = response.read().decode("utf-8")
+
+        if not response_body:
+            raise RuntimeError("GPU worker 返回空响应")
+
+        try:
+            decoded = json.loads(response_body)
+        except json.JSONDecodeError as ex:
+            raise RuntimeError("GPU worker 返回的响应不是合法 JSON") from ex
+
+        return self._extract_feature_from_payload(decoded)
+
+    @classmethod
+    def _extract_feature_from_payload(cls, payload) -> list[float]:
+        if isinstance(payload, dict):
+            code = payload.get("code")
+            if code not in (None, 0, "0"):
+                message = payload.get("msg") or payload.get("message") or payload.get("error") or "unknown error"
+                raise RuntimeError(f"GPU worker 返回失败 code={code}: {message}")
+
+            for key in ("feature", "features", "embedding", "embeddings", "output", "outputs", "result", "prediction", "predictions"):
+                if key in payload:
+                    try:
+                        feature = cls._coerce_feature_vector(payload[key])
+                    except RuntimeError:
+                        feature = []
+                    if feature:
+                        return feature
+
+            if "data" in payload:
+                try:
+                    feature = cls._extract_feature_from_payload(payload["data"])
+                except RuntimeError:
+                    feature = []
+                if feature:
+                    return feature
+
+        if not isinstance(payload, dict):
+            feature = cls._coerce_feature_vector(payload)
+            if feature:
+                return feature
+
+        raise RuntimeError("GPU worker 响应中未找到特征向量")
+
+    @classmethod
+    def _coerce_feature_vector(cls, value) -> list[float]:
+        if isinstance(value, dict):
+            return cls._extract_feature_from_payload(value)
+
+        if not isinstance(value, list) or not value:
+            return []
+
+        if all(isinstance(item, (int, float)) and not isinstance(item, bool) for item in value):
+            return [float(item) for item in value]
+
+        for item in value:
+            try:
+                feature = cls._coerce_feature_vector(item)
+            except RuntimeError:
+                feature = []
+            if feature:
+                return feature
+
+        return []
+
+    @staticmethod
+    def _split_config_values(value: str) -> list[str]:
+        return [item.strip() for item in value.replace("\r", "\n").replace(",", ";").replace("\n", ";").split(";") if item.strip()]
+
+    @staticmethod
+    def _normalize_predict_url(raw: str) -> str:
+        value = raw.strip().rstrip("/")
+        parsed = urlparse(value)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError(f"GPU worker 地址无效: {raw}")
+        if parsed.path in {"", "/"}:
+            value = f"{value}/predict"
+        return value
+
+    @staticmethod
+    def _parse_remote_timeout() -> float:
+        raw = os.getenv("AURA_GPU_TIMEOUT_SECONDS", "10").strip()
+        try:
+            return max(0.1, float(raw))
+        except ValueError:
+            return 10.0
 
     async def _batch_loop(self) -> None:
         try:

@@ -36,6 +36,7 @@ class RouteDeps:
             model_loaded=self.inference.model_loaded,
             model_error=self.inference.model_error,
         )
+        payload["inference_backend"] = self.inference.backend
         guard_state = self.retrieval_guard.get_state()
         payload["retrieval_guard"] = guard_state
         payload["backfill_state"] = self.index_runtime.get_backfill_state()

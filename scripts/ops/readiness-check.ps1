@@ -1,5 +1,5 @@
-# 文件：上线就绪检查脚本（readiness-check.ps1） | File: Go-live Readiness Check Script
-# 用途：检查健康与就绪状态并输出最终结论。
+# File: Go-live Readiness Check Script
+# Usage: check health/readiness and print final result.
 param(
     [string]$User = "",
     [SecureString]$Password
@@ -16,6 +16,7 @@ $user = if (-not [string]::IsNullOrWhiteSpace($User)) {
 } else {
     "admin"
 }
+
 function Convert-SecureStringToPlainText([SecureString]$SecureValue) {
     if ($null -eq $SecureValue) { return "" }
     $ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureValue)
@@ -73,7 +74,7 @@ try {
     Write-Host "   Environment: $envName"
     Write-Host "   Ready: $isReady"
     Write-Host "   Checks: jwt=$($checks.jwt) hmac=$($checks.hmac) pgsql=$($checks.pgsql) redis=$($checks.redis) ai_svc=$($checks.ai_service) ai_model=$($checks.ai_model)"
-    
+
     Write-Host "4) Docker Resource Sampling..."
     try {
         $stats = docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.NetIO}}"
@@ -81,7 +82,7 @@ try {
             Write-Host "   $s"
         }
     } catch {
-        Write-Host "   Skip Docker stats: docker commanded failed or not found." -ForegroundColor Yellow
+        Write-Host "   Skip Docker stats: docker command failed or was not found." -ForegroundColor Yellow
     }
 
     if (-not $isReady) {

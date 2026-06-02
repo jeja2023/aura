@@ -23,7 +23,8 @@ Docker 目录已收敛为一套主入口：一份 Compose、一份 Docker 环境
 2. 编辑 `.env.docker`：
    - 首次联网部署时设置 `IMAGE_PULL_POLICY=missing`，允许 Docker 拉取缺失基础镜像。
    - 替换 `POSTGRES_PASSWORD`、`ARANGO_ROOT_PASSWORD`、`JWT__KEY`、`SECURITY__HMACSECRET`、`AURA_ADMIN_PASSWORD`。
-   - 确认 `models/osnet_ibn_x1_0.onnx` 存在，或调整 `AURA_MODEL_HOST_DIR`。
+   - 如服务器已有其他 Redis 使用宿主机默认端口，保持 `REDIS_PORT=6380` 或改成其他未占用端口；API 容器内部仍通过 `redis:6379` 访问，不受宿主机映射端口影响。
+   - 服务器 GPU 模式下确认 `gpu-bridge` 网络存在，且 GPU 共享卷内模型路径与 `docker-compose.yml` 内置默认值一致；如现场服务名、项目名或模型名不同，再覆盖同名环境变量。
 3. 启动：
    - Windows：`powershell -ExecutionPolicy Bypass -File .\docker\up.ps1 -Build`
    - Linux/macOS：`sh ./docker/up.sh --build`
@@ -38,6 +39,12 @@ Docker 目录已收敛为一套主入口：一份 Compose、一份 Docker 环境
 - `.env.docker` 中的 `AI_BASE_URLS` 只作为启动兜底，建议保持为空；当数据库运行时配置为空或不可用时，API 才回退到该值或 Compose 内置 `ai` 服务。
 - 运行时配置支持英文分号、逗号或换行输入多个节点，后端会轮询这些节点，并在连接异常、`429`、`5xx` 时切换到下一个节点。
 - 多 worker 仍需共用同一个 ArangoDB；如使用 `/ai/extract-file`，API 写入的图片路径必须在所有 AI worker 中同路径可读。
+
+### 服务器 GPU worker
+
+- 当服务器上的 GPU 服务已加入外部 Docker 网络 `gpu-bridge` 时，主 `docker-compose.yml` 已让本项目 `ai` 容器加入同一网络，无需额外 override 文件。
+- `docker-compose.yml` 已内置默认 GPU 配置：`http://gpu-worker-0:8000/predict;http://gpu-worker-1:8000/predict`、`project_name=person_reid`、`model_name=osnet_x1_0_v1.onnx`。现场不需要在 `.env.docker` 重复填写；只有服务名、项目名或模型名不一致时才覆盖同名环境变量。
+- 模型文件放在 GPU 服务共享模型目录约定路径 `<shared-models>/<project_name>/<model_name>`，例如 `shared-models/person_reid/osnet_x1_0_v1.onnx`。本项目负责图片解码和预处理，只向 GPU worker `/predict` 发送 `project_name`、`model_name`、`tensor_data`。
 
 `down` 默认保留 PostgreSQL、Redis、ArangoDB 与 API storage 命名卷。确实要清空数据时才使用 `.\docker\down.ps1 -Volumes` 或 `sh ./docker/down.sh --volumes`。
 

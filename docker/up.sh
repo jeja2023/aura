@@ -30,10 +30,11 @@ compose() {
 
 echo "Env file: $ENV_FILE"
 echo "Compose file: $COMPOSE_FILE"
+set -- --env-file "$ENV_FILE" -f "$COMPOSE_FILE"
 if [ "$BUILD" = "true" ]; then
-  compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --build
+  compose "$@" up -d --build
 else
-  compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --no-build
+  compose "$@" up -d --no-build
 fi
 echo ""
 if [ "$BUILD" = "true" ]; then

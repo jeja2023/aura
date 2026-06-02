@@ -105,6 +105,11 @@ services:
       AURA_AI_CANDIDATE_POOL_DEFAULT: ${AURA_AI_CANDIDATE_POOL_DEFAULT:-0}
       AURA_AI_ANN_PROBE_DEFAULT: ${AURA_AI_ANN_PROBE_DEFAULT:-16}
       AURA_AI_RERANK_WINDOW_DEFAULT: ${AURA_AI_RERANK_WINDOW_DEFAULT:-30}
+      AURA_GPU_PREDICT_URLS: ${AURA_GPU_PREDICT_URLS:-http://gpu-worker-0:8000/predict;http://gpu-worker-1:8000/predict}
+      AURA_GPU_PROJECT_NAME: ${AURA_GPU_PROJECT_NAME:-person_reid}
+      AURA_GPU_MODEL_NAME: ${AURA_GPU_MODEL_NAME:-osnet_x1_0_v1.onnx}
+      AURA_GPU_API_TOKEN: ${AURA_GPU_API_TOKEN:-}
+      AURA_GPU_TIMEOUT_SECONDS: ${AURA_GPU_TIMEOUT_SECONDS:-10}
     volumes:
       - ${AURA_MODEL_HOST_DIR:-../models}:/app/models:ro
     ports:
@@ -114,6 +119,9 @@ services:
       interval: 15s
       timeout: 5s
       retries: 10
+    networks:
+      - default
+      - gpu-bridge
 
   db-migrate:
     image: ${API_IMAGE:-aura-api:local}
@@ -189,6 +197,10 @@ services:
       interval: 15s
       timeout: 5s
       retries: 10
+
+networks:
+  gpu-bridge:
+    external: true
 
 volumes:
   aura-pgsql-data:
