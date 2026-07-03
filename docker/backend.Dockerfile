@@ -1,4 +1,4 @@
-﻿# SDK image aligns with the repository global.json sdk.version; runtime uses the official ASP.NET image.
+﻿# SDK 镜像与仓库 global.json 的 sdk.version 保持一致；运行时使用官方 ASP.NET 镜像。
 ARG DOTNET_SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:10.0.201
 ARG DOTNET_ASPNET_IMAGE=mcr.microsoft.com/dotnet/aspnet:10.0
 

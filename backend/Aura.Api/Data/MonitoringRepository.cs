@@ -1,4 +1,4 @@
-/* 文件：监控与研判仓储 | File: Monitoring repository */
+/* 文件：监控与研判仓储 */
 using Dapper;
 using Microsoft.Extensions.Logging;
 using Npgsql;

@@ -1,4 +1,4 @@
-﻿/* 文件：重试队列服务（RetryQueueService.cs） | File: Retry Queue Service */
+﻿/* 文件：重试队列服务（RetryQueueService.cs） */
 using System.Text.Json;
 using Aura.Api.Serialization;
 using StackExchange.Redis;

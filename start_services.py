@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# 文件：一键启动脚本（start_services.py） | File: Service Launcher
+# 文件：一键启动脚本（start_services.py）
 #
 # 适用范围：本机全栈联调（AI + .NET + PostgreSQL + Redis）。
 # 默认不会强制清理占用端口的进程；如确认可清理，请附加 --kill-conflicts。

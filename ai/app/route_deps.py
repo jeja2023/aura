@@ -1,4 +1,4 @@
-# File: Route dependency bundle
+# 文件：路由依赖集合（route_deps.py）
 from dataclasses import dataclass
 
 import numpy as np

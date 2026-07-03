@@ -1,4 +1,4 @@
-# File: AI route definitions
+# 文件：AI 路由定义（api_routes.py）
 from pathlib import Path
 import os
 import time

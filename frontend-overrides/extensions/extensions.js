@@ -1,4 +1,4 @@
-﻿/* 文件：扩展管理页脚本（extensions.js） | File: Extension Management Script */
+﻿/* 文件：扩展管理页脚本（extensions.js） */
 (function () {
   const apiBase = "";
   const fallbackRequestJson = async (url, options = {}) => {

@@ -1,4 +1,4 @@
-/* 文件：抓拍与轨迹仓储 | File: Capture and track repository */
+/* 文件：抓拍与轨迹仓储 */
 using Dapper;
 using Microsoft.Extensions.Logging;
 using Npgsql;

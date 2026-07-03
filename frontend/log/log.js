@@ -1,4 +1,4 @@
-/* 文件：日志页脚本（log.js） | File: Log Script */
+/* 文件：日志页脚本（log.js） */
 const apiBase = "";
 const resultEl = document.getElementById("result");
 const tableWrapEl = document.getElementById("tableWrap");

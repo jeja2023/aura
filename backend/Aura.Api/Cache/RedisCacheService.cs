@@ -1,4 +1,4 @@
-﻿/* 文件：Redis缓存服务（RedisCacheService.cs） | File: Redis Cache Service */
+﻿/* 文件：Redis缓存服务（RedisCacheService.cs） */
 using StackExchange.Redis;
 
 namespace Aura.Api.Cache;

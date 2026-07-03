@@ -1,4 +1,4 @@
-/* 文件：审计日志仓储 | File: Audit repository */
+/* 文件：审计日志仓储 */
 using Dapper;
 using Microsoft.Extensions.Logging;
 using Npgsql;

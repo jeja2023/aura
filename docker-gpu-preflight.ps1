@@ -1,4 +1,4 @@
-﻿# File: Docker GPU network preflight
+﻿# 容器 GPU 网络预检
 param(
     [string]$NetworkName = "gpu-bridge",
     [switch]$Create

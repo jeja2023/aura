@@ -1,4 +1,4 @@
-﻿/* 文件：认证与账号端点 | File: Auth and account endpoints */
+﻿/* 文件：认证与账号端点 */
 using System.Security.Claims;
 using Aura.Api.Internal;
 using Aura.Api.Models;

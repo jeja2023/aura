@@ -1,4 +1,4 @@
-﻿/* 文件：角色页脚本（role.js） | File: Role Script */
+﻿/* 文件：角色页脚本（role.js） */
 const apiBase = "";
 const resultEl = document.getElementById("result");
 const createRoleResultEl = document.getElementById("createRoleResult");

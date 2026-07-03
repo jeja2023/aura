@@ -1,4 +1,4 @@
-﻿/* 文件：用户与认证仓储 | File: User and auth repository */
+﻿/* 文件：用户与认证仓储 */
 using Dapper;
 using Microsoft.Extensions.Logging;
 using Npgsql;

@@ -1,4 +1,4 @@
-﻿/* 文件：运行配置页脚本（ops-settings.js） | File: Runtime Settings Script */
+﻿/* 文件：运行配置页脚本（ops-settings.js） */
 const resultEl = document.getElementById("result");
 const aiBaseUrlsEl = document.getElementById("aiBaseUrls");
 const runtimeOverrideStateEl = document.getElementById("runtimeOverrideState");

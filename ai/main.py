@@ -1,4 +1,4 @@
-# 文件：AI 服务入口（main.py） | File: AI service entrypoint
+# 文件：AI 服务入口（main.py）
 import logging
 
 from app.bootstrap import build_runtime

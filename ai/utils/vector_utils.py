@@ -1,4 +1,4 @@
-# File: Vector and image helpers
+# 文件：向量与图像辅助（vector_utils.py）
 import base64
 import binascii
 import io

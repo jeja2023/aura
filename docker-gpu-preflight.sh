@@ -1,5 +1,5 @@
 ﻿#!/usr/bin/env sh
-# File: Docker GPU network preflight
+# 容器 GPU 网络预检
 set -eu
 
 NETWORK_NAME="gpu-bridge"

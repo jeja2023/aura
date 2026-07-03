@@ -1,4 +1,4 @@
-﻿/* File: Backend helper utilities */
+﻿/* 文件：后端辅助工具（AuraHelpers.cs） */
 using System.Collections.Concurrent;
 using System.Net;
 using System.Security.Claims;
