@@ -30,6 +30,18 @@
   min-width: 180px;
 }
 
+.log-toolbar label {
+  display: inline-grid;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.log-filter-time {
+  width: 190px;
+}
+
 .log-toolbar button {
   flex: 0 0 auto;
   white-space: nowrap;

@@ -10,32 +10,95 @@ const searchPreviewImg = document.getElementById("searchPreviewImg");
 const searchPreviewFileName = document.getElementById("searchPreviewFileName");
 const searchResultHead = document.getElementById("searchResultHead");
 const fileInputEl = document.getElementById("file");
+const topKInputEl = document.getElementById("topk");
+const runBtnEl = document.getElementById("runBtn");
 const searchCompareModalEl = document.getElementById("searchCompareModal");
 const searchCompareQueryImgEl = document.getElementById("searchCompareQueryImg");
 const searchCompareHitImgEl = document.getElementById("searchCompareHitImg");
 const searchCompareMetaEl = document.getElementById("searchCompareMeta");
+const requestJson = window.aura?.requestJson || fallbackRequestJson;
+const pageStatus = window.aura?.createStatusController?.(resultEl) || null;
 
 let queryPreviewObjectUrl = null;
 let latestSearchRows = [];
 let searchPage = 1;
 let searchPageSize = 15;
 
-/** 成功提示自动消失定时器 */
-let successStatusTimer = null;
-const SUCCESS_STATUS_MS = 5000;
-
-function clearSuccessStatusTimer() {
-  if (successStatusTimer != null) {
-    clearTimeout(successStatusTimer);
-    successStatusTimer = null;
+async function fallbackRequestJson(url, options = {}) {
+  const headers = new Headers(options.headers || {});
+  const init = {
+    ...options,
+    credentials: options.credentials || "include",
+    headers
+  };
+  const body = options.body;
+  const isJsonBody = body && typeof body === "object" && !(body instanceof FormData) && !(body instanceof Blob) && !(body instanceof URLSearchParams);
+  if (isJsonBody) {
+    if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+    init.body = JSON.stringify(body);
   }
+
+  const response = await fetch(url, init);
+  const text = await response.text();
+  let data = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { code: response.ok ? 0 : -1, msg: text };
+    }
+  }
+  return { ok: response.ok, status: response.status, data, response };
 }
 
-function hideResult() {
+function escapeHtml(value) {
+  if (window.aura && typeof window.aura.escapeHtml === "function") {
+    return window.aura.escapeHtml(value);
+  }
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\"", "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function setResult(data, options = {}) {
+  if (pageStatus && typeof pageStatus.set === "function") {
+    pageStatus.set(data, options);
+    return;
+  }
+  if (window.aura && typeof window.aura.setStatus === "function") {
+    window.aura.setStatus(resultEl, data, options);
+    return;
+  }
   if (!resultEl) return;
-  resultEl.textContent = "";
-  resultEl.hidden = true;
-  resultEl.classList.remove("is-error");
+  const message = typeof data === "string" ? data : String(data?.msg ?? data ?? "");
+  if (!message.trim()) {
+    resultEl.textContent = "";
+    resultEl.hidden = true;
+    resultEl.classList.remove("is-error");
+    return;
+  }
+  resultEl.textContent = message;
+  resultEl.hidden = false;
+  resultEl.classList.toggle("is-error", Boolean(options.isError ?? data?.code !== 0));
+}
+
+function clearResult() {
+  if (pageStatus && typeof pageStatus.clear === "function") {
+    pageStatus.clear();
+    return;
+  }
+  setResult("");
+}
+
+function setBusy(busy) {
+  if (window.aura && typeof window.aura.setBusy === "function") {
+    window.aura.setBusy(runBtnEl, busy);
+    return;
+  }
+  if (runBtnEl && "disabled" in runBtnEl) runBtnEl.disabled = Boolean(busy);
 }
 
 function hideTable() {
@@ -66,6 +129,7 @@ function updateFilePreview() {
     if (searchPreviewFileName) searchPreviewFileName.textContent = "";
     return;
   }
+
   queryPreviewObjectUrl = URL.createObjectURL(file);
   searchPreviewImg.src = queryPreviewObjectUrl;
   searchPreviewImg.alt = `检索用图片：${file.name}`;
@@ -74,18 +138,10 @@ function updateFilePreview() {
   if (searchMainLayout) searchMainLayout.classList.remove("search-main-layout--no-preview");
 }
 
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll("\"", "&quot;");
-}
-
-function formatScore(v) {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return escapeHtml(String(v ?? "-"));
-  return escapeHtml(n.toFixed(4));
+function formatScore(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return escapeHtml(String(value ?? "-"));
+  return escapeHtml(number.toFixed(4));
 }
 
 function toAbsoluteImageUrl(rawUrl) {
@@ -125,19 +181,31 @@ function getQueryPreviewSrc() {
   return String(searchPreviewImg.getAttribute("src") || "").trim();
 }
 
+function showFieldHint(message) {
+  const text = String(message || "").trim();
+  if (!text) return;
+  if (window.aura && typeof window.aura.toast === "function") {
+    window.aura.toast(text, true);
+    return;
+  }
+  setResult({ code: 40000, msg: text }, { isError: true });
+}
+
 function openCompareModal(rowIndex) {
   if (!(searchCompareModalEl instanceof HTMLElement)) return;
   const idx = Number(rowIndex);
   if (!Number.isInteger(idx) || idx < 0 || idx >= latestSearchRows.length) return;
+
   const row = latestSearchRows[idx] || {};
   const vid = String(row?.vid ?? row?.Vid ?? "-").trim() || "-";
   const score = formatScore(row?.score ?? row?.Score);
   const hitImageUrl = resolveHitImageUrl(row);
   const queryImageUrl = getQueryPreviewSrc();
   if (!hitImageUrl) {
-    showFieldHint("该条结果未返回命中图片，暂无法进行图片比对。");
+    showFieldHint("该条结果未返回命中图片，暂无可对比内容。");
     return;
   }
+
   if (searchCompareQueryImgEl) {
     if (queryImageUrl) {
       searchCompareQueryImgEl.src = queryImageUrl;
@@ -154,23 +222,21 @@ function openCompareModal(rowIndex) {
   if (searchCompareMetaEl) {
     searchCompareMetaEl.textContent = `VID：${vid}，相似度：${score}`;
   }
+
+  if (window.aura && typeof window.aura.openModal === "function") {
+    window.aura.openModal(searchCompareModalEl);
+    return;
+  }
   searchCompareModalEl.hidden = false;
 }
 
 function closeCompareModal() {
   if (!(searchCompareModalEl instanceof HTMLElement)) return;
-  searchCompareModalEl.hidden = true;
-}
-
-/** 参数类提示：居中 Toast，不写状态框 */
-function showFieldHint(message) {
-  const text = String(message || "").trim();
-  if (!text) return;
-  if (window.aura && typeof window.aura.toast === "function") {
-    window.aura.toast(text, true);
+  if (window.aura && typeof window.aura.closeModal === "function") {
+    window.aura.closeModal(searchCompareModalEl);
     return;
   }
-  setResult(text);
+  searchCompareModalEl.hidden = true;
 }
 
 function renderTable(rows, options = {}) {
@@ -188,7 +254,7 @@ function renderTable(rows, options = {}) {
   const pageRows = list.slice(start, start + searchPageSize);
 
   if (total === 0) {
-    searchTableBodyEl.innerHTML = "<tr><td colspan=\"5\">暂无相似结果，可尝试换图或调整返回条数。</td></tr>";
+    searchTableBodyEl.innerHTML = '<tr><td colspan="5">暂无相似结果，可尝试换图或调整返回条数。</td></tr>';
     tableWrapEl.hidden = false;
     if (searchResultHead) searchResultHead.hidden = false;
     if (searchPagerEl) {
@@ -199,8 +265,8 @@ function renderTable(rows, options = {}) {
   }
 
   const trackTarget = ' target="_blank" rel="noopener noreferrer"';
-  searchTableBodyEl.innerHTML = pageRows.map((row, i) => {
-    const idx = start + i + 1;
+  searchTableBodyEl.innerHTML = pageRows.map((row, index) => {
+    const idx = start + index + 1;
     const vidRaw = String(row?.vid ?? row?.Vid ?? "").trim();
     const hitImageUrl = resolveHitImageUrl(row);
     const vidCell =
@@ -209,15 +275,15 @@ function renderTable(rows, options = {}) {
         : escapeHtml(vidRaw || "-");
     const imageCell = hitImageUrl
       ? `<img class="search-hit-thumb" src="${escapeHtml(hitImageUrl)}" alt="VID ${escapeHtml(vidRaw || "-")} 的命中图片" />`
-      : "<span class=\"search-hit-empty\">暂无命中图</span>";
+      : '<span class="search-hit-empty">暂无命中图</span>';
     const score = row?.score ?? row?.Score;
     const compareButton = hitImageUrl
       ? `<button type="button" class="btn-secondary" data-search-action="compare" data-row-index="${idx - 1}">对比图片</button>`
-      : "<button type=\"button\" class=\"btn-secondary\" disabled>暂无命中图</button>";
+      : '<button type="button" class="btn-secondary" disabled>暂无命中图</button>';
     const actionCell =
       vidRaw && vidRaw !== "-"
         ? `<div class="aura-table-actions"><a href="/track/?vid=${encodeURIComponent(vidRaw)}" class="btn-secondary"${trackTarget}>查看轨迹</a>${compareButton}</div>`
-        : "—";
+        : "-";
     return `
       <tr>
         <td class="aura-col-id">${escapeHtml(idx)}</td>
@@ -246,52 +312,6 @@ function renderTable(rows, options = {}) {
   }
 }
 
-function deriveMessage(data) {
-  if (typeof data === "string") return data;
-  if (data && typeof data === "object") {
-    if (Array.isArray(data.data)) return `共 ${data.data.length} 条结果`;
-    if (typeof data.msg === "string") return data.msg;
-    return "操作完成";
-  }
-  return String(data ?? "");
-}
-
-function isErrorPayload(data, message) {
-  if (data && typeof data === "object" && typeof data.code === "number") {
-    return data.code !== 0;
-  }
-  if (typeof message === "string") {
-    return /失败|错误|异常|超时|拒绝|未授权|无权|禁止|非法|无效|无法|不能|不存在|已过期|已失效/.test(message);
-  }
-  return false;
-}
-
-function setResult(data) {
-  if (!resultEl) return;
-
-  const isEmpty = !data || (typeof data === "string" && data.trim() === "");
-  if (isEmpty) {
-    clearSuccessStatusTimer();
-    hideResult();
-    return;
-  }
-
-  const message = deriveMessage(data);
-  const isError = isErrorPayload(data, message);
-
-  clearSuccessStatusTimer();
-  resultEl.textContent = message;
-  resultEl.hidden = false;
-  resultEl.classList.toggle("is-error", isError);
-
-  if (!isError) {
-    successStatusTimer = window.setTimeout(() => {
-      successStatusTimer = null;
-      hideResult();
-    }, SUCCESS_STATUS_MS);
-  }
-}
-
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -305,79 +325,99 @@ function fileToBase64(file) {
   });
 }
 
+function getTopK() {
+  const raw = Number(topKInputEl?.value);
+  return Number.isFinite(raw) && raw > 0 ? Math.min(50, Math.floor(raw)) : 10;
+}
+
+function normalizeErrorMessage(error) {
+  return error instanceof Error ? error.message : String(error ?? "未知错误");
+}
+
 async function runSearch() {
-  const file = document.getElementById("file").files?.[0];
-  const topKRaw = Number(document.getElementById("topk").value);
-  const topK = Number.isFinite(topKRaw) && topKRaw > 0 ? Math.min(50, Math.floor(topKRaw)) : 10;
+  const file = fileInputEl?.files?.[0];
+  const topK = getTopK();
   if (!file) {
     showFieldHint("请先选择图片");
     return;
   }
-  setResult("");
+
+  clearResult();
   hideTable();
+  setBusy(true);
   try {
     const imageBase64 = await fileToBase64(file);
-    const extRes = await fetch(`${apiBase}/api/vector/extract`, {
+    const extractResult = await requestJson(`${apiBase}/api/vector/extract`, {
       method: "POST",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
+      body: {
         imageBase64,
         metadataJson: JSON.stringify({ source: "search-page", fileName: file.name })
-      })
+      }
     });
-    const extData = await extRes.json();
-    if (!extRes.ok || extData.code !== 0) {
+    const extractData = extractResult.data || {};
+    if (!extractResult.ok || extractData.code !== 0) {
       hideTable();
-      setResult(extData?.msg ? extData : { code: 40000, msg: extData?.msg || `提取失败：HTTP ${extRes.status}` });
-      return;
-    }
-    const feature = extData.data.feature;
-    const seaRes = await fetch(`${apiBase}/api/vector/search`, {
-      method: "POST",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ feature, topK })
-    });
-    const seaData = await seaRes.json();
-    if (!seaRes.ok || seaData.code !== 0) {
-      hideTable();
-      setResult(seaData);
+      setResult(
+        extractData?.msg
+          ? extractData
+          : { code: 40000, msg: `提取失败：HTTP ${extractResult.status}` },
+        { isError: true }
+      );
       return;
     }
 
-    const rows = Array.isArray(seaData.data) ? seaData.data : [];
+    const feature = extractData?.data?.feature;
+    if (!Array.isArray(feature)) {
+      hideTable();
+      setResult({ code: 40000, msg: "提取结果缺少特征向量" }, { isError: true });
+      return;
+    }
+
+    const searchResult = await requestJson(`${apiBase}/api/vector/search`, {
+      method: "POST",
+      body: { feature, topK }
+    });
+    const searchData = searchResult.data || {};
+    if (!searchResult.ok || searchData.code !== 0) {
+      hideTable();
+      setResult(searchData?.msg ? searchData : { code: 40000, msg: `检索失败：HTTP ${searchResult.status}` }, { isError: true });
+      return;
+    }
+
+    const rows = Array.isArray(searchData.data) ? searchData.data : [];
     latestSearchRows = rows;
     renderTable(rows, { keepPageInput: false });
+    const message = `检索完成：共 ${rows.length} 条结果`;
+    setResult({ code: 0, msg: message });
     if (window.aura && typeof window.aura.toast === "function") {
-      window.aura.toast(`检索完成：共 ${rows.length} 条结果`, false);
+      window.aura.toast(message, false);
     }
   } catch (error) {
     hideTable();
-    setResult(`检索失败：${error.message}`);
+    setResult({ code: 40000, msg: `检索失败：${normalizeErrorMessage(error)}` }, { isError: true });
+  } finally {
+    setBusy(false);
   }
 }
 
-document.getElementById("runBtn").addEventListener("click", runSearch);
+runBtnEl?.addEventListener("click", runSearch);
 fileInputEl?.addEventListener("change", updateFilePreview);
+window.addEventListener("beforeunload", revokeQueryPreviewUrl);
 searchTableBodyEl?.addEventListener("click", (event) => {
   const target = event.target instanceof Element ? event.target.closest("[data-search-action=\"compare\"]") : null;
   if (!target) return;
   const rowIndex = Number(target.getAttribute("data-row-index"));
   openCompareModal(rowIndex);
 });
-searchCompareModalEl?.addEventListener("click", (event) => {
-  const element = event.target instanceof Element ? event.target : null;
-  if (!element) return;
-  if (element.classList.contains("aura-modal-backdrop")) {
-    closeCompareModal();
-    return;
-  }
-  if (element.closest("[data-aura-modal-dismiss]")) {
-    closeCompareModal();
-  }
-});
+
+if (window.aura && typeof window.aura.bindModalDismiss === "function") {
+  window.aura.bindModalDismiss(searchCompareModalEl, { onClose: closeCompareModal });
+} else {
+  searchCompareModalEl?.addEventListener("click", (event) => {
+    const element = event.target instanceof Element ? event.target : null;
+    if (!element) return;
+    if (element.classList.contains("aura-modal-backdrop") || element.closest("[data-aura-modal-dismiss]")) {
+      closeCompareModal();
+    }
+  });
+}

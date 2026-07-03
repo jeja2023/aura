@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "description": "Minimal labeled retrieval dataset for smoke-testing Aura AI search evaluation.",
+  "gallery": [
+    {
+      "vid": "person-a-1",
+      "feature": [1.0, 0.0, 0.0, 0.0],
+      "metadata": {
+        "camera": "east-gate",
+        "identity": "person-a"
+      }
+    },
+    {
+      "vid": "person-a-2",
+      "feature": [0.98, 0.02, 0.0, 0.0],
+      "metadata": {
+        "camera": "north-gate",
+        "identity": "person-a"
+      }
+    },
+    {
+      "vid": "person-b-1",
+      "feature": [0.0, 1.0, 0.0, 0.0],
+      "metadata": {
+        "camera": "east-gate",
+        "identity": "person-b"
+      }
+    },
+    {
+      "vid": "person-c-1",
+      "feature": [0.0, 0.0, 1.0, 0.0],
+      "metadata": {
+        "camera": "west-gate",
+        "identity": "person-c"
+      }
+    }
+  ],
+  "queries": [
+    {
+      "query_id": "q-person-a",
+      "feature": [1.0, 0.0, 0.0, 0.0],
+      "relevant_vids": ["person-a-1", "person-a-2"]
+    },
+    {
+      "query_id": "q-person-b-east",
+      "feature": [0.0, 1.0, 0.0, 0.0],
+      "relevant_vids": ["person-b-1"],
+      "metadata_filter": {
+        "camera": "east-gate"
+      }
+    },
+    {
+      "query_id": "q-person-c",
+      "feature": [0.0, 0.0, 1.0, 0.0],
+      "expected_vids": ["person-c-1"]
+    }
+  ]
+}

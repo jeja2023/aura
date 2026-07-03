@@ -1,0 +1,69 @@
+<!-- 文件：扩展管理页（extensions.html） | File: Extension Management Page -->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>扩展管理</title>
+  <script src="../common/theme-pref.js"></script>
+  <link rel="stylesheet" href="../common/theme.css" />
+  <link rel="stylesheet" href="../common/shell.css" />
+  <link rel="stylesheet" href="../common/forms.css" />
+  <link rel="stylesheet" href="./extensions.css" />
+</head>
+<body class="app-body" data-shell-title="扩展管理">
+  <aside class="app-sidebar" id="auraSidebar" aria-label="主导航"></aside>
+  <div class="app-frame">
+    <header class="app-topbar">
+      <button type="button" class="app-sidebar-toggle" id="auraSidebarToggle" aria-label="展开或收起导航">菜单</button>
+      <h1 class="app-page-title"></h1>
+      <div class="app-topbar-actions"></div>
+    </header>
+    <main class="app-content">
+      <div class="page extensions-page">
+        <div class="extensions-toolbar">
+          <div class="extensions-tabs" role="tablist" aria-label="扩展管理分类">
+            <button type="button" class="extensions-tab is-active" data-section="workflow">告警闭环</button>
+            <button type="button" class="extensions-tab" data-section="space">空间能力</button>
+            <button type="button" class="extensions-tab" data-section="report">报表计划</button>
+            <button type="button" class="extensions-tab" data-section="tenant">多租户</button>
+            <button type="button" class="extensions-tab" data-section="ai">AI 平台</button>
+          </div>
+          <div class="extensions-actions">
+            <button id="refreshSection" type="button" class="btn-secondary">刷新</button>
+            <button id="generateReport" type="button" class="btn-secondary" hidden>生成报表</button>
+            <button id="openAiExperimentModal" type="button" class="btn-secondary" hidden>新增实验</button>
+            <button id="openTenantScopeModal" type="button" class="btn-secondary" hidden>配置范围</button>
+            <button id="openCreateModal" type="button" class="btn-primary">新增</button>
+          </div>
+        </div>
+        <pre id="extensionsStatus" class="aura-status aura-display-box" role="status" hidden aria-live="polite"></pre>
+        <div id="extensionsTableWrap" class="aura-data-table-wrap">
+          <table class="aura-data-table" aria-label="扩展管理列表">
+            <thead id="extensionsTableHead"></thead>
+            <tbody id="extensionsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div id="extensionsModal" class="aura-modal-root" hidden>
+    <div class="aura-modal-backdrop" tabindex="-1" aria-hidden="true"></div>
+    <div class="aura-modal-panel extensions-modal" role="dialog" aria-modal="true" aria-labelledby="extensionsModalTitle">
+      <div class="aura-modal-head">
+        <h2 id="extensionsModalTitle" class="aura-modal-title">新增</h2>
+        <button type="button" class="btn-secondary aura-modal-close" data-aura-modal-dismiss aria-label="关闭对话框">关闭</button>
+      </div>
+      <div id="extensionsForm" class="aura-modal-fields extensions-form"></div>
+      <div class="aura-modal-actions">
+        <button type="button" class="btn-secondary" data-aura-modal-dismiss>取消</button>
+        <button id="saveExtension" type="button" class="btn-primary">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script defer src="../common/shell.js"></script>
+  <script defer src="./extensions.js"></script>
+</body>
+</html>

@@ -46,6 +46,12 @@ Docker 目录已收敛为一套主入口：一份 Compose、一份 Docker 环境
 - `docker-compose.yml` 已内置默认 GPU 配置：`http://gpu-worker-0:8000/predict;http://gpu-worker-1:8000/predict`、`project_name=person_reid`、`model_name=osnet_x1_0_v1.onnx`。现场不需要在 `.env.docker` 重复填写；只有服务名、项目名或模型名不一致时才覆盖同名环境变量。
 - 模型文件放在 GPU 服务共享模型目录约定路径 `<shared-models>/<project_name>/<model_name>`，例如 `shared-models/person_reid/osnet_x1_0_v1.onnx`。本项目负责图片解码和预处理，只向 GPU worker `/predict` 发送 `project_name`、`model_name`、`tensor_data`。
 
+### 外部图片特征服务
+
+- 若外部服务已经能自行完成图片解码、预处理和特征提取，可在 `.env.docker` 中填写 `AURA_EXTERNAL_EXTRACT_URLS`，多个地址用英文分号/逗号/换行分隔；根地址会自动补 `/ai/extract`。远程图片特征服务和张量级 GPU worker 地址都支持 `URL|权重` 写法。
+- 启用外部图片特征服务后，Compose 内置 `ai` 容器仍保留向量检索、聚类、ArangoDB 索引、限流、审计与健康检查能力，只把图片特征提取动作转发给外部服务。
+- 外部图片特征服务优先于张量级 GPU worker；`/ready` 中 `inference_backend=external-image` 表示已启用该模式，`gpu-worker` 表示仅启用张量级 GPU worker。`inference_remote` 会返回远程节点池状态，所有节点熔断或不可用时 `/ready` 返回 `50302`。
+
 `down` 默认保留 PostgreSQL、Redis、ArangoDB 与 API storage 命名卷。确实要清空数据时才使用 `.\docker\down.ps1 -Volumes` 或 `sh ./docker/down.sh --volumes`。
 
 ## 构建镜像
@@ -58,6 +64,8 @@ Docker 目录已收敛为一套主入口：一份 Compose、一份 Docker 环境
 构建脚本会生成 `aura-api:local` 与 `aura-ai:local`，并按 `API_IMAGE_REPO`、`AI_IMAGE_REPO`、`IMAGE_TAG` 额外打标签；未指定 `IMAGE_TAG` 时自动使用时间戳。
 
 ## 镜像分发
+
+当前发布版本默认业务镜像标签为 `v0.1.32`，如现场使用自定义标签，请确保 API、AI 与离线包文件名保持一致。
 
 推送到内网仓库：
 
@@ -86,4 +94,7 @@ Docker 目录已收敛为一套主入口：一份 Compose、一份 Docker 环境
 1. `docker load -i aura-images.tar`
 2. 检查 `.env.docker`，保持 `IMAGE_PULL_POLICY=never`
 3. 局域网启动：`docker compose --env-file .env.docker -f docker-compose.yml up -d --no-build`
+
 更新时先 `docker load`，再用同一条 `docker compose ... up -d --no-build` 更新容器。默认保留命名卷，不会清空 PostgreSQL、Redis、ArangoDB 与 API storage 数据。
+
+> 兼容说明：部分 Windows 环境只安装了连字符版 Compose 命令，可改用 `docker-compose --env-file .env.docker -f docker-compose.yml up -d --no-build`。

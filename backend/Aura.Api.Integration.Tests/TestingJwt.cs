@@ -13,17 +13,21 @@ internal static class TestingJwt
     internal const string Issuer = "Aura.Api.Testing";
     internal const string Audience = "Aura.Client.Testing";
 
-    internal static string CreateToken(string userName = "integration_tester", string role = "super_admin", bool mustChangePassword = false)
+    internal static string CreateToken(string userName = "integration_tester", string role = "super_admin", bool mustChangePassword = false, params string[] permissions)
     {
         var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(Key));
         var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
-        var claims = new[]
+        var claims = new List<Claim>
         {
             new Claim(ClaimTypes.NameIdentifier, userName),
             new Claim(ClaimTypes.Name, userName),
             new Claim(ClaimTypes.Role, role),
             new Claim(AuraHelpers.MustChangePasswordClaimType, mustChangePassword ? "true" : "false")
         };
+        foreach (var permission in permissions)
+        {
+            claims.Add(new Claim(AuraPermissions.ClaimType, permission));
+        }
         var token = new JwtSecurityToken(
             issuer: Issuer,
             audience: Audience,

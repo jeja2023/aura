@@ -2,6 +2,7 @@
 using Dapper;
 using Microsoft.Extensions.Logging;
 using Npgsql;
+using System.Diagnostics;
 
 namespace Aura.Api.Data;
 
@@ -148,23 +149,55 @@ internal sealed class CaptureRepository
         }
     }
 
-    public async Task<(List<DbCapture> Rows, int Total)> GetCapturesPagedAsync(DateTimeOffset? from, DateTimeOffset? to, int page, int pageSize)
+    public async Task<DbPagedResult<DbCapture>> GetCapturesPagedAsync(
+        DateTimeOffset? from,
+        DateTimeOffset? to,
+        int page,
+        int pageSize,
+        long? deviceId = null,
+        int? channelNo = null)
     {
         if (page <= 0) page = 1;
         if (pageSize <= 0) pageSize = 20;
+        pageSize = Math.Clamp(pageSize, 1, 1000);
 
         try
         {
+            var sw = Stopwatch.StartNew();
             var fromLocal = from.HasValue ? ToLocalTimestamp(from.Value) : (DateTime?)null;
             var toLocal = to.HasValue ? ToLocalTimestamp(to.Value) : (DateTime?)null;
             await using var conn = CreateConnection();
+            var parameters = new DynamicParameters();
             var where = " WHERE 1=1 ";
-            if (from.HasValue) where += " AND capture_time >= @From ";
-            if (to.HasValue) where += " AND capture_time <= @To ";
+            if (from.HasValue)
+            {
+                where += " AND capture_time >= @From ";
+                parameters.Add("From", fromLocal);
+            }
 
-            var total = await conn.ExecuteScalarAsync<int>($"SELECT COUNT(1) FROM capture_record {where}", new { From = fromLocal, To = toLocal });
+            if (to.HasValue)
+            {
+                where += " AND capture_time <= @To ";
+                parameters.Add("To", toLocal);
+            }
+
+            if (deviceId.HasValue)
+            {
+                where += " AND device_id = @DeviceId ";
+                parameters.Add("DeviceId", deviceId.Value);
+            }
+
+            if (channelNo.HasValue)
+            {
+                where += " AND channel_no = @ChannelNo ";
+                parameters.Add("ChannelNo", channelNo.Value);
+            }
+
+            var total = await conn.ExecuteScalarAsync<int>($"SELECT COUNT(1) FROM capture_record {where}", parameters);
 
             var offset = (page - 1) * pageSize;
+            parameters.Add("Offset", offset);
+            parameters.Add("PageSize", pageSize);
             var rows = await conn.QueryAsync<DbCapture>(
                 $"""
                 SELECT capture_id AS CaptureId, device_id AS DeviceId, channel_no AS ChannelNo,
@@ -175,14 +208,15 @@ internal sealed class CaptureRepository
                 ORDER BY capture_time DESC, capture_id DESC
                 LIMIT @PageSize OFFSET @Offset
                 """,
-                new { From = fromLocal, To = toLocal, Offset = offset, PageSize = pageSize });
+                parameters);
 
-            return (rows.ToList(), total);
+            PgSqlRepositoryHelpers.LogIfSlow(_logger, "数据库分页查询抓拍", sw.ElapsedMilliseconds, new { from, to, deviceId, channelNo, page, pageSize });
+            return new DbPagedResult<DbCapture>(rows.ToList(), total, true);
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "数据库分页查询抓拍失败。from={From}, to={To}, page={Page}, pageSize={PageSize}", from, to, page, pageSize);
-            return ([], 0);
+            _logger?.LogError(ex, "数据库分页查询抓拍失败。from={From}, to={To}, deviceId={DeviceId}, channelNo={ChannelNo}, page={Page}, pageSize={PageSize}", from, to, deviceId, channelNo, page, pageSize);
+            return new DbPagedResult<DbCapture>([], 0, false);
         }
     }
 
@@ -262,6 +296,7 @@ internal sealed class CaptureRepository
 
         try
         {
+            var sw = Stopwatch.StartNew();
             await using var conn = CreateConnection();
             var where = string.IsNullOrWhiteSpace(vid) ? "" : " WHERE vid = @Vid ";
             var rows = await conn.QueryAsync<DbTrackEvent>(
@@ -270,10 +305,11 @@ internal sealed class CaptureRepository
                        roi_id AS RoiId, event_time AS EventTime
                 FROM track_event
                 {where}
-                ORDER BY event_id DESC
+                ORDER BY event_time DESC, event_id DESC
                 LIMIT @Limit
                 """,
                 new { Vid = vid, Limit = limit });
+            PgSqlRepositoryHelpers.LogIfSlow(_logger, "db query track events", sw.ElapsedMilliseconds, new { vid, limit });
             return rows.ToList();
         }
         catch (Exception ex)
@@ -287,6 +323,7 @@ internal sealed class CaptureRepository
     {
         try
         {
+            var sw = Stopwatch.StartNew();
             var startLocal = ToLocalTimestamp(start);
             var endLocal = ToLocalTimestamp(end);
             await using var conn = CreateConnection();
@@ -296,10 +333,11 @@ internal sealed class CaptureRepository
                        roi_id AS RoiId, event_time AS EventTime
                 FROM track_event
                 WHERE event_time >= @Start AND event_time < @End
-                ORDER BY event_id DESC
+                ORDER BY event_time DESC, event_id DESC
                 LIMIT @MaxRows
                 """,
                 new { Start = startLocal, End = endLocal, MaxRows = maxRows });
+            PgSqlRepositoryHelpers.LogIfSlow(_logger, "db query track events in range", sw.ElapsedMilliseconds, new { start, end, maxRows });
             return rows.ToList();
         }
         catch (Exception ex)

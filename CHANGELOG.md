@@ -2,6 +2,196 @@
 
 本文档记录仓库关键版本与阶段性改动，便于联调、回归与发布追踪。
 
+## 0.1.32（2026-07-03）
+### 启动迁移与配置对齐
+- `start_services.py` 在本地一键启动前自动执行 `Aura.DbMigrator migrate`，复用 `.env` / `appsettings.Development.json` 的 PostgreSQL 连接串，并使用 `DB_MIGRATION_COMMAND_TIMEOUT_SECONDS`、`DB_MIGRATION_LOCK_TIMEOUT_SECONDS` 控制超时。
+- 新增 `--skip-db-migrate` 与 `AURA_SKIP_DB_MIGRATE=1`，用于临时跳过本地自动迁移；明确直接 `dotnet run --project backend/Aura.Api` 不会自动改库，需要先执行迁移器。
+- 将 `.env` 对齐 `.env.example`、`.env.docker` 对齐 `.env.docker.example` 的键集合与顺序，保留本地真实值，补齐安全反代、AI 图片限制、外部 AI 服务和 forwarded headers 等新增配置键。
+- 本地开发库已通过 `Aura.DbMigrator migrate` 应用 `001` 至 `014`，并以 `status --fail-on-pending --fail-on-drift` 确认为 applied 14、pending 0、unknown 0。
+
+### 文档与验证
+- README、Docker 说明、运维上线手册、数据库迁移说明和运维脚本说明同步记录自动迁移边界、env 对齐维护规则和跳过迁移开关。
+- 验证记录：`.env` / `.env.docker` 与各自 example 的键集合、键顺序和重复键检查通过；`start_services.py` 语法解析与轻量导入检查通过；`git diff --check` 通过（仅 Windows LF/CRLF 策略提示）。
+
+### 版本
+- 启用版本 `0.1.32`：`.NET` 统一版本写入 `Directory.Build.props`，AI FastAPI OpenAPI 版本同步为 `0.1.32`。
+- `docker/.env.registry.example` 默认业务镜像标签与离线包文件名升级到 `v0.1.32`。
+
+## 0.1.31（2026-07-03）
+### 综合修复与优化闭环
+- 将前期检查中生成目录与正式源码不一致的问题收敛到 `backend/Aura.Api` 正式源码，`Directory.Build.targets` 改为说明性 no-op，避免生产构建继续引用 `generated/` 审查产物。
+- `docker/backend.Dockerfile` 同步改为复制 `Directory.Build.targets` 并直接构建 `backend/Aura.Api` / `backend/Aura.DbMigrator`，确保本机、CI 与 Docker 使用同一套源码入口。
+- 补齐 README、Docker 模板、上线手册与环境变量示例，使反向代理、Cookie、Redis 降级、AI 图片限制和镜像标签具备可交接说明。
+
+### 后端安全与运行韧性
+- 新增 `UseAuraForwardedHeaders`，通过 `Security:ForwardedHeaders` 控制反向代理头、可信代理 IP 与 CIDR 网段，生产默认启用可信内网段配置。
+- 登录 Cookie 的 `Secure` 策略改为由生产环境和 `Security:Cookies:ForceSecure` 决定，适配 TLS 终止在 Ingress/nginx 的部署方式。
+- HMAC 签名校验改为十六进制解析后使用 `CryptographicOperations.FixedTimeEquals`，减少计时侧信道风险。
+- 抓拍来源白名单支持精确 IP、IPv4-mapped IPv6 与 CIDR；Redis 不可用时，重负载限流退回进程内固定窗口，避免保护逻辑直接放开。
+- 新增 `RedisConnectionProvider`，缓存、固定窗口限流与重试队列复用连接并在 Redis 异常时优雅降级。
+
+### AI 输入防护与错误语义
+- `ai/utils/vector_utils.py` 增加严格 Base64 解码、Data URL 兼容、图片格式白名单、像素上限与 Base64 长度上限，配置项为 `AURA_AI_MAX_IMAGE_BASE64_CHARS`、`AURA_AI_MAX_IMAGE_PIXELS`、`AURA_AI_ALLOWED_IMAGE_FORMATS`。
+- `/ai/extract` 在进入推理前完成图片校验：非法图片返回 `HTTP 400/code=40002`，超限图片返回 `HTTP 413/code=41301`。
+- `/ai/extract-file` 调整为先解析并校验白名单路径，再检查文件存在性；本地解码路径复用统一图片校验逻辑，外部图片特征服务保持原始路径转发兼容。
+- 补充 AI hardening 测试，覆盖 Data URL、非法 Base64、长度限制、像素限制与接口错误映射。
+
+### 前端安全渲染与页面恢复
+- `frontend/role`、`frontend/log`、`frontend/ops-settings`、`frontend/extensions` 的 HTML 转义 fallback 改为安全实现，避免 `window.aura.escapeHtml` 缺失时直接输出未转义文本。
+- 恢复并整理角色、日志、运行配置与扩展管理脚本为干净 UTF-8 文件，保留筛选、分页、导出、保存配置与 readiness 展示等既有行为。
+- 前端 ESLint 全量通过，修复过程中发现的 fallback 命名与解析问题已同步回归。
+
+### 文档、配置与发布
+- `.env.example`、`.env.docker.example` 与 `docker/docker-compose.yml` 新增 Cookie、Forwarded Headers、AI 图片限制相关环境变量。
+- `docs/运维上线手册.md` 增加安全加固与 AI 图片输入限制上线核对项，便于生产部署前逐项确认。
+- `README.md` 更新当前版本、构建源说明、反向代理/Cookie、Redis 降级和 AI 图片限制说明。
+- `docker/.env.registry.example` 默认镜像标签与离线包文件名升级为 `v0.1.31`。
+
+### 验证
+- `dotnet build backend\Aura.Api\Aura.Api.csproj --no-restore -v:minimal /m:1`：通过，0 warning / 0 error。
+- `dotnet test backend\Aura.Api.Tests\Aura.Api.Tests.csproj --no-restore -v:minimal /m:1`：45 passed。
+- `dotnet test backend\Aura.Api.Integration.Tests\Aura.Api.Integration.Tests.csproj --no-restore -v:minimal /m:1`：42 passed。
+- `python -m pytest -p no:cacheprovider ai\tests`：32 passed，保留第三方 multipart pending deprecation 与刻意触发的 Pillow DecompressionBombWarning。
+- `npm run lint`：通过。
+- `dotnet list ... package --vulnerable --include-transitive`：`Aura.Api`、`Aura.Api.Tests`、`Aura.Api.Integration.Tests` 均未发现易受攻击包。
+- `git diff --check`：通过；仅有 Windows Git 的 LF/CRLF 策略提示。
+
+### 版本
+- 启用版本 `0.1.31`：`.NET` 统一版本写入 `Directory.Build.props`，AI FastAPI OpenAPI 版本同步为 `0.1.31`。
+- `docker/.env.registry.example` 默认业务镜像标签与离线包文件名升级到 `v0.1.31`。
+
+## 0.1.30（2026-07-03）
+
+### 依赖安全审计闭环
+- 前端 ESLint 开发工具链升级到 `eslint` / `@eslint/js` 9.39.4，带动 `@eslint/plugin-kit` 与 `js-yaml` 等传递依赖进入安全版本；`npm audit --json` 返回 0 个漏洞。
+- 后端显式覆盖 `Microsoft.AspNetCore.OpenApi` 10.0.9 带入的 `Microsoft.OpenApi` 2.0.0，将 `Microsoft.OpenApi` 固定到 2.7.5，修复 GHSA-v5pm-xwqc-g5wc 高危审计项。
+- 完整解决方案 NuGet 漏洞审计通过：`dotnet list Aura.sln package --vulnerable --include-transitive` 显示所有 .NET 项目无易受攻击包。
+
+### 构建、测试与受限项恢复
+- 审批服务恢复后，完成 `dotnet restore Aura.sln /p:NuGetAudit=true /p:NuGetAuditMode=all`、`dotnet build Aura.sln --no-restore -maxcpucount:1` 与 `dotnet test Aura.sln --no-build` 验证。
+- 后端单元测试与集成测试全部通过：`Aura.Api.Tests` 39/39，`Aura.Api.Integration.Tests` 42/42。
+- 清理遗留临时产物 `_write_test_root.txt`、`generated/project-preprocess.xml`、`generated/.msbuild`，并更新修复记录中的环境受限说明。
+- 当前完整编译仍保留 generated `AuraEndpointsDomain.cs` 中两个未使用变量警告，不影响构建与测试结果。
+
+### 静态资源管线启动修复
+- 修复 generated 静态资源管线中 `PhysicalFileProvider` 创建时机：只有 `frontendRoot` 存在时才创建前端文件 provider。
+- 隔离 content root 的集成测试不再因缺少 `frontend` 目录启动失败，`Storage目录不存在时启动会自动创建目录` 场景恢复通过。
+
+### 版本
+- 启用版本 `0.1.30`：`.NET` 统一版本写入 `Directory.Build.props`，AI FastAPI OpenAPI 版本同步为 `0.1.30`。
+- `docker/.env.registry.example` 默认业务镜像标签与离线包文件名升级到 `v0.1.30`。
+
+## 0.1.29（2026-07-03）
+
+### 数据库错误语义与分页查询收敛
+- 分页仓储结果统一增加 `Succeeded` 状态，覆盖抓拍、告警、操作日志、系统日志与用户列表，区分“真实空数据”和“数据库查询失败”。
+- PG 已配置时，抓拍列表、告警列表、操作日志、系统日志、用户列表、外联输出与导出接口遇到数据库查询失败时返回 `50311`，不再以 HTTP 200 + 空列表掩盖故障。
+- 统计概览与图表在数据库查询失败时抛出明确异常，由端点层映射为真正的 HTTP 500，避免把失败计数折算为 0。
+- 导出抓拍与告警时改为分页累积读取，保留导出 `maxRows` 语义，同时复用列表查询上限和失败状态，降低单次大查询风险。
+
+### 前端静态覆盖层与安全兜底
+- 新增 `frontend-overrides` 静态资源覆盖目录，后端优先读取覆盖文件，再回退到原 `frontend` 目录，便于小范围修复前端问题而不扩大原目录改动面。
+- 修复扩展管理页在 `window.aura.escapeHtml` 缺失时的 HTML 转义兜底，避免降级路径直接输出未转义文本。
+- 前端路由中间件改为基于 `IFileProvider` 判断页面文件，使覆盖层中的同路径 HTML/JS 能参与静态路由解析。
+
+### Docker GPU 网络预检与运维恢复说明
+- 新增 `docker-gpu-preflight.ps1` 与 `docker-gpu-preflight.sh`，用于检查外部 Docker 网络 `gpu-bridge`；默认只检查，显式传 `-Create` / `--create` 时才创建网络。
+- README 补充 GPU 网络预检命令，降低现场因 `gpu-bridge` 缺失导致 Compose 启动失败的排障成本。
+- 新增 `2026-07-03-fix-optimization-notes.md`，记录本轮修复范围、审批/ACL 受限项、恢复命令和 AI `/ai/extract-file` 白名单配置建议。
+
+### 依赖与构建验证
+- 后端核心依赖继续升级到 `Microsoft.AspNetCore.* 10.0.9`、`Microsoft.Extensions.Http.Resilience 10.7.0`、`OpenTelemetry 1.16.0` 系列。
+- 前端生产依赖审计通过：`npm audit --omit=dev --package-lock-only` 返回 0 个漏洞；剩余风险位于 ESLint 开发工具链，需在可写 `frontend` 目录后运行 `npm audit fix --package-lock-only`。
+- 已用 `node --check frontend-overrides/extensions/extensions.js`、PowerShell 解析检查和 `dotnet msbuild -getItem:Compile` 验证覆盖层进入编译清单且原同名文件未重复编译。
+- 当前受限环境仍无法完成完整 `dotnet build`：MSBuild 生成文件写入被沙箱阻止，提升权限请求被审批服务 502/503 拒绝；NuGet 漏洞审计也因 `api.nuget.org` TLS/凭据错误未完成。
+
+### 版本
+- 启用版本 `0.1.29`：`.NET` 统一版本写入 `Directory.Build.props`，AI FastAPI OpenAPI 版本同步为 `0.1.29`。
+- `docker/.env.registry.example` 默认业务镜像标签与离线包文件名升级到 `v0.1.29`。
+
+## 0.1.28（2026-06-13）
+### 细粒度权限与高风险操作收敛
+
+- 新增统一权限规范与别名归一化：`alert.manage`、`ai.settings`、`device.diag`、`export`、`space.manage`、`report.manage`、`tenant.manage`、`ai.platform`，超级管理员继续默认放行。
+- 登录态接口 `/api/auth/me` 补充当前账号权限列表，前端可按权限动态显示功能入口。
+- 角色管理页补充空间能力、报表计划、多租户、AI 平台等产品化扩展权限勾选项，并兼容历史权限别名。
+- 导出、设备诊断、媒体能力、海康 ISAPI 调试、AI 运行配置、告警闭环与产品化扩展接口改为显式权限控制，降低高风险能力被普通楼栋角色误用的风险。
+- 新增 `database/migrations/008_add_fine_grained_permissions.sql`，为既有 `building_admin` 保留告警处理、设备诊断和导出等常用能力位，避免升级后基础工作流断档。
+
+### 产品化扩展管理
+
+- 新增扩展管理页面 `frontend/extensions/`，统一承载告警闭环、空间能力、报表计划、多租户与 AI 平台配置等跨域产品化能力。
+- 新增 `ExtensionRepository` 与 `/api/alert/workflow`、`/api/space/topology|heatmap`、`/api/report/*`、`/api/tenant/*`、`/api/ai-platform/*` 等接口，覆盖闭环处理、空间拓扑/热力快照、报表计划/生成记录、租户范围与 AI provider/A/B 实验配置。
+- 新增 `database/migrations/014_add_workflow_space_report_tenant_ai_platform_tables.sql`，为上述扩展能力补齐 PostgreSQL 表结构与查询索引。
+- 扩展管理页按当前账号权限过滤可见 tab；无授权时给出明确提示并隐藏新增/刷新等动作，避免展示不可操作的空功能。
+- 优化扩展管理页 tab 按钮视觉：未选中按钮使用深色文字与浅蓝底，选中按钮使用主色实底与白字，修复按钮名称低对比度、看起来像空白按钮的问题。
+
+### 查询性能与列表体验
+
+- 新增告警时间、告警检索、抓拍筛选、日志时间、轨迹历史等索引迁移：`009_add_alert_time_lookup_index.sql` 至 `013_add_track_history_time_index.sql`。
+- 抓拍、告警、日志、轨迹、统计与导出查询补充时间范围、关键字和分页场景下的索引友好查询路径，减少大数据量页面扫描和导出阻塞。
+- 前端抓拍、告警、日志、搜索与统计页面同步优化筛选、分页、状态提示和空数据处理，提升排查与回归时的可读性。
+- 导出能力扩展更多数据集和筛选参数，继续复用统一权限 `export` 控制。
+
+### AI 推理、检索与评测
+
+- AI 服务新增外部图片特征服务模式，配置 `AURA_EXTERNAL_EXTRACT_URLS` 后可将原始图片参数转发给外部服务，本项目继续负责特征归一化、检索、聚类、限流和审计。
+- 张量级 GPU worker 地址支持 `URL|权重`，并与外部图片特征服务共用远程节点熔断逻辑；`/ready` 增加 `inference_ready`、`inference_backend` 与远程推理节点池状态。
+- 新增 `/ai/evaluate-search` 离线检索评测接口、`ai/evaluate_search.py`、`scripts/ops/ai-eval.ps1` 与示例数据集，支持 recall、precision、MRR、命中率、空结果率和失败率等质量指标。
+- AI 路由依赖、服务状态和推理服务进一步拆分，补充外部推理、限流、路径白名单和评测相关测试覆盖。
+
+### 运维与工程结构
+
+- `Program.cs` 与 `ServiceExtensions.cs` 继续拆分为应用装配、生命周期、授权、持久化、HTTP Client、限流、SignalR、海康服务等更细的注册模块，降低主入口维护成本。
+- 运维脚本新增数据库状态、备份、迁移、恢复、回滚后前滚和 AI 离线评测入口；`scripts/ops/README.md` 与 `docs/运维上线手册.md` 同步补充使用说明。
+- Docker 与环境模板补充外部图片特征服务、远程推理权重、熔断阈值和评测数据集目录等配置项。
+- `database/schema.pgsql.sql` 同步最新迁移后的表结构，便于空库初始化与交付包基线保持一致。
+
+### 版本与验证
+
+- 启用版本 `0.1.28`：`.NET` 统一版本写入 `Directory.Build.props`，AI FastAPI OpenAPI 版本同步为 `0.1.28`。
+- `docker/.env.registry.example` 默认业务镜像标签与离线包文件名升级到 `v0.1.28`。
+- 本轮已确认前端 ESLint 通过：`npm run lint`。
+- 后端目标测试已补充/更新 `AuraPermissionsTests`、`QueryOptimizationRegressionTests` 与 `AiClientTests` 相关覆盖；当前沙箱环境执行 `dotnet test backend\Aura.Api.Tests\Aura.Api.Tests.csproj --filter "FullyQualifiedName~AuraPermissionsTests|FullyQualifiedName~QueryOptimizationRegressionTests"` 时被 `bin/obj` 写入权限阻塞，需在本机非受限环境复跑。
+
+## 0.1.27（2026-06-09）
+### 文档与汇报材料补充
+
+- 新增《寓瞳开放式集宿区智能分析系统建设方案（领导汇报版）》，面向立项/汇报场景补充建设背景、痛点、目标、架构、业务闭环、部署运维、预算测算、实施计划、验收指标与风险控制。
+- 新增 `docs/2026-06-09-自动化验收记录.md`，沉淀本次本机自动化验收结果与边界，便于后续发布复核和现场联调交接。
+- `README.md` 更新当前版本、近期重点、领导汇报版建设方案与验收记录入口，明确 `0.1.27` 为文档补强与自动化验收确认版本。
+- `docs/运维上线手册.md` 与 `docker/README.md` 补充 `docker compose` / `docker-compose` 命令兼容说明，降低 Windows 现场 Compose 插件差异带来的部署摩擦。
+
+### 自动化验收确认
+
+- 后端 API 独立构建通过：`dotnet build backend\Aura.Api\Aura.Api.csproj`，0 警告 0 错误。
+- 数据库迁移器独立构建通过：`dotnet build backend\Aura.DbMigrator\Aura.DbMigrator.csproj`，0 警告 0 错误。
+- 后端单元测试通过：`dotnet test backend\Aura.Api.Tests\Aura.Api.Tests.csproj`，`16/16`。
+- 后端集成测试通过：`dotnet test backend\Aura.Api.Integration.Tests\Aura.Api.Integration.Tests.csproj`，`42/42`。
+- AI 测试通过：`python -m pytest`，`13/13`。
+- 前端 ESLint 通过：`npm run lint`。
+- Docker 配置级验收通过：`docker-compose --env-file .env.docker.example -f docker\docker-compose.yml config --quiet` 与 `docker-compose --env-file .env.docker -f docker\docker-compose.yml config --quiet` 均通过。
+- 环境模板键集合校验通过：`.env` 与 `.env.example` 一致，`.env.docker` 与 `.env.docker.example` 一致。
+- 运维/Docker PowerShell 脚本语法检查通过：`scripts/ops/*.ps1` 与 `docker/*.ps1` 关键脚本均无解析错误。
+
+### 运行环境兼容记录
+
+- 本机 `docker compose` 子命令不可用，但 `docker-compose` v2.40.3 可用；离线服务器如遇同类 Docker CLI 差异，可使用连字符版 `docker-compose` 执行配置解析与启动命令。
+- 沙箱内 `.NET restore/build` 与 `pytest` 会受到 NuGet 网络、临时目录和缓存目录写入权限影响；本次验收使用非沙箱执行与 `.codex-build` 隔离目录复核，排除项目代码问题。
+- 真实 PostgreSQL/Redis/ArangoDB、AI/API 全栈服务、真实海康/ONVIF/NVR/GPU worker 未在本轮启动联调，仍需现场按 `docs/运维上线手册.md` 执行 readiness、抓拍回归与全系统联调。
+
+### 版本与分发
+
+- 启用版本 `0.1.27`：`.NET` 统一版本写入 `Directory.Build.props`，AI FastAPI OpenAPI 版本同步为 `0.1.27`。
+- `docker/.env.registry.example` 默认业务镜像标签与离线包文件名升级到 `v0.1.27`。
+
+### 外部 GPU/AI 推理兼容
+
+- AI 推理服务新增外部图片特征服务模式：配置 `AURA_EXTERNAL_EXTRACT_URLS` 后，`/ai/extract` 与 `/ai/extract-file` 会将原始图片参数转发给外部服务，由外部服务负责图片解码、预处理和特征提取；本项目继续负责特征归一化、向量索引、检索、聚类、限流和审计。
+- 保留原有张量级 GPU worker 模式：仅配置 `AURA_GPU_PREDICT_URLS` 时，本项目 AI 服务继续负责图片解码和预处理，只将 `tensor_data` 发往外部 `/predict`。
+- 外部推理优先级调整为：`external-image`（外部图片特征服务） -> `gpu-worker`（张量级 GPU worker） -> `onnx`（本地 ONNX）。`GET /ready` 的 `inference_backend` 可用于确认当前模式。
+- `.env.example`、`.env.docker.example` 与 `docker/docker-compose.yml` 补充 `AURA_EXTERNAL_EXTRACT_URLS`、`AURA_EXTERNAL_PROJECT_NAME`、`AURA_EXTERNAL_MODEL_NAME`、`AURA_EXTERNAL_API_TOKEN`、`AURA_EXTERNAL_TIMEOUT_SECONDS` 配置。
+
 ## 0.1.26（2026-05-28）
 ### 抓拍与事件时间时区修复
 
@@ -1359,4 +1549,4 @@
 ## 版本规范
 
 - 版本号遵循 `MAJOR.MINOR.PATCH`
-- 当前版本：`0.1.26`
+- 当前版本：`0.1.32`

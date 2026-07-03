@@ -30,7 +30,7 @@ internal sealed class AppStore
     public List<RoleEntity> Roles { get; } =
     [
         new(1, "super_admin", "[\"all\"]"),
-        new(2, "building_admin", "[\"device\",\"roi\",\"track\",\"alert\",\"stats\"]")
+        new(2, "building_admin", "[\"device\",\"roi\",\"track\",\"alert\",\"alert.manage\",\"stats\",\"device.diag\",\"export\"]")
     ];
     public List<UserEntity> Users { get; } =
     [

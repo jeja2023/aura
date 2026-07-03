@@ -1,0 +1,121 @@
+/* 文件：扩展管理页样式（extensions.css） | File: Extension Management Styles */
+.extensions-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+}
+
+.extensions-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.extensions-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.app-content .page.extensions-page .extensions-tabs button.extensions-tab {
+  min-width: 92px;
+  min-height: 40px;
+  padding: 9px 16px;
+  border: 1px solid rgba(var(--primary-rgb), 0.22);
+  border-radius: 8px;
+  background-color: color-mix(in srgb, var(--bg-elevated) 88%, var(--primary) 12%);
+  color: color-mix(in srgb, var(--text-main) 86%, var(--primary) 14%);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    color var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.app-content .page.extensions-page .extensions-tabs button.extensions-tab:hover {
+  border-color: rgba(var(--primary-rgb), 0.52);
+  background-color: color-mix(in srgb, var(--bg-elevated) 78%, var(--primary) 22%);
+  color: var(--primary);
+  box-shadow: 0 5px 14px rgba(var(--primary-rgb), 0.18);
+  transform: translateY(-1px);
+}
+
+.app-content .page.extensions-page .extensions-tabs button.extensions-tab:focus-visible {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.24);
+}
+
+.app-content .page.extensions-page .extensions-tabs button.extensions-tab.is-active {
+  border-color: var(--primary);
+  background-color: var(--primary);
+  color: var(--primary-text);
+  box-shadow: 0 6px 16px rgba(var(--primary-rgb), 0.26);
+}
+
+.app-content .page.extensions-page .extensions-tabs button.extensions-tab.is-active:hover {
+  border-color: var(--primary-hover);
+  background-color: var(--primary-hover);
+  color: var(--primary-text);
+  box-shadow: 0 7px 18px rgba(var(--primary-rgb), 0.3);
+}
+
+.extensions-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.extensions-modal {
+  width: min(680px, calc(100vw - 32px));
+}
+
+.extensions-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.extensions-form label.extensions-wide-field {
+  grid-column: 1 / -1;
+}
+
+.extensions-form textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.extensions-subhead th,
+.extensions-inline-head th {
+  background: color-mix(in srgb, var(--bg-elevated) 88%, var(--primary) 12%);
+  color: var(--text-main);
+  font-weight: 700;
+}
+
+.extensions-subhead th {
+  text-align: left;
+}
+
+@media (max-width: 720px) {
+  .extensions-toolbar {
+    align-items: stretch;
+  }
+
+  .extensions-tabs,
+  .extensions-actions {
+    width: 100%;
+  }
+
+  .extensions-form {
+    grid-template-columns: 1fr;
+  }
+}

@@ -2,7 +2,7 @@ using Aura.Api.Data;
 
 internal sealed class UserQueryService
 {
-    internal sealed record UserQueryResult(object Data, object Pager);
+    internal sealed record UserQueryResult(object Data, object Pager, bool Succeeded);
 
     private readonly AppStore _store;
     private readonly PgSqlConnectionFactory _pgSqlConnectionFactory;
@@ -24,8 +24,13 @@ internal sealed class UserQueryService
         var dbResult = await _userAuthRepository.GetUsersAsync(keyword, page, pageSize);
         if (_pgSqlConnectionFactory.IsConfigured)
         {
+            if (!dbResult.Succeeded)
+            {
+                return new UserQueryResult(Array.Empty<DbUserListItem>(), new { page = 1, pageSize, total = 0 }, false);
+            }
+
             var actualPage = ResolvePage(page, pageSize, dbResult.Total);
-            return new UserQueryResult(dbResult.Rows, new { page = actualPage, pageSize, total = dbResult.Total });
+            return new UserQueryResult(dbResult.Rows, new { page = actualPage, pageSize, total = dbResult.Total }, true);
         }
 
         var query = _store.Users.AsEnumerable();
@@ -54,7 +59,7 @@ internal sealed class UserQueryService
                 u.LastLoginAt?.DateTime,
                 u.MustChangePassword))
             .ToArray();
-        return new UserQueryResult(rows, new { page = actual, pageSize, total });
+        return new UserQueryResult(rows, new { page = actual, pageSize, total }, true);
     }
 
     private static int ResolvePage(int page, int pageSize, int total)

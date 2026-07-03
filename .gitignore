@@ -125,5 +125,6 @@ frontend/playwright-report/
 # Codex 与临时缓存
 .codex-artifacts/
 .codex-build/
+.codex-tmp/
 codex-push-tmp/
 ai/data/

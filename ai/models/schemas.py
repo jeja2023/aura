@@ -1,4 +1,6 @@
 # 文件：请求模型定义（schemas.py） | File: Request schemas
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -24,6 +26,17 @@ class SearchReq(BaseModel):
     exclude_vids: list[str] | None = None
     metadata_filter: dict[str, str | int | float | bool] | None = None
     explain: bool = False
+
+
+class EvalReq(BaseModel):
+    dataset: dict[str, Any] | None = None
+    dataset_path: str | None = Field(default=None, min_length=1, max_length=1024)
+    top_k: int = Field(default=10, ge=1, le=1000)
+    min_score: float = Field(default=-1.0, ge=-1.0, le=1.0)
+    candidate_multiplier: int = Field(default=8, ge=1, le=64)
+    candidate_pool: int = Field(default=0, ge=0, le=10000)
+    ann_probe: int = Field(default=16, ge=1, le=128)
+    rerank_window: int = Field(default=30, ge=1, le=10000)
 
 
 class UpsertReq(BaseModel):

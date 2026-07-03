@@ -1,20 +1,21 @@
-# 文件：AI 路由定义（api_routes.py） | File: AI route definitions
+# File: AI route definitions
 from pathlib import Path
 import os
 import time
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
-from PIL import Image
 
 from app.middlewares import RetrievalQuotaExceeded
 from app.route_deps import RouteDeps
-from models.schemas import ClusterReq, ImageFileReq, ImageReq, SearchReq, UpsertReq
+from models.schemas import ClusterReq, EvalReq, ImageFileReq, ImageReq, SearchReq, UpsertReq
 from services.cluster_service import cluster_vectors, compute_cluster_cohesion
-from services.inference_service import InferenceBackpressureError
+from services.evaluation_service import evaluate_retrieval_dataset, load_eval_dataset
+from services.inference_service import InferenceBackpressureError, InferenceUnavailableError
 from vector_store.index_store import load_vectors_for_cluster, search_vectors, upsert_vector
 from utils.retrieval_config import build_retrieval_defaults, resolve_search_params
 from utils.service_state import requires_persistent_index
+from utils.vector_utils import ImageTooLargeError, ImageValidationError, validate_image_base64_length
 
 
 def build_api_router(deps: RouteDeps) -> APIRouter:
@@ -29,33 +30,74 @@ def build_api_router(deps: RouteDeps) -> APIRouter:
             deps.logger.critical("健康检查发现 ArangoDB 不可用且当前环境要求持久化索引")
             return 503, payload
 
+        if not payload.get("inference_ready", True):
+            payload["code"] = 50302
+            payload["msg"] = "AI 推理服务当前不可用"
+            deps.logger.warning(
+                "健康检查发现推理链路不可用。backend=%s error=%s",
+                payload.get("inference_backend", "unknown"),
+                payload.get("inference_error", ""),
+            )
+            return 503, payload
+
         payload["code"] = 0
         payload["msg"] = "AI 服务运行正常"
         return 200, payload
 
-    def _resolve_extract_file_path(raw_path: str) -> tuple[bool, str]:
+    def _resolve_extract_file_path(raw_path: str) -> tuple[bool, str, str]:
         target = Path(raw_path).expanduser()
-        if not target.exists():
-            return True, ""
+        try:
+            target_resolved = target.resolve(strict=False)
+        except Exception:
+            return False, "", "file path resolve failed"
+
         allowed_roots_raw = os.getenv("AURA_AI_EXTRACT_FILE_ROOTS", "").strip()
         if not allowed_roots_raw:
-            return True, ""
-        allowed_roots = [Path(item.strip()).expanduser().resolve() for item in allowed_roots_raw.split(";") if item.strip()]
-        try:
-            target_resolved = target.resolve()
-        except Exception:
-            return False, "文件路径解析失败"
+            return True, str(target_resolved), ""
+
+        allowed_roots = []
+        for item in allowed_roots_raw.replace("\n", ";").split(";"):
+            value = item.strip()
+            if not value:
+                continue
+            try:
+                allowed_roots.append(Path(value).expanduser().resolve(strict=False))
+            except Exception:
+                deps.logger.warning("extract-file allowed root resolve failed: %s", value)
+
         for root in allowed_roots:
             try:
                 target_resolved.relative_to(root)
-                return True, ""
+                return True, str(target_resolved), ""
             except Exception:
                 continue
-        return False, "文件路径不在允许目录内"
+        return False, "", "file path is outside allowed roots"
+
+    def _resolve_eval_dataset_path(raw_path: str) -> tuple[bool, str, str]:
+        target = Path(raw_path).expanduser()
+        allowed_roots_raw = os.getenv("AURA_AI_EVAL_DATASET_ROOTS", "").strip()
+        if not allowed_roots_raw:
+            return True, str(target), ""
+
+        try:
+            target_resolved = target.resolve()
+        except Exception:
+            return False, "", "dataset_path_resolve_failed"
+
+        allowed_roots = [
+            Path(item.strip()).expanduser().resolve()
+            for item in allowed_roots_raw.replace("\n", ";").split(";")
+            if item.strip()
+        ]
+        for root in allowed_roots:
+            try:
+                target_resolved.relative_to(root)
+                return True, str(target_resolved), ""
+            except Exception:
+                continue
+        return False, "", "dataset_path_outside_allowed_roots"
 
     def require_retrieval_quota(request: Request) -> None:
-        """FastAPI 依赖：检索保护限流。命中阈值时抛 RetrievalQuotaExceeded，
-        由全局异常处理器统一格式化输出，避免每个路由重复 _allow_operation 调用。"""
         allowed, reason = deps.retrieval_guard.allow_request()
         if allowed:
             return
@@ -83,14 +125,33 @@ def build_api_router(deps: RouteDeps) -> APIRouter:
     @router.post("/ai/extract")
     async def extract(req: ImageReq, _quota: None = Depends(require_retrieval_quota)):
         try:
-            img = deps.decode_image(req.image_base64)
-            tensor = deps.preprocess(img)
-            feature = await deps.extract_feature_batched(tensor)
+            validate_image_base64_length(req.image_base64)
+            if deps.accepts_raw_image_inference():
+                feature = await deps.extract_feature_from_base64(req.image_base64, req.metadata_json)
+            else:
+                img = deps.decode_image(req.image_base64)
+                tensor = deps.preprocess(img)
+                feature = await deps.extract_feature_batched(tensor)
             return {"code": 0, "msg": "特征提取成功", "data": {"feature": feature, "dim": len(feature)}}
         except InferenceBackpressureError:
             return JSONResponse(
                 status_code=429,
                 content={"code": 42902, "msg": "推理服务繁忙，请稍后重试", "data": {"feature": [], "dim": 0}},
+            )
+        except InferenceUnavailableError:
+            return JSONResponse(
+                status_code=503,
+                content={"code": 50302, "msg": "AI 推理服务当前不可用，请稍后重试", "data": {"feature": [], "dim": 0}},
+            )
+        except ImageTooLargeError as ex:
+            return JSONResponse(
+                status_code=413,
+                content={"code": 41301, "msg": str(ex), "data": {"feature": [], "dim": 0}},
+            )
+        except ImageValidationError as ex:
+            return JSONResponse(
+                status_code=400,
+                content={"code": 40002, "msg": str(ex), "data": {"feature": [], "dim": 0}},
             )
         except Exception:
             deps.logger.exception("特征提取失败（/ai/extract）")
@@ -102,23 +163,41 @@ def build_api_router(deps: RouteDeps) -> APIRouter:
     @router.post("/ai/extract-file")
     async def extract_file(req: ImageFileReq, _quota: None = Depends(require_retrieval_quota)):
         try:
-            path = Path(req.image_path)
-            if not path.exists():
-                return JSONResponse(status_code=404, content={"code": 40401, "msg": f"文件不存在: {req.image_path}"})
-            allowed, reason = _resolve_extract_file_path(req.image_path)
+            allowed, resolved_path, reason = _resolve_extract_file_path(req.image_path)
             if not allowed:
                 return JSONResponse(status_code=403, content={"code": 40301, "msg": reason})
 
-            with Image.open(str(path)) as img:
-                rgb = img.convert("RGB")
-                tensor = deps.preprocess(rgb)
+            path = Path(resolved_path)
+            use_external_image_service = deps.accepts_raw_image_inference()
+            if not path.exists() and not use_external_image_service:
+                return JSONResponse(status_code=404, content={"code": 40401, "msg": f"file not found: {req.image_path}"})
 
-            feature = await deps.extract_feature_batched(tensor)
+            if use_external_image_service:
+                feature = await deps.extract_feature_from_file(req.image_path, req.metadata_json)
+            else:
+                rgb = deps.decode_image_file(str(path))
+                tensor = deps.preprocess(rgb)
+                feature = await deps.extract_feature_batched(tensor)
             return {"code": 0, "msg": "特征提取成功", "data": {"feature": feature, "dim": len(feature)}}
         except InferenceBackpressureError:
             return JSONResponse(
                 status_code=429,
                 content={"code": 42902, "msg": "推理服务繁忙，请稍后重试", "data": {"feature": [], "dim": 0}},
+            )
+        except InferenceUnavailableError:
+            return JSONResponse(
+                status_code=503,
+                content={"code": 50302, "msg": "AI 推理服务当前不可用，请稍后重试", "data": {"feature": [], "dim": 0}},
+            )
+        except ImageTooLargeError as ex:
+            return JSONResponse(
+                status_code=413,
+                content={"code": 41301, "msg": str(ex), "data": {"feature": [], "dim": 0}},
+            )
+        except ImageValidationError as ex:
+            return JSONResponse(
+                status_code=400,
+                content={"code": 40002, "msg": str(ex), "data": {"feature": [], "dim": 0}},
             )
         except Exception:
             deps.logger.exception("特征提取失败（/ai/extract-file）")
@@ -198,6 +277,7 @@ def build_api_router(deps: RouteDeps) -> APIRouter:
             )
             deps.logger.exception("检索内部异常 request_id=%s", request_id)
             return JSONResponse(status_code=500, content={"code": 50002, "msg": "检索失败，请稍后重试", "request_id": request_id})
+
         elapsed_ms = (time.perf_counter() - begin) * 1000.0
         if isinstance(result, JSONResponse):
             deps.retrieval_guard.record_result(success=False)
@@ -217,9 +297,18 @@ def build_api_router(deps: RouteDeps) -> APIRouter:
             )
             deps.logger.warning("检索失败 request_id=%s", request_id)
             return result
+
         hits = result.get("data", [])
         meta = result.setdefault("meta", {})
         meta["request_id"] = request_id
+        meta["resolved_params"] = {
+            "top_k": max(1, min(req.top_k, 50)),
+            "min_score": resolved["min_score"],
+            "candidate_multiplier": resolved["candidate_multiplier"],
+            "candidate_pool": resolved["candidate_pool"],
+            "ann_probe": resolved["ann_probe"],
+            "rerank_window": resolved["rerank_window"],
+        }
         deps.retrieval_guard.record_result(success=True)
         deps.index_runtime.record_search(
             success=True,
@@ -246,6 +335,63 @@ def build_api_router(deps: RouteDeps) -> APIRouter:
             elapsed_ms,
         )
         return result
+
+    @router.post("/ai/evaluate-search")
+    async def evaluate_search(req: EvalReq, request: Request, _quota: None = Depends(require_retrieval_quota)):
+        request_id = getattr(request.state, "request_id", "")
+        defaults = build_retrieval_defaults()
+        resolved, warnings = resolve_search_params(req, defaults)
+        try:
+            if req.dataset is not None:
+                dataset = req.dataset
+            elif req.dataset_path:
+                allowed, resolved_path, reason = _resolve_eval_dataset_path(req.dataset_path)
+                if not allowed:
+                    return JSONResponse(status_code=403, content={"code": 40301, "msg": reason, "request_id": request_id})
+                dataset = load_eval_dataset(resolved_path)
+            else:
+                return JSONResponse(
+                    status_code=400,
+                    content={"code": 40001, "msg": "dataset or dataset_path is required", "request_id": request_id},
+                )
+
+            result = evaluate_retrieval_dataset(
+                dataset,
+                top_k=req.top_k,
+                min_score=resolved["min_score"],
+                candidate_multiplier=resolved["candidate_multiplier"],
+                candidate_pool=resolved["candidate_pool"],
+                ann_probe=resolved["ann_probe"],
+                rerank_window=resolved["rerank_window"],
+                normalize_feature_func=deps.normalize_feature,
+                cosine_func=deps.cosine,
+                vector_dim=deps.vector_dim,
+                logger=deps.logger,
+            )
+        except FileNotFoundError:
+            return JSONResponse(status_code=404, content={"code": 40401, "msg": "dataset_path not found", "request_id": request_id})
+        except ValueError as ex:
+            return JSONResponse(status_code=400, content={"code": 40002, "msg": str(ex), "request_id": request_id})
+        except Exception:
+            deps.logger.exception("search evaluation failed request_id=%s", request_id)
+            return JSONResponse(
+                status_code=500,
+                content={"code": 50003, "msg": "search evaluation failed", "request_id": request_id},
+            )
+
+        summary = result.setdefault("summary", {})
+        summary["resolved_params"] = {
+            "top_k": max(1, min(req.top_k, 50)),
+            "min_score": resolved["min_score"],
+            "candidate_multiplier": resolved["candidate_multiplier"],
+            "candidate_pool": resolved["candidate_pool"],
+            "ann_probe": resolved["ann_probe"],
+            "rerank_window": resolved["rerank_window"],
+        }
+        if warnings:
+            summary["warnings"] = warnings
+        summary["request_id"] = request_id
+        return {"code": 0, "msg": "search evaluation completed", "data": result}
 
     @router.get("/ai/search-stats")
     async def search_stats(window_minutes: int = 0):

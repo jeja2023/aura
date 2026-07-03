@@ -1,12 +1,6 @@
 /* 文件：抓拍页脚本（capture.js） | File: Capture Script */
 const apiBase = "";
 
-function fillCapturePushUrlDoc() {
-  const el = document.getElementById("capturePushUrlDoc");
-  if (!el) return;
-  const origin = (window.location.origin || "").replace(/\/$/, "");
-  el.textContent = `${origin}/api/capture/push`;
-}
 const resultEl = document.getElementById("result");
 const createCaptureResultEl = document.getElementById("createCaptureResult");
 const captureCreateModalEl = document.getElementById("captureCreateModal");
@@ -18,10 +12,127 @@ const capturePagerEl = document.getElementById("capturePager");
 const captureTableHeadEl = document.getElementById("captureTableHead");
 const captureTableBodyEl = document.getElementById("captureTableBody");
 const exportCaptureBtn = document.getElementById("exportCapture");
+const captureDeviceIdFilterEl = document.getElementById("captureDeviceIdFilter");
+const captureChannelNoFilterEl = document.getElementById("captureChannelNoFilter");
+const captureStartTimeFilterEl = document.getElementById("captureStartTimeFilter");
+const captureEndTimeFilterEl = document.getElementById("captureEndTimeFilter");
+const clearCaptureFilterBtn = document.getElementById("clearCaptureFilter");
+const requestJson = window.aura?.requestJson || fallbackRequestJson;
+const pageStatus = window.aura?.createStatusController?.(resultEl) || null;
+const createStatus = window.aura?.createStatusController?.(createCaptureResultEl, { successMs: 0 }) || null;
+
 let latestCaptureRows = [];
 let latestCapturePager = null;
 let capturePage = 1;
 let capturePageSize = 15;
+
+function fillCapturePushUrlDoc() {
+  const el = document.getElementById("capturePushUrlDoc");
+  if (!el) return;
+  const origin = (window.location.origin || "").replace(/\/$/, "");
+  el.textContent = `${origin}/api/capture/push`;
+}
+
+async function fallbackRequestJson(url, options = {}) {
+  const headers = new Headers(options.headers || {});
+  const init = {
+    ...options,
+    credentials: options.credentials || "include",
+    headers
+  };
+  const body = options.body;
+  const isJsonBody = body && typeof body === "object" && !(body instanceof FormData) && !(body instanceof Blob) && !(body instanceof URLSearchParams);
+  if (isJsonBody) {
+    if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+    init.body = JSON.stringify(body);
+  }
+
+  const response = await fetch(url, init);
+  const text = await response.text();
+  let data = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { code: response.ok ? 0 : -1, msg: text };
+    }
+  }
+  return { ok: response.ok, status: response.status, data, response };
+}
+
+function escapeHtml(value) {
+  if (window.aura && typeof window.aura.escapeHtml === "function") {
+    return window.aura.escapeHtml(value);
+  }
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function deriveMessage(data, fallback = "操作完成") {
+  if (window.aura && typeof window.aura.deriveMessage === "function") {
+    return window.aura.deriveMessage(data, fallback);
+  }
+  if (typeof data === "string") return data;
+  if (data && typeof data === "object") {
+    if (typeof data.msg === "string") return data.msg;
+    if (Array.isArray(data.data)) return `共 ${data.data.length} 条结果`;
+    return fallback;
+  }
+  return String(data ?? "");
+}
+
+function isErrorPayload(data, message = "") {
+  if (window.aura && typeof window.aura.isErrorPayload === "function") {
+    return window.aura.isErrorPayload(data, message);
+  }
+  if (data && typeof data === "object" && typeof data.code === "number") {
+    return data.code !== 0;
+  }
+  return /失败|错误|异常|超时|拒绝|未授权|无权|禁止|非法|无效|无法|不能|不存在|已过期|已失效/.test(String(message || ""));
+}
+
+function setStatus(controller, element, data, options = {}) {
+  if (controller && typeof controller.set === "function") {
+    controller.set(data, options);
+    return;
+  }
+  if (window.aura && typeof window.aura.setStatus === "function") {
+    window.aura.setStatus(element, data, options);
+    return;
+  }
+  if (!element) return;
+  const message = deriveMessage(data, options.fallback || "操作完成").trim();
+  if (!message) {
+    element.textContent = "";
+    element.hidden = true;
+    element.classList.remove("is-error");
+    return;
+  }
+  const isError = options.isError ?? isErrorPayload(data, message);
+  element.textContent = message;
+  element.hidden = false;
+  element.classList.toggle("is-error", Boolean(isError));
+}
+
+function clearStatus(controller, element) {
+  if (controller && typeof controller.clear === "function") {
+    controller.clear();
+    return;
+  }
+  setStatus(null, element, "");
+}
+
+function setResult(data, options = {}) {
+  setStatus(pageStatus, resultEl, data, options);
+}
+
+function setCreateCaptureResult(data, options = {}) {
+  setStatus(createStatus, createCaptureResultEl, data, options);
+}
 
 function setExportVisible(visible) {
   if (!exportCaptureBtn) return;
@@ -33,71 +144,34 @@ function setExportVisible(visible) {
   exportCaptureBtn.disabled = !visible;
 }
 
-/** 成功提示自动消失定时器 */
-let successStatusTimer = null;
-const SUCCESS_STATUS_MS = 5000;
-
-function clearSuccessStatusTimer() {
-  if (successStatusTimer != null) {
-    clearTimeout(successStatusTimer);
-    successStatusTimer = null;
-  }
-}
-
-function hideResult() {
-  if (!resultEl) return;
-  resultEl.textContent = "";
-  resultEl.hidden = true;
-  resultEl.classList.remove("is-error");
-}
-
-function hideCreateCaptureResult() {
-  if (!createCaptureResultEl) return;
-  createCaptureResultEl.textContent = "";
-  createCaptureResultEl.hidden = true;
-  createCaptureResultEl.classList.remove("is-error");
-}
-
-function setCreateCaptureResult(data) {
-  if (!createCaptureResultEl) return;
-  const isEmpty = !data || (typeof data === "string" && data.trim() === "");
-  if (isEmpty) {
-    hideCreateCaptureResult();
+function openModal(root, options = {}) {
+  if (!root) return;
+  if (window.aura && typeof window.aura.openModal === "function") {
+    window.aura.openModal(root, options);
     return;
   }
-  const message = deriveMessage(data);
-  const isError = isErrorPayload(data, message);
-  createCaptureResultEl.textContent = message;
-  createCaptureResultEl.hidden = false;
-  createCaptureResultEl.classList.toggle("is-error", isError);
+  root.hidden = false;
+  document.body.style.overflow = "hidden";
 }
 
-function closeCaptureCreateModal() {
-  if (!captureCreateModalEl) return;
-  captureCreateModalEl.hidden = true;
+function closeModal(root) {
+  if (!root) return;
+  if (window.aura && typeof window.aura.closeModal === "function") {
+    window.aura.closeModal(root);
+    return;
+  }
+  root.hidden = true;
   document.body.style.overflow = "";
 }
 
 function openCaptureCreateModal() {
-  if (!captureCreateModalEl) return;
-  captureCreateModalEl.hidden = false;
-  document.body.style.overflow = "hidden";
-  hideCreateCaptureResult();
-  const deviceIdEl = document.getElementById("deviceId");
-  if (deviceIdEl instanceof HTMLInputElement) deviceIdEl.focus();
-}
-
-function closeCaptureOnboardModal() {
-  if (!captureOnboardModalEl) return;
-  captureOnboardModalEl.hidden = true;
-  document.body.style.overflow = "";
+  clearStatus(createStatus, createCaptureResultEl);
+  openModal(captureCreateModalEl, { focus: "#deviceId" });
 }
 
 function openCaptureOnboardModal() {
-  if (!captureOnboardModalEl) return;
   fillCapturePushUrlDoc();
-  captureOnboardModalEl.hidden = false;
-  document.body.style.overflow = "hidden";
+  openModal(captureOnboardModalEl);
 }
 
 function hideTable() {
@@ -110,38 +184,10 @@ function hideTable() {
   if (captureTableWrapEl) captureTableWrapEl.hidden = true;
 }
 
-function deriveMessage(data) {
-  if (typeof data === "string") return data;
-  if (data && typeof data === "object") {
-    if (typeof data.msg === "string") return data.msg;
-    if (Array.isArray(data.data)) return `共 ${data.data.length} 条结果`;
-    return "操作完成";
-  }
-  return String(data ?? "");
-}
-
-function isErrorPayload(data, message) {
-  if (data && typeof data === "object" && typeof data.code === "number") {
-    return data.code !== 0;
-  }
-  if (typeof message === "string") {
-    return /失败|错误|异常|超时|拒绝|未授权|无权|禁止|非法|无效|无法|不能|不存在|已过期|已失效/.test(message);
-  }
-  return false;
-}
-
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
-function formatTime(v) {
-  if (typeof window.formatDateTimeDisplay === "function") return window.formatDateTimeDisplay(v, "-");
-  return String(v ?? "-");
+function formatTime(value) {
+  const formatter = window.aura?.formatDateTime || window.formatDateTimeDisplay;
+  if (typeof formatter === "function") return formatter(value, "-");
+  return String(value ?? "-");
 }
 
 function parseMetadataJson(raw) {
@@ -153,6 +199,10 @@ function parseMetadataJson(raw) {
   } catch {
     return null;
   }
+}
+
+function hasOwn(obj, key) {
+  return Object.prototype.hasOwnProperty.call(obj, key);
 }
 
 function buildCaptureBadge(label, tone = "neutral") {
@@ -186,9 +236,6 @@ function formatMetadataCell(row) {
   }
 
   const aiStatus = String(meta.ai_status || "").trim();
-  const aiSuccess = meta.ai_success === true;
-  const vectorSuccess = meta.ai_vector_success === true;
-  const retryQueued = meta.ai_retry_queued === true;
   const badges = [];
   if (aiStatus === "ready") {
     badges.push(buildCaptureBadge("AI+向量就绪", "ok"));
@@ -199,11 +246,16 @@ function formatMetadataCell(row) {
   } else if (aiStatus === "extract_only") {
     badges.push(buildCaptureBadge("仅提特征", "neutral"));
   }
-  badges.push(buildCaptureBadge(aiSuccess ? "提特征成功" : "提特征失败", aiSuccess ? "ok" : "error"));
-  if (meta.ai_vector_id) {
-    badges.push(buildCaptureBadge(vectorSuccess ? "向量已写入" : "向量待确认", vectorSuccess ? "ok" : retryQueued ? "warn" : "neutral"));
+
+  if (hasOwn(meta, "ai_success")) {
+    badges.push(buildCaptureBadge(meta.ai_success === true ? "提特征成功" : "提特征失败", meta.ai_success === true ? "ok" : "error"));
   }
-  if (retryQueued) {
+  if (hasOwn(meta, "ai_vector_success") || meta.ai_vector_id) {
+    const vectorOk = meta.ai_vector_success === true;
+    const retryQueued = meta.ai_retry_queued === true;
+    badges.push(buildCaptureBadge(vectorOk ? "向量已写入" : "向量待确认", vectorOk ? "ok" : retryQueued ? "warn" : "neutral"));
+  }
+  if (meta.ai_retry_queued === true) {
     badges.push(buildCaptureBadge("已入重试队列", "warn"));
   }
 
@@ -222,7 +274,7 @@ function formatMetadataCell(row) {
 
   return `
     <div class="capture-meta">
-      <div class="capture-meta-badges">${badges.join("")}</div>
+      ${badges.length ? `<div class="capture-meta-badges">${badges.join("")}</div>` : ""}
       <div class="capture-meta-summary">${escapeHtml(summaryParts.join("；") || "未写入 AI 链路摘要")}</div>
       ${extraFields.length ? `<div class="capture-meta-fields">${extraFields.join("")}</div>` : ""}
       ${customFields ? `<div class="capture-meta-extra">${customFields}</div>` : ""}
@@ -232,6 +284,43 @@ function formatMetadataCell(row) {
       </details>
     </div>
   `;
+}
+
+function getPositiveIntegerInput(element) {
+  const text = String(element?.value ?? "").trim();
+  if (!text) return null;
+  const value = Number(text);
+  return Number.isInteger(value) && value > 0 ? value : null;
+}
+
+function getDateTimeInput(element) {
+  const text = String(element?.value ?? "").trim();
+  return text || null;
+}
+
+function getCaptureFilters() {
+  return {
+    deviceId: getPositiveIntegerInput(captureDeviceIdFilterEl),
+    channelNo: getPositiveIntegerInput(captureChannelNoFilterEl),
+    from: getDateTimeInput(captureStartTimeFilterEl),
+    to: getDateTimeInput(captureEndTimeFilterEl)
+  };
+}
+
+function appendCaptureFilters(query) {
+  const filters = getCaptureFilters();
+  if (filters.deviceId) query.set("deviceId", String(filters.deviceId));
+  if (filters.channelNo) query.set("channelNo", String(filters.channelNo));
+  if (filters.from) query.set("from", filters.from);
+  if (filters.to) query.set("to", filters.to);
+}
+
+function clearCaptureFilters() {
+  if (captureDeviceIdFilterEl) captureDeviceIdFilterEl.value = "";
+  if (captureChannelNoFilterEl) captureChannelNoFilterEl.value = "";
+  if (captureStartTimeFilterEl) captureStartTimeFilterEl.value = "";
+  if (captureEndTimeFilterEl) captureEndTimeFilterEl.value = "";
+  reloadFirstPage();
 }
 
 function normalizeServerPager(pager, rows) {
@@ -265,12 +354,12 @@ function renderCaptureTable(rows, serverPager = latestCapturePager) {
     <th>图片路径</th>
   </tr>`;
   if (!pageData.rows.length) {
-    captureTableBodyEl.innerHTML = `<tr><td colspan="7">暂无抓拍数据。</td></tr>`;
+    captureTableBodyEl.innerHTML = '<tr><td colspan="7">暂无抓拍数据。</td></tr>';
   } else {
     const start = (pageData.page - 1) * pageData.pageSize;
     captureTableBodyEl.innerHTML = pageData.rows
-      .map((row, idx) => `<tr>
-        <td class="aura-col-no">${start + idx + 1}</td>
+      .map((row, index) => `<tr>
+        <td class="aura-col-no">${start + index + 1}</td>
         <td class="aura-col-id">${escapeHtml(row.captureId ?? row.CaptureId ?? "-")}</td>
         <td class="aura-col-id">${escapeHtml(row.deviceId ?? row.DeviceId ?? "-")}</td>
         <td>${escapeHtml(row.channelNo ?? row.ChannelNo ?? "-")}</td>
@@ -300,65 +389,41 @@ function renderCaptureTable(rows, serverPager = latestCapturePager) {
   }
 }
 
-function setResult(data) {
-  if (!resultEl) return;
-
-  const isEmpty = !data || (typeof data === "string" && data.trim() === "");
-  if (isEmpty) {
-    clearSuccessStatusTimer();
-    hideResult();
-    return;
-  }
-
-  const message = deriveMessage(data);
-  const isError = isErrorPayload(data, message);
-
-  clearSuccessStatusTimer();
-  resultEl.textContent = message;
-  resultEl.hidden = false;
-  resultEl.classList.toggle("is-error", isError);
-
-  if (!isError) {
-    successStatusTimer = window.setTimeout(() => {
-      successStatusTimer = null;
-      hideResult();
-    }, SUCCESS_STATUS_MS);
-  }
-}
-
 async function createMock() {
-  const deviceId = Number(document.getElementById("deviceId").value || 1);
-  const channelNo = Number(document.getElementById("channelNo").value || 1);
-  const metadataJson = document.getElementById("meta").value || "";
-  setCreateCaptureResult("");
+  const deviceId = Number(document.getElementById("deviceId")?.value || 1);
+  const channelNo = Number(document.getElementById("channelNo")?.value || 1);
+  const metadataJson = document.getElementById("meta")?.value || "";
+  clearStatus(createStatus, createCaptureResultEl);
 
   try {
-    const res = await fetch(`${apiBase}/api/capture/mock`, {
+    const result = await requestJson(`${apiBase}/api/capture/mock`, {
       method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ deviceId, channelNo, metadataJson })
+      body: { deviceId, channelNo, metadataJson }
     });
-    const data = await res.json();
+    const data = result.data || {};
     setCreateCaptureResult(data);
-    if (res.ok && data?.code === 0) {
+    if (result.ok && data?.code === 0) {
       const deviceIdEl = document.getElementById("deviceId");
       const channelNoEl = document.getElementById("channelNo");
       const metaEl = document.getElementById("meta");
       if (deviceIdEl instanceof HTMLInputElement) deviceIdEl.value = "";
       if (channelNoEl instanceof HTMLInputElement) channelNoEl.value = "";
       if (metaEl instanceof HTMLInputElement) metaEl.value = "";
-      closeCaptureCreateModal();
+      closeModal(captureCreateModalEl);
       capturePage = 1;
       void load();
     }
   } catch (error) {
-    setCreateCaptureResult(`新增失败：${error.message}`);
+    setCreateCaptureResult({ code: 40000, msg: `新增失败：${normalizeErrorMessage(error)}` }, { isError: true });
   }
 }
 
+function normalizeErrorMessage(error) {
+  return error instanceof Error ? error.message : String(error ?? "未知错误");
+}
+
 async function load() {
-  setResult("");
+  clearStatus(pageStatus, resultEl);
   hideTable();
   setExportVisible(false);
 
@@ -367,12 +432,11 @@ async function load() {
       page: String(capturePage),
       pageSize: String(capturePageSize)
     });
-    const res = await fetch(`${apiBase}/api/capture/list?${query.toString()}`, {
-      credentials: "include"
-    });
-    const data = await res.json();
-    if (!res.ok || data?.code !== 0) {
-      setResult(data);
+    appendCaptureFilters(query);
+    const result = await requestJson(`${apiBase}/api/capture/list?${query.toString()}`);
+    const data = result.data || {};
+    if (!result.ok || data?.code !== 0) {
+      setResult(data?.msg ? data : { code: 40000, msg: `查询失败：HTTP ${result.status}` }, { isError: true });
       latestCaptureRows = [];
       latestCapturePager = null;
       setExportVisible(false);
@@ -383,24 +447,52 @@ async function load() {
     renderCaptureTable(latestCaptureRows, latestCapturePager);
     setExportVisible((latestCapturePager?.total ?? latestCaptureRows.length) > 0);
   } catch (error) {
-    setResult(`查询失败：${error.message}`);
+    setResult({ code: 40000, msg: `查询失败：${normalizeErrorMessage(error)}` }, { isError: true });
     latestCaptureRows = [];
     latestCapturePager = null;
     setExportVisible(false);
   }
 }
 
+function reloadFirstPage() {
+  capturePage = 1;
+  void load();
+}
+
 openCreateCaptureModalBtn?.addEventListener("click", openCaptureCreateModal);
 openCaptureOnboardModalBtn?.addEventListener("click", openCaptureOnboardModal);
-captureCreateModalEl?.querySelectorAll("[data-aura-modal-dismiss]").forEach((el) => {
-  el.addEventListener("click", () => closeCaptureCreateModal());
-});
-captureOnboardModalEl?.querySelectorAll("[data-capture-onboard-dismiss]").forEach((el) => {
-  el.addEventListener("click", () => closeCaptureOnboardModal());
-});
 
-document.getElementById("load").addEventListener("click", load);
-document.getElementById("create").addEventListener("click", createMock);
+if (window.aura && typeof window.aura.bindModalDismiss === "function") {
+  window.aura.bindModalDismiss(captureCreateModalEl, { onClose: () => closeModal(captureCreateModalEl) });
+  window.aura.bindModalDismiss(captureOnboardModalEl, {
+    dismissSelector: "[data-capture-onboard-dismiss]",
+    onClose: () => closeModal(captureOnboardModalEl)
+  });
+} else {
+  captureCreateModalEl?.querySelectorAll("[data-aura-modal-dismiss], .aura-modal-backdrop").forEach((el) => {
+    el.addEventListener("click", () => closeModal(captureCreateModalEl));
+  });
+  captureOnboardModalEl?.querySelectorAll("[data-capture-onboard-dismiss], .aura-modal-backdrop").forEach((el) => {
+    el.addEventListener("click", () => closeModal(captureOnboardModalEl));
+  });
+}
+
+document.getElementById("load")?.addEventListener("click", reloadFirstPage);
+clearCaptureFilterBtn?.addEventListener("click", clearCaptureFilters);
+[
+  captureDeviceIdFilterEl,
+  captureChannelNoFilterEl,
+  captureStartTimeFilterEl,
+  captureEndTimeFilterEl
+].forEach((element) => {
+  element?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      reloadFirstPage();
+    }
+  });
+});
+document.getElementById("create")?.addEventListener("click", createMock);
 exportCaptureBtn?.addEventListener("click", async (event) => {
   event.preventDefault();
   event.stopPropagation();
@@ -408,11 +500,16 @@ exportCaptureBtn?.addEventListener("click", async (event) => {
     await window.aura.exportDataset({
       apiBase,
       dataset: "capture",
+      params: {
+        ...getCaptureFilters(),
+        maxRows: 20000
+      },
       onError: (message) => setResult(message)
     });
     return;
   }
-  setResult("导出失败：缺少全局导出能力");
+  setResult({ code: 40000, msg: "导出失败：缺少全局导出能力" }, { isError: true });
 });
+
 fillCapturePushUrlDoc();
 void load();

@@ -9,6 +9,8 @@ using Aura.Api.Internal;
 using Aura.Api.Models;
 using Aura.Api.Serialization;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Npgsql;
 
 namespace Aura.Api;
@@ -77,8 +79,9 @@ internal sealed class IdentityAdminService
             _store.Users[userIdx] = _store.Users[userIdx] with { LastLoginAt = loginAt };
         }
 
+        var permissions = AuraPermissions.ParsePermissionJson(dbUser.PermissionJson);
         var expireAt = DateTimeOffset.UtcNow.AddMinutes(_jwtExpireMinutes);
-        var token = BuildJwtToken(userName, role, dbUser.MustChangePassword);
+        var token = BuildJwtToken(userName, role, dbUser.MustChangePassword, permissions);
         AppendAuthCookie(http, token, expireAt);
 
         var ip = http.Connection.RemoteIpAddress?.ToString() ?? "unknown";
@@ -95,7 +98,8 @@ internal sealed class IdentityAdminService
                 expireAt,
                 userName,
                 role,
-                mustChangePassword = dbUser.MustChangePassword
+                mustChangePassword = dbUser.MustChangePassword,
+                permissions
             }
         });
     }
@@ -111,7 +115,7 @@ internal sealed class IdentityAdminService
         http.Response.Cookies.Append("aura_token", string.Empty, new CookieOptions
         {
             HttpOnly = true,
-            Secure = http.Request.IsHttps,
+            Secure = ShouldUseSecureCookie(http),
             SameSite = SameSiteMode.Lax,
             Path = "/",
             Expires = DateTimeOffset.UnixEpoch
@@ -393,7 +397,8 @@ internal sealed class IdentityAdminService
 
         var role = AuraHelpers.ConvertRole(dbUser.RoleName);
         var expireAt = DateTimeOffset.UtcNow.AddMinutes(_jwtExpireMinutes);
-        var token = BuildJwtToken(userName, role, mustChangePassword: false);
+        var permissions = AuraPermissions.ParsePermissionJson(dbUser.PermissionJson);
+        var token = BuildJwtToken(userName, role, mustChangePassword: false, permissions);
         AppendAuthCookie(http, token, expireAt);
 
         var ip = http.Connection.RemoteIpAddress?.ToString() ?? "unknown";
@@ -514,19 +519,26 @@ internal sealed class IdentityAdminService
         return new string(chars.ToArray());
     }
 
+    private static bool ShouldUseSecureCookie(HttpContext http)
+    {
+        var env = http.RequestServices.GetService<IHostEnvironment>();
+        var configuration = http.RequestServices.GetService<IConfiguration>();
+        var forceSecure = configuration?.GetValue<bool?>("Security:Cookies:ForceSecure") ?? env?.IsProduction() == true;
+        return forceSecure || http.Request.IsHttps;
+    }
     private static void AppendAuthCookie(HttpContext http, string token, DateTimeOffset expireAt)
     {
         http.Response.Cookies.Append("aura_token", token, new CookieOptions
         {
             HttpOnly = true,
-            Secure = http.Request.IsHttps,
+            Secure = ShouldUseSecureCookie(http),
             SameSite = SameSiteMode.Lax,
             Path = "/",
             Expires = expireAt
         });
     }
 
-    private string BuildJwtToken(string userName, string role, bool mustChangePassword)
+    private string BuildJwtToken(string userName, string role, bool mustChangePassword, IReadOnlyList<string>? permissions = null)
     {
         var claims = new List<Claim>
         {
@@ -536,6 +548,10 @@ internal sealed class IdentityAdminService
             new(AuraHelpers.MustChangePasswordClaimType, mustChangePassword ? "true" : "false"),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
+        foreach (var permission in permissions ?? [])
+        {
+            claims.Add(new Claim(AuraPermissions.ClaimType, permission));
+        }
 
         var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtKey));
         var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);

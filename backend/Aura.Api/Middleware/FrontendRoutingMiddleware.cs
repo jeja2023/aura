@@ -5,12 +5,12 @@ namespace Aura.Api.Middleware;
 public sealed class FrontendRoutingMiddleware
 {
     private readonly RequestDelegate _next;
-    private readonly string _frontendRoot;
+    private readonly IFileProvider _frontendFiles;
 
-    public FrontendRoutingMiddleware(RequestDelegate next, string frontendRoot)
+    public FrontendRoutingMiddleware(RequestDelegate next, IFileProvider frontendFiles)
     {
         _next = next;
-        _frontendRoot = frontendRoot;
+        _frontendFiles = frontendFiles;
     }
 
     public async Task InvokeAsync(HttpContext context)
@@ -60,8 +60,8 @@ public sealed class FrontendRoutingMiddleware
                 var seg = path.Trim('/');
                 if (!string.IsNullOrWhiteSpace(seg))
                 {
-                    var htmlFile = Path.Combine(_frontendRoot, seg, $"{seg}.html");
-                    if (File.Exists(htmlFile))
+                    var htmlCandidate = $"{seg}/{seg}.html";
+                    if (_frontendFiles.GetFileInfo(htmlCandidate).Exists)
                     {
                         if (!path.EndsWith("/", StringComparison.Ordinal))
                         {

@@ -19,6 +19,34 @@ let currentFloorId = null;
 const EVENT_FEED_LIMIT = 12;
 const eventFeedItems = [];
 let currentEventFilter = "all";
+const requestJson = window.aura?.requestJson || fallbackRequestJson;
+
+async function fallbackRequestJson(url, options = {}) {
+  const headers = new Headers(options.headers || {});
+  const init = {
+    ...options,
+    credentials: options.credentials || "include",
+    headers
+  };
+  const body = options.body;
+  const isJsonBody = body && typeof body === "object" && !(body instanceof FormData) && !(body instanceof Blob) && !(body instanceof URLSearchParams);
+  if (isJsonBody) {
+    if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+    init.body = JSON.stringify(body);
+  }
+
+  const response = await fetch(url, init);
+  const text = await response.text();
+  let data = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { code: response.ok ? 0 : -1, msg: text };
+    }
+  }
+  return { ok: response.ok, status: response.status, data, response };
+}
 
 function showToast(message, isError = false) {
   const text = String(message ?? "").trim();
@@ -405,11 +433,11 @@ function flashFloorByCameraId(cameraId) {
 
 async function loadBaseData() {
   const [fRes, cRes] = await Promise.all([
-    fetch(`${apiBase}/api/floor/list`, { credentials: "include" }),
-    fetch(`${apiBase}/api/camera/list`, { credentials: "include" })
+    requestJson(`${apiBase}/api/floor/list`),
+    requestJson(`${apiBase}/api/camera/list`)
   ]);
-  const fData = await fRes.json();
-  const cData = await cRes.json();
+  const fData = fRes.data || {};
+  const cData = cRes.data || {};
   const rawFloors = fData.data;
   const rawCams = cData.data;
   floorData = Array.isArray(rawFloors) ? rawFloors : [];
@@ -427,13 +455,13 @@ async function loadBaseData() {
 async function loadHistoryEventFeed() {
   try {
     const [captureRes, alertRes, trackRes] = await Promise.all([
-      fetch(`${apiBase}/api/capture/list?limit=24`, { credentials: "include" }),
-      fetch(`${apiBase}/api/alert/list?limit=24`, { credentials: "include" }),
-      fetch(`${apiBase}/api/track/history/list?limit=24`, { credentials: "include" })
+      requestJson(`${apiBase}/api/capture/list?limit=24`),
+      requestJson(`${apiBase}/api/alert/list?limit=24`),
+      requestJson(`${apiBase}/api/track/history/list?limit=24`)
     ]);
-    const captureData = await captureRes.json();
-    const alertData = await alertRes.json();
-    const trackData = await trackRes.json();
+    const captureData = captureRes.data || {};
+    const alertData = alertRes.data || {};
+    const trackData = trackRes.data || {};
     const captureItems = Array.isArray(captureData?.data)
       ? captureData.data.map((x) => ({
           eventType: "capture",

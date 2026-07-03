@@ -23,6 +23,7 @@ from typing import Any, Callable, Optional
 ROOT = Path(__file__).resolve().parent
 AI_DIR = ROOT / "ai"
 API_DIR = ROOT / "backend" / "Aura.Api"
+DB_MIGRATOR_PROJECT = ROOT / "backend" / "Aura.DbMigrator" / "Aura.DbMigrator.csproj"
 FRONTEND_URL = "https://localhost:5001/"
 AI_LIVE_URL = "http://127.0.0.1:8000/live"
 AI_READY_URL = "http://127.0.0.1:8000/ready"
@@ -113,6 +114,17 @@ def _get_or_default_env(name: str, default: Optional[str]) -> Optional[str]:
     return value if value else default
 
 
+def _env_positive_int(name: str, default: int) -> int:
+    value = str(os.environ.get(name) or "").strip()
+    if not value:
+        return default
+    try:
+        parsed = int(value)
+    except ValueError:
+        return default
+    return parsed if parsed > 0 else default
+
+
 def _env_key_pgsql() -> str:
     return "ConnectionStrings__PgSql"
 
@@ -151,7 +163,52 @@ def _preflight_check() -> None:
         raise RuntimeError("开发配置中的 Redis 连接串仍为占位值，请先配置后再启动。")
     if not ai_base_url:
         raise RuntimeError("开发配置缺少 Ai:BaseUrl")
+
+    os.environ["Jwt__Key"] = jwt_key
+    os.environ[_env_key_pgsql()] = pgsql_conn
+    os.environ[_env_key_redis()] = redis_conn
+    os.environ[_env_key_ai_base_url()] = ai_base_url
     print("[预检] 开发配置检查通过。")
+
+
+def _should_skip_db_migrate(skip_db_migrate_arg: bool) -> bool:
+    value = str(os.environ.get("AURA_SKIP_DB_MIGRATE") or "").strip().lower()
+    return skip_db_migrate_arg or value in {"1", "true", "yes", "on"}
+
+
+def _run_database_migrations(skip_db_migrate_arg: bool) -> None:
+    if _should_skip_db_migrate(skip_db_migrate_arg):
+        print("[迁移] 已跳过数据库迁移。")
+        return
+
+    if not DB_MIGRATOR_PROJECT.exists():
+        raise RuntimeError(f"缺少数据库迁移项目：{DB_MIGRATOR_PROJECT}")
+
+    command_timeout = _env_positive_int("DB_MIGRATION_COMMAND_TIMEOUT_SECONDS", 300)
+    lock_timeout = _env_positive_int("DB_MIGRATION_LOCK_TIMEOUT_SECONDS", 60)
+    cmd = [
+        "dotnet",
+        "run",
+        "--project",
+        str(DB_MIGRATOR_PROJECT),
+        "--",
+        "migrate",
+        "--command-timeout",
+        str(command_timeout),
+        "--lock-timeout",
+        str(lock_timeout),
+    ]
+    print("[迁移] 执行数据库迁移（Aura.DbMigrator migrate）...")
+    result = subprocess.run(
+        cmd,
+        cwd=str(ROOT),
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"数据库迁移失败，退出码：{result.returncode}")
+    print("[迁移] 数据库迁移检查完成。")
 
 
 def _extract_dev_admin_password_from_log_line(line: str) -> Optional[str]:
@@ -263,10 +320,12 @@ def _ensure_local_port_available(port: int) -> None:
 
 def main() -> int:
     run_until_ready = ("--run-until-ready" in sys.argv) or ("--check-only" in sys.argv)
+    skip_db_migrate = "--skip-db-migrate" in sys.argv
     kill_conflicts = "--kill-conflicts" in sys.argv
 
     _load_env_file(ROOT / ".env")
     _preflight_check()
+    _run_database_migrations(skip_db_migrate)
 
     # 端口清理保持一致策略：仅在显式 --kill-conflicts 时才执行强制结束。
     # 默认只检查占用并提示，避免误杀其他会话进程。

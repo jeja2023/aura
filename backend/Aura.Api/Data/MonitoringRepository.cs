@@ -9,11 +9,23 @@ internal sealed class MonitoringRepository
 {
     public const int DefaultAlertLimit = 500;
     public const int MaxAlertLimit = 2000;
+    public const int DefaultAlertPageSize = 20;
+    public const int MaxAlertPageSize = 100;
     public const int DefaultJudgeLimit = 500;
     public const int MaxJudgeLimit = 5000;
 
     private readonly PgSqlConnectionFactory _connectionFactory;
     private readonly ILogger<MonitoringRepository>? _logger;
+    private const string AlertDetailTextSql = """
+        COALESCE(
+          CASE
+            WHEN detail_json IS NULL THEN ''
+            WHEN jsonb_typeof(detail_json) = 'string' THEN trim(both '"' from detail_json::text)
+            ELSE CAST(detail_json AS TEXT)
+          END,
+          ''
+        )
+        """;
 
     public MonitoringRepository(PgSqlConnectionFactory connectionFactory, ILogger<MonitoringRepository>? logger = null)
     {
@@ -93,6 +105,77 @@ internal sealed class MonitoringRepository
             },
             fallback: new List<DbAlert>(),
             logContext: new { limit });
+    }
+
+    public async Task<DbPagedResult<DbAlert>> GetAlertsPagedAsync(
+        string? typeKeyword,
+        string? detailKeyword,
+        DateTimeOffset? from,
+        DateTimeOffset? to,
+        int page,
+        int pageSize)
+    {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize <= 0 ? DefaultAlertPageSize : pageSize, 1, MaxAlertPageSize);
+
+        var type = string.IsNullOrWhiteSpace(typeKeyword) ? null : typeKeyword.Trim();
+        var detail = string.IsNullOrWhiteSpace(detailKeyword) ? null : detailKeyword.Trim();
+        DateTime? fromLocal = from.HasValue ? ToLocalTimestamp(from.Value) : null;
+        DateTime? toLocal = to.HasValue ? ToLocalTimestamp(to.Value) : null;
+
+        return await PgSqlRepositoryHelpers.ExecuteAsync(
+            _connectionFactory,
+            _logger,
+            "数据库分页查询告警列表",
+            async conn =>
+            {
+                var where = new List<string>();
+                var args = new DynamicParameters();
+                args.Add("PageSize", pageSize);
+                args.Add("Offset", (page - 1) * pageSize);
+
+                if (!string.IsNullOrWhiteSpace(type))
+                {
+                    where.Add("alert_type ILIKE @TypeKeyword");
+                    args.Add("TypeKeyword", $"%{type}%");
+                }
+
+                if (!string.IsNullOrWhiteSpace(detail))
+                {
+                    where.Add($"{AlertDetailTextSql} ILIKE @DetailKeyword");
+                    args.Add("DetailKeyword", $"%{detail}%");
+                }
+
+                if (fromLocal.HasValue)
+                {
+                    where.Add("created_at >= @From");
+                    args.Add("From", fromLocal.Value);
+                }
+
+                if (toLocal.HasValue)
+                {
+                    where.Add("created_at <= @To");
+                    args.Add("To", toLocal.Value);
+                }
+
+                var whereSql = where.Count == 0 ? string.Empty : "WHERE " + string.Join(" AND ", where);
+                var total = await conn.ExecuteScalarAsync<long>($"SELECT COUNT(1) FROM alert_record {whereSql}", args);
+                var rows = await conn.QueryAsync<DbAlert>(
+                    $"""
+                    SELECT alert_id AS AlertId, alert_type AS AlertType,
+                           {AlertDetailTextSql} AS Detail,
+                           created_at AS CreatedAt
+                    FROM alert_record
+                    {whereSql}
+                    ORDER BY created_at DESC, alert_id DESC
+                    LIMIT @PageSize OFFSET @Offset
+                    """,
+                    args);
+
+                return new DbPagedResult<DbAlert>(rows.ToList(), total > int.MaxValue ? int.MaxValue : (int)total, true);
+            },
+            fallback: new DbPagedResult<DbAlert>(new List<DbAlert>(), 0, false),
+            logContext: new { typeKeyword = type, detailKeyword = detail, from, to, page, pageSize });
     }
 
     public async Task<long?> GetAlertCountAsync()

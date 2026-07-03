@@ -1,38 +1,25 @@
-/* 文件：重试队列服务（RetryQueueService.cs） | File: Retry Queue Service */
+﻿/* 文件：重试队列服务（RetryQueueService.cs） | File: Retry Queue Service */
 using System.Text.Json;
 using Aura.Api.Serialization;
-using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
 
 namespace Aura.Api.Cache;
 
 internal sealed class RetryQueueService
 {
+    private readonly RedisConnectionProvider _provider;
     private readonly IDatabase? _db;
     private readonly ILogger<RetryQueueService> _logger;
     private const string QueueKey = "aura:retry:capture";
 
-    public RetryQueueService(string? connectionString, ILogger<RetryQueueService> logger)
+    public RetryQueueService(RedisConnectionProvider provider, ILogger<RetryQueueService> logger)
     {
+        _provider = provider;
+        _db = provider.Database;
         _logger = logger;
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            _logger.LogWarning("Redis 重试队列未启用：连接串为空。");
-            return;
-        }
-        try
-        {
-            var mux = ConnectionMultiplexer.Connect(connectionString);
-            _db = mux.GetDatabase();
-        }
-        catch (Exception ex)
-        {
-            _db = null;
-            _logger.LogError(ex, "Redis 重试队列初始化失败，已降级为禁用状态。");
-        }
     }
 
-    public bool Enabled => _db is not null;
+    public bool Enabled => _provider.Enabled;
 
     public async Task EnqueueAsync(RetryTask task)
     {
@@ -47,6 +34,7 @@ internal sealed class RetryQueueService
         }
         catch (Exception ex)
         {
+            _provider.RecordFailure(ex, "retry-enqueue");
             _logger.LogError(ex, "重试任务入队失败。captureId={CaptureId}, deviceId={DeviceId}, retry={RetryCount}", task.CaptureId, task.DeviceId, task.RetryCount);
         }
     }
@@ -68,6 +56,7 @@ internal sealed class RetryQueueService
         }
         catch (Exception ex)
         {
+            _provider.RecordFailure(ex, "retry-dequeue");
             _logger.LogError(ex, "重试任务出队失败。");
             return null;
         }
@@ -85,6 +74,7 @@ internal sealed class RetryQueueService
         }
         catch (Exception ex)
         {
+            _provider.RecordFailure(ex, "retry-length");
             _logger.LogError(ex, "查询重试队列长度失败。");
             return 0;
         }

@@ -15,19 +15,22 @@
   <aside class="app-sidebar" id="auraSidebar" aria-label="主导航"></aside>
   <div class="app-frame">
     <header class="app-topbar">
-      <button type="button" class="app-sidebar-toggle" id="auraSidebarToggle" aria-label="展开或收起导航">菜单</button>
+      <button type="button" class="app-sidebar-toggle" id="auraSidebarToggle" aria-label="展开或收起导航菜单"></button>
       <h1 class="app-page-title"></h1>
       <div class="app-topbar-actions"></div>
     </header>
     <main class="app-content">
       <div class="page">
         <div class="log-toolbar">
-          <select id="logType">
+          <select id="logType" class="aura-input">
             <option value="operation">操作日志</option>
             <option value="system">系统日志</option>
           </select>
           <input id="keyword" class="aura-search-input" placeholder="关键字筛选，如设备注册" />
+          <label>开始时间 <input id="logStartTime" class="aura-input log-filter-time" type="datetime-local" /></label>
+          <label>结束时间 <input id="logEndTime" class="aura-input log-filter-time" type="datetime-local" /></label>
           <button id="load" class="btn-secondary" type="button">刷新日志</button>
+          <button id="clearLogFilter" class="btn-secondary" type="button">清空筛选</button>
           <button id="exportLog" class="btn-secondary" type="button" hidden>导出</button>
         </div>
         <pre id="result" class="aura-status aura-display-box" role="status" hidden aria-live="polite"></pre>

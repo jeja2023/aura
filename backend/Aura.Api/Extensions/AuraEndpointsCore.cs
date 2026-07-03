@@ -85,12 +85,14 @@ internal static class AuraEndpointsCore
 
             var aiReady = false;
             var aiModelLoaded = false;
+            var aiInferenceReady = false;
             AiClusterHealth? aiHealth = null;
             try
             {
                 aiHealth = await ai.GetClusterHealthAsync();
                 aiReady = aiHealth.AnyReachable;
                 aiModelLoaded = aiHealth.AnyModelLoaded;
+                aiInferenceReady = aiHealth.AnyInferenceReady;
             }
             catch (Exception ex)
             {
@@ -110,12 +112,13 @@ internal static class AuraEndpointsCore
 
             var checks = new Dictionary<string, bool>
             {
-                ["jwt"] = !string.IsNullOrWhiteSpace(jwtSecret) && !jwtSecret.Contains("PLEASE_", StringComparison.OrdinalIgnoreCase),
-                ["hmac"] = !string.IsNullOrWhiteSpace(hmacSecret) && !hmacSecret.Contains("PLEASE_", StringComparison.OrdinalIgnoreCase),
+                ["jwt"] = !ServiceExtensions.IsPlaceholderValue(jwtSecret, "PLEASE_", "REPLACE_", "aura-dev-jwt-key-please-change"),
+                ["hmac"] = !ServiceExtensions.IsPlaceholderValue(hmacSecret, "PLEASE_", "REPLACE_", "demo-hmac-secret"),
                 ["pgsql"] = pgsqlOk,
                 ["redis"] = cache.Enabled,
                 ["ai_service"] = aiReady,
                 ["ai_model"] = aiModelLoaded,
+                ["ai_inference"] = aiInferenceReady,
                 ["alertNotify"] = !alertNotifyRecentFailure
             };
             var ready = checks.Values.All(v => v);
@@ -135,6 +138,7 @@ internal static class AuraEndpointsCore
                             configuredNodes = aiHealth.ConfiguredNodeCount,
                             reachableNodes = aiHealth.ReachableNodeCount,
                             modelLoadedNodes = aiHealth.ModelLoadedNodeCount,
+                            inferenceReadyNodes = aiHealth.InferenceReadyNodeCount,
                             nodes = aiHealth.Nodes
                         }
                 },
@@ -148,7 +152,7 @@ internal static class AuraEndpointsCore
             await alertNotifier.NotifyAsync(new AlertNotifyMessage(alertType, req.Detail ?? "自检消息", "ops.test", DateTimeOffset.Now));
             await audit.InsertOperationAsync("系统管理员", "告警通知自检", $"类型={alertType}");
             return Results.Ok(new { code = 0, msg = "已发送" });
-        }).RequireAuthorization("超级管理员");
+        }).RequireAuthorization("告警操作");
 
         app.MapGet("/api/ops/alert-notify-stats", () => Results.Ok(new { code = 0, msg = "获取统计成功", data = alertNotifier.GetStats(), time = DateTimeOffset.Now }))
             .RequireAuthorization("超级管理员");
@@ -171,7 +175,7 @@ internal static class AuraEndpointsCore
                 },
                 time = DateTimeOffset.Now
             });
-        }).RequireAuthorization("超级管理员");
+        }).RequireAuthorization("AI配置");
 
         app.MapPut("/api/ops/ai-settings", async (HttpContext http, OpsAiSettingsUpdateReq req) =>
         {
@@ -216,6 +220,6 @@ internal static class AuraEndpointsCore
                 },
                 time = DateTimeOffset.Now
             });
-        }).RequireAuthorization("超级管理员");
+        }).RequireAuthorization("AI配置");
     }
 }

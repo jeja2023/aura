@@ -281,16 +281,18 @@ internal sealed class AiClient
             var code = TryGetInt(payload, "code");
             var message = TryGetString(payload, "msg") ?? string.Empty;
             var modelLoaded = TryGetBool(payload, "model_loaded") == true;
-            var reachable = res.IsSuccessStatusCode && payload.HasValue;
+            var inferenceReady = TryGetBool(payload, "inference_ready") ?? modelLoaded;
+            var reachable = payload.HasValue;
             return new AiEndpointHealth
             {
                 BaseUrl = baseUrl,
                 Reachable = reachable,
                 ModelLoaded = reachable && modelLoaded,
+                InferenceReady = reachable && inferenceReady,
                 StatusCode = (int)res.StatusCode,
                 Code = code,
                 Message = message,
-                Error = reachable ? string.Empty : $"HTTP {(int)res.StatusCode}",
+                Error = payload.HasValue ? string.Empty : $"HTTP {(int)res.StatusCode}",
                 Payload = payload
             };
         }
@@ -302,6 +304,7 @@ internal sealed class AiClient
                 BaseUrl = baseUrl,
                 Reachable = false,
                 ModelLoaded = false,
+                InferenceReady = false,
                 StatusCode = null,
                 Code = null,
                 Message = string.Empty,
@@ -534,12 +537,15 @@ internal sealed class AiClusterHealth
     public int ConfiguredNodeCount => Nodes.Count;
     public int ReachableNodeCount => Nodes.Count(x => x.Reachable);
     public int ModelLoadedNodeCount => Nodes.Count(x => x.ModelLoaded);
+    public int InferenceReadyNodeCount => Nodes.Count(x => x.InferenceReady);
     public bool AnyReachable => ReachableNodeCount > 0;
     public bool AnyModelLoaded => ModelLoadedNodeCount > 0;
+    public bool AnyInferenceReady => InferenceReadyNodeCount > 0;
 
     [JsonIgnore]
     public AiEndpointHealth? BestNode =>
-        Nodes.FirstOrDefault(x => x.Reachable && x.ModelLoaded)
+        Nodes.FirstOrDefault(x => x.Reachable && x.InferenceReady)
+        ?? Nodes.FirstOrDefault(x => x.Reachable && x.ModelLoaded)
         ?? Nodes.FirstOrDefault(x => x.Reachable);
 }
 
@@ -548,6 +554,7 @@ internal sealed class AiEndpointHealth
     public string BaseUrl { get; init; } = string.Empty;
     public bool Reachable { get; init; }
     public bool ModelLoaded { get; init; }
+    public bool InferenceReady { get; init; }
     public int? StatusCode { get; init; }
     public int? Code { get; init; }
     public string Message { get; init; } = string.Empty;

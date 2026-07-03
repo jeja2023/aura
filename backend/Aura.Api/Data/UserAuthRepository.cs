@@ -2,6 +2,7 @@
 using Dapper;
 using Microsoft.Extensions.Logging;
 using Npgsql;
+using System.Diagnostics;
 
 namespace Aura.Api.Data;
 
@@ -26,6 +27,7 @@ internal sealed class UserAuthRepository
             return await conn.QueryFirstOrDefaultAsync<DbUser>(
                 """
                 SELECT u.user_name AS UserName, u.password_hash AS PasswordHash, r.role_name AS RoleName,
+                       COALESCE(CAST(r.permission_json AS TEXT), '[]') AS PermissionJson,
                        u.must_change_password AS MustChangePassword
                 FROM sys_user u
                 LEFT JOIN sys_role r ON u.role_id = r.role_id
@@ -105,12 +107,14 @@ internal sealed class UserAuthRepository
         }
     }
 
-    public async Task<(List<DbUserListItem> Rows, int Total)> GetUsersAsync(string? keyword, int page, int pageSize)
+    public async Task<DbPagedResult<DbUserListItem>> GetUsersAsync(string? keyword, int page, int pageSize)
     {
         try
         {
             if (page <= 0) page = 1;
             if (pageSize <= 0) pageSize = 20;
+            pageSize = Math.Clamp(pageSize, 1, 1000);
+            var sw = Stopwatch.StartNew();
 
             await using var conn = CreateConnection();
             var trimmedKeyword = keyword?.Trim();
@@ -127,7 +131,7 @@ internal sealed class UserAuthRepository
 
             if (total <= 0)
             {
-                return ([], 0);
+                return new DbPagedResult<DbUserListItem>([], 0, true);
             }
 
             var maxPage = Math.Max(1, (int)Math.Ceiling(total / (double)pageSize));
@@ -151,12 +155,13 @@ internal sealed class UserAuthRepository
                     pageSize,
                     offset
                 });
-            return (rows.ToList(), total);
+            PgSqlRepositoryHelpers.LogIfSlow(_logger, "数据库分页查询用户列表", sw.ElapsedMilliseconds, new { keyword = trimmedKeyword, page, pageSize });
+            return new DbPagedResult<DbUserListItem>(rows.ToList(), total, true);
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库分页查询用户列表失败。keyword={Keyword}, page={Page}, pageSize={PageSize}", keyword, page, pageSize);
-            return ([], 0);
+            return new DbPagedResult<DbUserListItem>([], 0, false);
         }
     }
 

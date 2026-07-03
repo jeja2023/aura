@@ -1,5 +1,6 @@
 using Aura.Api.Data;
 using Aura.Api.Models;
+using Aura.Api.Internal;
 
 namespace Aura.Api.Capture;
 
@@ -93,10 +94,29 @@ internal sealed class CaptureOpsService
                 to = parsedTo;
             }
 
-            var (dbRows, total) = await _captureRepository.GetCapturesPagedAsync(from, to, pageNum, pageSize);
+            long? deviceId = null;
+            int? channelNo = null;
+            var deviceIdQ = httpReq.Query["deviceId"].FirstOrDefault();
+            var channelNoQ = httpReq.Query["channelNo"].FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(deviceIdQ) && long.TryParse(deviceIdQ, out var parsedDeviceId) && parsedDeviceId > 0)
+            {
+                deviceId = parsedDeviceId;
+            }
+
+            if (!string.IsNullOrWhiteSpace(channelNoQ) && int.TryParse(channelNoQ, out var parsedChannelNo) && parsedChannelNo > 0)
+            {
+                channelNo = parsedChannelNo;
+            }
+
+            var dbResult = await _captureRepository.GetCapturesPagedAsync(from, to, pageNum, pageSize, deviceId, channelNo);
             if (_pgSqlConnectionFactory.IsConfigured)
             {
-                var mapped = dbRows.Select(x => new CaptureEntity(
+                if (!dbResult.Succeeded)
+                {
+                    return AuraApiResults.ServiceUnavailable("数据库查询失败，无法获取抓拍列表", 50311);
+                }
+
+                var mapped = dbResult.Rows.Select(x => new CaptureEntity(
                     x.CaptureId,
                     x.DeviceId,
                     x.ChannelNo,
@@ -104,7 +124,7 @@ internal sealed class CaptureOpsService
                     x.MetadataJson,
                     x.ImagePath));
 
-                return Results.Ok(new { code = 0, msg = "查询成功", data = mapped, pagination = new { total, page = pageNum, pageSize } });
+                return Results.Ok(new { code = 0, msg = "查询成功", data = mapped, pagination = new { total = dbResult.Total, page = pageNum, pageSize } });
             }
 
             IEnumerable<CaptureEntity> mem = _store.Captures;
@@ -118,6 +138,16 @@ internal sealed class CaptureOpsService
                 mem = mem.Where(x => x.CaptureTime <= to.Value);
             }
 
+            if (deviceId.HasValue)
+            {
+                mem = mem.Where(x => x.DeviceId == deviceId.Value);
+            }
+
+            if (channelNo.HasValue)
+            {
+                mem = mem.Where(x => x.ChannelNo == channelNo.Value);
+            }
+
             var ordered = mem.OrderByDescending(x => x.CaptureId).ToList();
             var memTotal = ordered.Count;
             var slice = ordered.Skip((pageNum - 1) * pageSize).Take(pageSize).ToList();
@@ -128,10 +158,15 @@ internal sealed class CaptureOpsService
         var limit = int.TryParse(limitStr, out var parsedLimit) ? parsedLimit : defaultLimit;
         limit = Math.Clamp(limit, 1, maxLimit);
 
-        var rows = await _captureRepository.GetCapturesAsync(limit);
+        var dbLimitResult = await _captureRepository.GetCapturesPagedAsync(null, null, 1, limit);
         if (_pgSqlConnectionFactory.IsConfigured)
         {
-            var mapped = rows.Select(x => new CaptureEntity(
+            if (!dbLimitResult.Succeeded)
+            {
+                return AuraApiResults.ServiceUnavailable("数据库查询失败，无法获取抓拍列表", 50311);
+            }
+
+            var mapped = dbLimitResult.Rows.Select(x => new CaptureEntity(
                 x.CaptureId,
                 x.DeviceId,
                 x.ChannelNo,

@@ -4,9 +4,11 @@ using Aura.Api.Export;
 using Aura.Api.Internal;
 using Aura.Api.Models;
 using Aura.Api.Ops;
+using Aura.Api.Services;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Aura.Api.Extensions;
 
@@ -20,6 +22,7 @@ internal static class AuraEndpointsDomain
         var cache = ctx.Cache;
         var store = ctx.Store;
         var allow = ctx.AllowInMemoryFallback;
+        var pgSqlConnectionFactory = app.ServiceProvider.GetRequiredService<PgSqlConnectionFactory>();
 
         var roiGroup = app.MapGroup("/api/roi");
         roiGroup.MapGet("/list", async (HttpRequest httpReq) =>
@@ -132,10 +135,82 @@ internal static class AuraEndpointsDomain
         var alertGroup = app.MapGroup("/api/alert");
         alertGroup.MapGet("/list", async (HttpRequest httpReq) =>
         {
+            if (int.TryParse(httpReq.Query["page"].FirstOrDefault(), out var pageNum) && pageNum > 0)
+            {
+                var pageSize = int.TryParse(httpReq.Query["pageSize"].FirstOrDefault(), out var ps)
+                    ? Math.Clamp(ps, 1, MonitoringRepository.MaxAlertPageSize)
+                    : MonitoringRepository.DefaultAlertPageSize;
+                var typeKeyword = httpReq.Query["typeKeyword"].FirstOrDefault();
+                var detailKeyword = httpReq.Query["detailKeyword"].FirstOrDefault();
+
+                DateTimeOffset? from = null;
+                DateTimeOffset? to = null;
+                var fromQ = httpReq.Query["from"].FirstOrDefault();
+                var toQ = httpReq.Query["to"].FirstOrDefault();
+                if (!string.IsNullOrWhiteSpace(fromQ) && DateTimeOffset.TryParse(fromQ, out var parsedFrom))
+                {
+                    from = parsedFrom;
+                }
+
+                if (!string.IsNullOrWhiteSpace(toQ) && DateTimeOffset.TryParse(toQ, out var parsedTo))
+                {
+                    to = parsedTo;
+                }
+
+                var pagedResult = await monitoring.GetAlertsPagedAsync(typeKeyword, detailKeyword, from, to, pageNum, pageSize);
+                if (pgSqlConnectionFactory.IsConfigured)
+                {
+                    if (!pagedResult.Succeeded)
+                    {
+                        return AuraApiResults.ServiceUnavailable("数据库查询失败，无法获取告警列表", 50311);
+                    }
+
+                    return Results.Ok(new { code = 0, msg = "查询成功", data = pagedResult.Rows, pager = new { page = pageNum, pageSize, total = pagedResult.Total } });
+                }
+
+                if (!allow) return Results.Ok(new { code = 0, msg = "查询成功", data = new List<DbAlert>(), pager = new { page = pageNum, pageSize, total = 0 } });
+
+                IEnumerable<AlertEntity> mem = store.Alerts;
+                if (!string.IsNullOrWhiteSpace(typeKeyword))
+                {
+                    var keyword = typeKeyword.Trim();
+                    mem = mem.Where(x => x.AlertType.Contains(keyword, StringComparison.OrdinalIgnoreCase));
+                }
+
+                if (!string.IsNullOrWhiteSpace(detailKeyword))
+                {
+                    var keyword = detailKeyword.Trim();
+                    mem = mem.Where(x => x.Detail.Contains(keyword, StringComparison.OrdinalIgnoreCase));
+                }
+
+                if (from.HasValue)
+                {
+                    mem = mem.Where(x => x.CreatedAt >= from.Value);
+                }
+
+                if (to.HasValue)
+                {
+                    mem = mem.Where(x => x.CreatedAt <= to.Value);
+                }
+
+                var ordered = mem.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.AlertId).ToList();
+                var memTotal = ordered.Count;
+                var slice = ordered.Skip((pageNum - 1) * pageSize).Take(pageSize).ToList();
+                return Results.Ok(new { code = 0, msg = "查询成功", data = slice, pager = new { page = pageNum, pageSize, total = memTotal } });
+            }
+
             var limit = int.TryParse(httpReq.Query["limit"].FirstOrDefault(), out var l) ? l : MonitoringRepository.DefaultAlertLimit;
             limit = Math.Clamp(limit, 1, MonitoringRepository.MaxAlertLimit);
-            var rows = await monitoring.GetAlertsAsync(limit);
-            if (rows.Count > 0) return Results.Ok(new { code = 0, msg = "查询成功", data = rows });
+            var limitedResult = await monitoring.GetAlertsPagedAsync(null, null, null, null, 1, limit);
+            if (pgSqlConnectionFactory.IsConfigured)
+            {
+                if (!limitedResult.Succeeded)
+                {
+                    return AuraApiResults.ServiceUnavailable("数据库查询失败，无法获取告警列表", 50311);
+                }
+
+                return Results.Ok(new { code = 0, msg = "查询成功", data = limitedResult.Rows });
+            }
             if (!allow) return Results.Ok(new { code = 0, msg = "查询成功", data = new List<DbAlert>() });
             return Results.Ok(new { code = 0, msg = "查询成功", data = store.Alerts.OrderByDescending(x => x.AlertId).Take(limit) });
         }).RequireAuthorization("楼栋管理员");
@@ -148,7 +223,22 @@ internal static class AuraEndpointsDomain
             var entity = new AlertEntity(Interlocked.Increment(ref store.AlertSeed), req.AlertType, req.Detail, DateTimeOffset.Now);
             store.Alerts.Add(entity);
             return Results.Ok(new { code = 0, msg = "创建成功", data = entity });
-        }).RequireAuthorization("楼栋管理员");
+        }).RequireAuthorization("告警操作");
+
+        alertGroup.MapGet("/workflow/list", async (ExtensionRepository extensions, string? status, int limit = 100) =>
+        {
+            var rows = await extensions.GetAlertWorkflowsAsync(status, limit);
+            return Results.Ok(new { code = 0, msg = "查询成功", data = rows });
+        }).RequireAuthorization("告警操作");
+
+        alertGroup.MapPost("/{alertId:long}/workflow", async (HttpContext http, long alertId, AlertWorkflowUpdateReq req, ExtensionRepository extensions) =>
+        {
+            var userName = http.User.Identity?.Name ?? "system";
+            var workflowId = await extensions.UpsertAlertWorkflowAsync(alertId, req, userName);
+            if (!workflowId.HasValue) return AuraApiResults.ServiceUnavailable("告警流程写入失败", 50301);
+            await audit.InsertOperationAsync(userName, "告警闭环更新", $"alertId={alertId}, workflowId={workflowId.Value}, status={req.Status}");
+            return Results.Ok(new { code = 0, msg = "告警流程已更新", data = new { workflowId = workflowId.Value, alertId } });
+        }).RequireAuthorization("告警操作");
 
         var statsGroup = app.MapGroup("/api/stats");
         statsGroup.MapGet("/overview", async (StatsApplicationService svc) =>
@@ -158,9 +248,9 @@ internal static class AuraEndpointsDomain
                 var data = await svc.GetOverviewAsync();
                 return Results.Ok(new { code = 0, msg = "查询成功", data });
             }
-            catch (Exception ex)
+            catch
             {
-                return Results.Ok(new { code = 50001, msg = $"概览查询失败：{ex.Message}" });
+                return AuraApiResults.InternalServerError("概览查询失败", 50001);
             }
         }).RequireAuthorization("楼栋管理员");
 
@@ -171,19 +261,19 @@ internal static class AuraEndpointsDomain
                 var data = await svc.GetDashboardAsync();
                 return Results.Ok(new { code = 0, msg = "查询成功", data });
             }
-            catch (Exception ex)
+            catch
             {
-                return Results.Ok(new { code = 50002, msg = $"图表数据查询失败：{ex.Message}" });
+                return AuraApiResults.InternalServerError("图表数据查询失败", 50002);
             }
         }).RequireAuthorization("楼栋管理员");
 
         var exportGroup = app.MapGroup("/api/export");
-        exportGroup.MapGet("/{type}", async (HttpRequest request, string type, ExportApplicationService svc, string dataset = "capture", int maxRows = 5000, string? keyword = null) =>
+        exportGroup.MapGet("/{type}", async (HttpRequest request, string type, ExportApplicationService svc, string dataset = "capture", int maxRows = 5000, string? keyword = null, DateTimeOffset? from = null, DateTimeOffset? to = null, long? deviceId = null, int? channelNo = null, string? typeKeyword = null, string? detailKeyword = null) =>
         {
             var rl = await AuraHelpers.CheckRateLimitAsync(request, cache, "export", 5, TimeSpan.FromMinutes(1));
             if (rl is not null) return rl;
-            return await svc.ExportAsync(type, dataset, maxRows, keyword);
-        }).RequireAuthorization("楼栋管理员");
+            return await svc.ExportAsync(type, dataset, maxRows, keyword, new ExportApplicationService.ExportFilterOptions(from, to, deviceId, channelNo, typeKeyword, detailKeyword));
+        }).RequireAuthorization("数据导出");
 
         var outputGroup = app.MapGroup("/api/output");
         outputGroup.MapGet("/events", async (DateTimeOffset? from, DateTimeOffset? to, OutputApplicationService svc, int page = 1, int pageSize = 200) => await svc.GetEventsAsync(from, to, page, pageSize)).RequireAuthorization("超级管理员");
@@ -206,14 +296,131 @@ internal static class AuraEndpointsDomain
         var spaceGroup = app.MapGroup("/api/space");
         spaceGroup.MapPost("/collision/check", async (SpaceCollisionReq req, SpaceCollisionService svc) => await svc.CheckCollisionAsync(req)).RequireAuthorization("楼栋管理员");
 
+        spaceGroup.MapGet("/topology", async (ExtensionRepository extensions, int limit = 1000) =>
+        {
+            var rows = await extensions.GetSpaceTopologyAsync(limit);
+            return Results.Ok(new { code = 0, msg = "查询成功", data = rows });
+        }).RequireAuthorization("SpaceManage");
+
+        spaceGroup.MapPost("/topology", async (SpaceTopologyEdgeReq req, ExtensionRepository extensions) =>
+        {
+            var edgeId = await extensions.CreateSpaceTopologyEdgeAsync(req);
+            if (!edgeId.HasValue) return AuraApiResults.ServiceUnavailable("空间拓扑写入失败", 50301);
+            return Results.Ok(new { code = 0, msg = "空间拓扑已保存", data = new { edgeId = edgeId.Value } });
+        }).RequireAuthorization("SpaceManage");
+
+        spaceGroup.MapGet("/heatmap", async (ExtensionRepository extensions, long? floorId, int limit = 100) =>
+        {
+            var rows = await extensions.GetSpaceHeatmapsAsync(floorId, limit);
+            return Results.Ok(new { code = 0, msg = "查询成功", data = rows });
+        }).RequireAuthorization("SpaceManage");
+
+        spaceGroup.MapPost("/heatmap", async (SpaceHeatmapSnapshotReq req, ExtensionRepository extensions) =>
+        {
+            var snapshotId = await extensions.CreateSpaceHeatmapAsync(req);
+            if (!snapshotId.HasValue) return AuraApiResults.ServiceUnavailable("热力图快照写入失败", 50301);
+            return Results.Ok(new { code = 0, msg = "热力图快照已保存", data = new { snapshotId = snapshotId.Value } });
+        }).RequireAuthorization("SpaceManage");
+
         var clusterGroup = app.MapGroup("/api/cluster");
         clusterGroup.MapPost("/run", async (ClusterRunReq req, ClusterApplicationService svc) => await svc.RunAsync(req)).RequireAuthorization("超级管理员");
         clusterGroup.MapGet("/list", async (MonitoringQueryService svc) => await svc.GetClustersAsync()).RequireAuthorization("楼栋管理员");
 
         var operationGroup = app.MapGroup("/api/operation");
-        operationGroup.MapGet("/list", async (OperationQueryService svc, string? keyword, int page = 1, int pageSize = 20) => await svc.GetOperationsAsync(keyword, page, pageSize)).RequireAuthorization("超级管理员");
+                operationGroup.MapGet("/list", async (OperationQueryService svc, string? keyword, DateTimeOffset? from, DateTimeOffset? to, int page = 1, int pageSize = 20) =>
+        {
+            var result = await svc.GetOperationsAsync(keyword, page, pageSize, from, to);
+            if (!result.Succeeded) return AuraApiResults.ServiceUnavailable("数据库查询失败，无法获取操作日志", 50311);
+            return Results.Ok(new { code = 0, msg = "查询成功", data = result.Data, pager = result.Pager });
+        }).RequireAuthorization("超级管理员");
 
         var systemLogGroup = app.MapGroup("/api/system-log");
-        systemLogGroup.MapGet("/list", async (SystemLogQueryService svc, string? keyword, int page = 1, int pageSize = 20) => await svc.GetSystemLogsAsync(keyword, page, pageSize)).RequireAuthorization("超级管理员");
+                systemLogGroup.MapGet("/list", async (SystemLogQueryService svc, string? keyword, DateTimeOffset? from, DateTimeOffset? to, int page = 1, int pageSize = 20) =>
+        {
+            var result = await svc.GetSystemLogsAsync(keyword, page, pageSize, from, to);
+            if (!result.Succeeded) return AuraApiResults.ServiceUnavailable("数据库查询失败，无法获取系统日志", 50311);
+            return Results.Ok(new { code = 0, msg = "查询成功", data = result.Data, pager = result.Pager });
+        }).RequireAuthorization("超级管理员");
+
+        var reportGroup = app.MapGroup("/api/report");
+        reportGroup.MapGet("/schedule/list", async (ExtensionRepository extensions, int limit = 200) =>
+        {
+            var rows = await extensions.GetReportSchedulesAsync(limit);
+            return Results.Ok(new { code = 0, msg = "查询成功", data = rows });
+        }).RequireAuthorization("ReportManage");
+
+        reportGroup.MapPost("/schedule", async (HttpContext http, ReportScheduleReq req, ExtensionRepository extensions) =>
+        {
+            var scheduleId = await extensions.CreateReportScheduleAsync(req, http.User.Identity?.Name ?? "system");
+            if (!scheduleId.HasValue) return AuraApiResults.ServiceUnavailable("报表计划写入失败", 50301);
+            return Results.Ok(new { code = 0, msg = "报表计划已保存", data = new { scheduleId = scheduleId.Value } });
+        }).RequireAuthorization("ReportManage");
+
+        reportGroup.MapGet("/run/list", async (ExtensionRepository extensions, int limit = 100) =>
+        {
+            var rows = await extensions.GetReportRunsAsync(limit);
+            return Results.Ok(new { code = 0, msg = "查询成功", data = rows });
+        }).RequireAuthorization("ReportManage");
+
+        reportGroup.MapPost("/generate", async (HttpContext http, ReportGenerateReq req, ReportAutomationService svc) =>
+        {
+            var result = await svc.GenerateAsync(req.ScheduleId, req.ReportType, req.RangeStart, req.RangeEnd, req.RoleName, req.DeliveryChannel, http.User.Identity?.Name ?? "system");
+            if (result is null) return AuraApiResults.ServiceUnavailable("报表生成失败", 50301);
+            return Results.Ok(new { code = 0, msg = "报表已生成并投递", data = result });
+        }).RequireAuthorization("ReportManage");
+
+        var tenantGroup = app.MapGroup("/api/tenant");
+        tenantGroup.MapGet("/list", async (ExtensionRepository extensions, int limit = 200) =>
+        {
+            var rows = await extensions.GetTenantsAsync(limit);
+            return Results.Ok(new { code = 0, msg = "查询成功", data = rows });
+        }).RequireAuthorization("TenantManage");
+
+        tenantGroup.MapPost("/project", async (TenantProjectReq req, ExtensionRepository extensions) =>
+        {
+            var tenantId = await extensions.CreateTenantAsync(req);
+            if (!tenantId.HasValue) return AuraApiResults.ServiceUnavailable("租户项目写入失败", 50301);
+            return Results.Ok(new { code = 0, msg = "租户项目已保存", data = new { tenantId = tenantId.Value } });
+        }).RequireAuthorization("TenantManage");
+
+        tenantGroup.MapGet("/scope/list", async (ExtensionRepository extensions, int limit = 200) =>
+        {
+            var rows = await extensions.GetTenantRoleScopesAsync(limit);
+            return Results.Ok(new { code = 0, msg = "查询成功", data = rows });
+        }).RequireAuthorization("TenantManage");
+
+        tenantGroup.MapPost("/scope", async (TenantRoleScopeReq req, ExtensionRepository extensions) =>
+        {
+            var scopeId = await extensions.UpsertTenantRoleScopeAsync(req);
+            if (!scopeId.HasValue) return AuraApiResults.ServiceUnavailable("租户权限范围写入失败", 50301);
+            return Results.Ok(new { code = 0, msg = "租户权限范围已保存", data = new { scopeId = scopeId.Value } });
+        }).RequireAuthorization("TenantManage");
+
+        var aiPlatformGroup = app.MapGroup("/api/ai-platform");
+        aiPlatformGroup.MapGet("/providers", async (ExtensionRepository extensions, int limit = 200) =>
+        {
+            var rows = await extensions.GetAiProvidersAsync(limit);
+            return Results.Ok(new { code = 0, msg = "查询成功", data = rows });
+        }).RequireAuthorization("AiPlatform");
+
+        aiPlatformGroup.MapPost("/providers", async (AiProviderConfigReq req, ExtensionRepository extensions) =>
+        {
+            var providerId = await extensions.CreateAiProviderAsync(req);
+            if (!providerId.HasValue) return AuraApiResults.ServiceUnavailable("AI 供应商写入失败", 50301);
+            return Results.Ok(new { code = 0, msg = "AI 供应商已保存", data = new { providerId = providerId.Value } });
+        }).RequireAuthorization("AiPlatform");
+
+        aiPlatformGroup.MapGet("/experiments", async (ExtensionRepository extensions, int limit = 200) =>
+        {
+            var rows = await extensions.GetAiExperimentsAsync(limit);
+            return Results.Ok(new { code = 0, msg = "查询成功", data = rows });
+        }).RequireAuthorization("AiPlatform");
+
+        aiPlatformGroup.MapPost("/experiments", async (AiAbExperimentReq req, ExtensionRepository extensions) =>
+        {
+            var experimentId = await extensions.CreateAiExperimentAsync(req);
+            if (!experimentId.HasValue) return AuraApiResults.ServiceUnavailable("AI 实验写入失败", 50301);
+            return Results.Ok(new { code = 0, msg = "AI 实验已保存", data = new { experimentId = experimentId.Value } });
+        }).RequireAuthorization("AiPlatform");
     }
 }

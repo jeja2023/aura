@@ -68,3 +68,12 @@ internal sealed record JudgeRunResult(DateOnly JudgeDate, string JudgeType, int 
 internal sealed record OpsAlertNotifyTestReq(string? AlertType, string? Detail);
 internal sealed record OpsAiSettingsUpdateReq(string? BaseUrls);
 internal sealed record PageViewAuditReq(string? PagePath, string? PageTitle, string? EventType, long? StayMs, string? SessionId);
+internal sealed record AlertWorkflowUpdateReq(string? Status, string? Assignee, string? Priority, int? EscalationLevel, string? HandoverTo, string? Note);
+internal sealed record SpaceTopologyEdgeReq(long FromCameraId, long ToCameraId, string? RelationType, decimal? Weight);
+internal sealed record SpaceHeatmapSnapshotReq(long FloorId, DateTimeOffset BucketStart, int BucketMinutes, string HeatJson);
+internal sealed record ReportScheduleReq(string ReportType, string CronExpr, string RoleName, string? DeliveryChannel, bool Enabled);
+internal sealed record ReportGenerateReq(long? ScheduleId, string? ReportType, DateOnly? RangeStart, DateOnly? RangeEnd, string? RoleName, string? DeliveryChannel);
+internal sealed record TenantProjectReq(string TenantCode, string TenantName, string? ConfigJson, bool Enabled);
+internal sealed record TenantRoleScopeReq(long TenantId, string RoleName, string? PermissionJson);
+internal sealed record AiProviderConfigReq(string ProviderName, string ProviderType, string EndpointUrl, string ModelName, string? ModelVersion, int TrafficWeight, bool Enabled);
+internal sealed record AiAbExperimentReq(string ExperimentName, long ProviderAId, long ProviderBId, int TrafficSplit, string? MetricName, bool Enabled);

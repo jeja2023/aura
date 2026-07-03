@@ -35,7 +35,7 @@ internal sealed class ExportApplicationService
         _storageRoot = storageRoot;
     }
 
-    public async Task<IResult> ExportAsync(string type, string dataset, int maxRows, string? keyword = null)
+    public async Task<IResult> ExportAsync(string type, string dataset, int maxRows, string? keyword = null, ExportFilterOptions? filters = null)
     {
         type = type.Trim().ToLowerInvariant();
         dataset = NormalizeDataset(dataset);
@@ -60,12 +60,23 @@ internal sealed class ExportApplicationService
         List<string[]> rows;
         if (dataset == "capture")
         {
-            var captures = await _captureRepository.GetCapturesAsync(maxRows);
+            filters ??= ExportFilterOptions.Empty;
+            var captureResult = await LoadCaptureRowsForExportAsync(filters, maxRows);
+            if (useDb && !captureResult.Succeeded)
+            {
+                return AuraApiResults.ServiceUnavailable("数据库查询失败，无法导出抓拍记录", 50311);
+            }
+
+            var captures = captureResult.Rows;
             var source = useDb
                 ? captures.Select(x => new { x.CaptureId, x.DeviceId, x.ChannelNo, CaptureTime = new DateTimeOffset(x.CaptureTime), x.MetadataJson }).ToList()
                 : captures.Count > 0
                     ? captures.Select(x => new { x.CaptureId, x.DeviceId, x.ChannelNo, CaptureTime = new DateTimeOffset(x.CaptureTime), x.MetadataJson }).ToList()
-                    : _store.Captures.Select(x => new { x.CaptureId, x.DeviceId, x.ChannelNo, x.CaptureTime, x.MetadataJson }).ToList();
+                    : ApplyCaptureFilters(_store.Captures, filters)
+                        .OrderByDescending(x => x.CaptureId)
+                        .Take(maxRows)
+                        .Select(x => new { x.CaptureId, x.DeviceId, x.ChannelNo, x.CaptureTime, x.MetadataJson })
+                        .ToList();
 
             rows =
             [
@@ -82,12 +93,24 @@ internal sealed class ExportApplicationService
         }
         else if (dataset == "alert")
         {
-            var alerts = await _monitoringRepository.GetAlertsAsync(maxRows);
+            filters ??= ExportFilterOptions.Empty;
+            var alertResult = await LoadAlertRowsForExportAsync(filters, maxRows);
+            if (useDb && !alertResult.Succeeded)
+            {
+                return AuraApiResults.ServiceUnavailable("数据库查询失败，无法导出告警记录", 50311);
+            }
+
+            var alerts = alertResult.Rows;
             var source = useDb
                 ? alerts.Select(x => new { x.AlertId, x.AlertType, x.Detail, CreatedAt = new DateTimeOffset(x.CreatedAt) }).ToList()
                 : alerts.Count > 0
                     ? alerts.Select(x => new { x.AlertId, x.AlertType, x.Detail, CreatedAt = new DateTimeOffset(x.CreatedAt) }).ToList()
-                    : _store.Alerts.Select(x => new { x.AlertId, x.AlertType, Detail = x.Detail, x.CreatedAt }).ToList();
+                    : ApplyAlertFilters(_store.Alerts, filters)
+                        .OrderByDescending(x => x.CreatedAt)
+                        .ThenByDescending(x => x.AlertId)
+                        .Take(maxRows)
+                        .Select(x => new { x.AlertId, x.AlertType, Detail = x.Detail, x.CreatedAt })
+                        .ToList();
 
             rows =
             [
@@ -135,16 +158,18 @@ internal sealed class ExportApplicationService
         }
         else if (dataset == "operation")
         {
-            var dbResult = await _auditRepository.GetOperationsAsync(keyword, 1, maxRows);
+            filters ??= ExportFilterOptions.Empty;
+            var dbResult = await _auditRepository.GetOperationsAsync(keyword, 1, maxRows, filters.From, filters.To);
+            if (useDb && !dbResult.Succeeded)
+            {
+                return AuraApiResults.ServiceUnavailable("数据库查询失败，无法导出操作日志", 50311);
+            }
+
             var source = useDb
                 ? dbResult.Rows.Select(x => new { x.OperationId, x.OperatorName, x.Action, x.Detail, x.CreatedAt }).ToList()
                 : (dbResult.Total > 0 || dbResult.Rows.Count > 0)
                     ? dbResult.Rows.Select(x => new { x.OperationId, x.OperatorName, x.Action, x.Detail, x.CreatedAt }).ToList()
-                    : _store.Operations
-                        .Where(x => string.IsNullOrWhiteSpace(keyword)
-                            || x.Action.Contains(keyword, StringComparison.OrdinalIgnoreCase)
-                            || x.Detail.Contains(keyword, StringComparison.OrdinalIgnoreCase)
-                            || x.OperatorName.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+                    : ApplyOperationFilters(_store.Operations, keyword, filters)
                         .OrderByDescending(x => x.OperationId)
                         .Take(maxRows)
                         .Select(x => new { x.OperationId, x.OperatorName, x.Action, Detail = x.Detail, CreatedAt = x.CreatedAt.DateTime })
@@ -165,16 +190,18 @@ internal sealed class ExportApplicationService
         }
         else if (dataset == "system")
         {
-            var dbResult = await _auditRepository.GetSystemLogsAsync(keyword, 1, maxRows);
+            filters ??= ExportFilterOptions.Empty;
+            var dbResult = await _auditRepository.GetSystemLogsAsync(keyword, 1, maxRows, filters.From, filters.To);
+            if (useDb && !dbResult.Succeeded)
+            {
+                return AuraApiResults.ServiceUnavailable("数据库查询失败，无法导出系统日志", 50311);
+            }
+
             var source = useDb
                 ? dbResult.Rows.Select(x => new { x.SystemLogId, x.Level, x.Source, x.Message, x.CreatedAt }).ToList()
                 : (dbResult.Total > 0 || dbResult.Rows.Count > 0)
                     ? dbResult.Rows.Select(x => new { x.SystemLogId, x.Level, x.Source, x.Message, x.CreatedAt }).ToList()
-                    : _store.SystemLogs
-                        .Where(x => string.IsNullOrWhiteSpace(keyword)
-                            || x.Level.Contains(keyword, StringComparison.OrdinalIgnoreCase)
-                            || x.Source.Contains(keyword, StringComparison.OrdinalIgnoreCase)
-                            || x.Message.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+                    : ApplySystemLogFilters(_store.SystemLogs, keyword, filters)
                         .OrderByDescending(x => x.SystemLogId)
                         .Take(maxRows)
                         .Select(x => new { x.SystemLogId, x.Level, x.Source, Message = x.Message, CreatedAt = x.CreatedAt.DateTime })
@@ -195,9 +222,14 @@ internal sealed class ExportApplicationService
         }
         else
         {
-            var dbUsers = await _userAuthRepository.GetUsersAsync();
+            var dbUsers = await _userAuthRepository.GetUsersAsync(keyword, 1, maxRows);
+            if (useDb && !dbUsers.Succeeded)
+            {
+                return AuraApiResults.ServiceUnavailable("数据库查询失败，无法导出用户列表", 50311);
+            }
+
             var source = useDb
-                ? dbUsers.Select(x => new
+                ? dbUsers.Rows.Select(x => new
                 {
                     x.UserId,
                     x.UserName,
@@ -208,8 +240,8 @@ internal sealed class ExportApplicationService
                     x.CreatedAt,
                     x.LastLoginAt
                 }).ToList()
-                : dbUsers.Count > 0
-                    ? dbUsers.Select(x => new
+                : dbUsers.Rows.Count > 0
+                    ? dbUsers.Rows.Select(x => new
                     {
                         x.UserId,
                         x.UserName,
@@ -284,6 +316,85 @@ internal sealed class ExportApplicationService
         return Results.Ok(new { code = 0, msg = "导出文件已生成", data = new { fileName, downloadUrl, type, dataset } });
     }
 
+    private async Task<DbPagedResult<DbCapture>> LoadCaptureRowsForExportAsync(ExportFilterOptions filters, int maxRows)
+    {
+        var rows = new List<DbCapture>();
+        const int pageSize = 1000;
+        var page = 1;
+        var total = 0;
+
+        while (rows.Count < maxRows)
+        {
+            var currentPageSize = Math.Min(pageSize, maxRows - rows.Count);
+            var result = await _captureRepository.GetCapturesPagedAsync(
+                filters.From,
+                filters.To,
+                page,
+                currentPageSize,
+                filters.DeviceId,
+                filters.ChannelNo);
+            if (!result.Succeeded)
+            {
+                return new DbPagedResult<DbCapture>(rows, total, false);
+            }
+
+            total = result.Total;
+            if (result.Rows.Count == 0)
+            {
+                break;
+            }
+
+            rows.AddRange(result.Rows);
+            if (rows.Count >= result.Total)
+            {
+                break;
+            }
+
+            page++;
+        }
+
+        return new DbPagedResult<DbCapture>(rows, total, true);
+    }
+
+    private async Task<DbPagedResult<DbAlert>> LoadAlertRowsForExportAsync(ExportFilterOptions filters, int maxRows)
+    {
+        var rows = new List<DbAlert>();
+        const int pageSize = MonitoringRepository.MaxAlertPageSize;
+        var page = 1;
+        var total = 0;
+
+        while (rows.Count < maxRows)
+        {
+            var currentPageSize = Math.Min(pageSize, maxRows - rows.Count);
+            var result = await _monitoringRepository.GetAlertsPagedAsync(
+                filters.TypeKeyword,
+                filters.DetailKeyword,
+                filters.From,
+                filters.To,
+                page,
+                currentPageSize);
+            if (!result.Succeeded)
+            {
+                return new DbPagedResult<DbAlert>(rows, total, false);
+            }
+
+            total = result.Total;
+            if (result.Rows.Count == 0)
+            {
+                break;
+            }
+
+            rows.AddRange(result.Rows);
+            if (rows.Count >= result.Total)
+            {
+                break;
+            }
+
+            page++;
+        }
+
+        return new DbPagedResult<DbAlert>(rows, total, true);
+    }
     private static string ExportDatasetTitleCn(string dataset) => dataset switch
     {
         "capture" => "抓拍记录",
@@ -330,5 +441,120 @@ internal sealed class ExportApplicationService
     private static string EscapeCell(string? text)
     {
         return text?.Replace("\r", " ").Replace("\n", " ") ?? string.Empty;
+    }
+
+    private static IEnumerable<CaptureEntity> ApplyCaptureFilters(IEnumerable<CaptureEntity> captures, ExportFilterOptions filters)
+    {
+        var query = captures;
+        if (filters.From.HasValue)
+        {
+            query = query.Where(x => x.CaptureTime >= filters.From.Value);
+        }
+
+        if (filters.To.HasValue)
+        {
+            query = query.Where(x => x.CaptureTime <= filters.To.Value);
+        }
+
+        if (filters.DeviceId.HasValue)
+        {
+            query = query.Where(x => x.DeviceId == filters.DeviceId.Value);
+        }
+
+        if (filters.ChannelNo.HasValue)
+        {
+            query = query.Where(x => x.ChannelNo == filters.ChannelNo.Value);
+        }
+
+        return query;
+    }
+
+    private static IEnumerable<AlertEntity> ApplyAlertFilters(IEnumerable<AlertEntity> alerts, ExportFilterOptions filters)
+    {
+        var query = alerts;
+        if (!string.IsNullOrWhiteSpace(filters.TypeKeyword))
+        {
+            var keyword = filters.TypeKeyword.Trim();
+            query = query.Where(x => x.AlertType.Contains(keyword, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filters.DetailKeyword))
+        {
+            var keyword = filters.DetailKeyword.Trim();
+            query = query.Where(x => x.Detail.Contains(keyword, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (filters.From.HasValue)
+        {
+            query = query.Where(x => x.CreatedAt >= filters.From.Value);
+        }
+
+        if (filters.To.HasValue)
+        {
+            query = query.Where(x => x.CreatedAt <= filters.To.Value);
+        }
+
+        return query;
+    }
+
+    private static IEnumerable<OperationEntity> ApplyOperationFilters(IEnumerable<OperationEntity> operations, string? keyword, ExportFilterOptions filters)
+    {
+        var query = operations;
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var kw = keyword.Trim();
+            query = query.Where(x =>
+                x.Action.Contains(kw, StringComparison.OrdinalIgnoreCase)
+                || x.Detail.Contains(kw, StringComparison.OrdinalIgnoreCase)
+                || x.OperatorName.Contains(kw, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (filters.From.HasValue)
+        {
+            query = query.Where(x => x.CreatedAt >= filters.From.Value);
+        }
+
+        if (filters.To.HasValue)
+        {
+            query = query.Where(x => x.CreatedAt <= filters.To.Value);
+        }
+
+        return query;
+    }
+
+    private static IEnumerable<SystemLogEntity> ApplySystemLogFilters(IEnumerable<SystemLogEntity> logs, string? keyword, ExportFilterOptions filters)
+    {
+        var query = logs;
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var kw = keyword.Trim();
+            query = query.Where(x =>
+                x.Level.Contains(kw, StringComparison.OrdinalIgnoreCase)
+                || x.Source.Contains(kw, StringComparison.OrdinalIgnoreCase)
+                || x.Message.Contains(kw, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (filters.From.HasValue)
+        {
+            query = query.Where(x => x.CreatedAt >= filters.From.Value);
+        }
+
+        if (filters.To.HasValue)
+        {
+            query = query.Where(x => x.CreatedAt <= filters.To.Value);
+        }
+
+        return query;
+    }
+
+    internal sealed record ExportFilterOptions(
+        DateTimeOffset? From,
+        DateTimeOffset? To,
+        long? DeviceId,
+        int? ChannelNo,
+        string? TypeKeyword = null,
+        string? DetailKeyword = null)
+    {
+        public static ExportFilterOptions Empty { get; } = new(null, null, null, null);
     }
 }

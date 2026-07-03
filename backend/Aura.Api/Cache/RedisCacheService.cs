@@ -1,49 +1,42 @@
-/* 文件：Redis缓存服务（RedisCacheService.cs） | File: Redis Cache Service */
+﻿/* 文件：Redis缓存服务（RedisCacheService.cs） | File: Redis Cache Service */
 using StackExchange.Redis;
-using Microsoft.Extensions.Logging;
 
 namespace Aura.Api.Cache;
 
 internal sealed class RedisCacheService
 {
+    private readonly RedisConnectionProvider _provider;
     private readonly IDatabase? _db;
     private readonly ILogger<RedisCacheService> _logger;
 
-    public RedisCacheService(string? connectionString, ILogger<RedisCacheService> logger)
+    public RedisCacheService(RedisConnectionProvider provider, ILogger<RedisCacheService> logger)
     {
+        _provider = provider;
+        _db = provider.Database;
         _logger = logger;
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            _logger.LogWarning("Redis 缓存未启用：连接串为空。");
-            return;
-        }
-
-        try
-        {
-            var mux = ConnectionMultiplexer.Connect(connectionString);
-            _db = mux.GetDatabase();
-        }
-        catch (Exception ex)
-        {
-            _db = null;
-            _logger.LogError(ex, "Redis 缓存初始化失败，已降级为禁用状态。");
-        }
     }
 
-    public bool Enabled => _db is not null;
+    public bool Enabled => _provider.Enabled;
 
     public async Task<long?> TryConsumeFixedWindowAsync(string key, TimeSpan window, long limit)
     {
         if (_db is null) return null;
         if (limit <= 0) return null;
 
-        // 固定窗口计数：第一次访问设置 TTL；超过 limit 返回当前计数（由调用方判断是否拒绝）
-        var count = await _db.StringIncrementAsync(key);
-        if (count == 1)
+        try
         {
-            await _db.KeyExpireAsync(key, window);
+            var count = await _db.StringIncrementAsync(key);
+            if (count == 1)
+            {
+                await _db.KeyExpireAsync(key, window);
+            }
+            return count;
         }
-        return count;
+        catch (Exception ex)
+        {
+            _provider.RecordFailure(ex, "fixed-window-rate-limit");
+            return null;
+        }
     }
 
     public async Task<string?> GetAsync(string key)
@@ -52,8 +45,17 @@ internal sealed class RedisCacheService
         {
             return null;
         }
-        var value = await _db.StringGetAsync(key);
-        return value.HasValue ? value.ToString() : null;
+
+        try
+        {
+            var value = await _db.StringGetAsync(key);
+            return value.HasValue ? value.ToString() : null;
+        }
+        catch (Exception ex)
+        {
+            _provider.RecordFailure(ex, "cache-get");
+            return null;
+        }
     }
 
     public async Task SetAsync(string key, string value, TimeSpan ttl)
@@ -62,7 +64,15 @@ internal sealed class RedisCacheService
         {
             return;
         }
-        await _db.StringSetAsync(key, value, ttl);
+
+        try
+        {
+            await _db.StringSetAsync(key, value, ttl);
+        }
+        catch (Exception ex)
+        {
+            _provider.RecordFailure(ex, "cache-set");
+        }
     }
 
     /// <summary>删除缓存键（设备列表等变更后主动失效）。</summary>
@@ -79,7 +89,6 @@ internal sealed class RedisCacheService
         }
         catch (Exception ex)
         {
-            // 删除失败不阻断主流程
             _logger.LogWarning(ex, "缓存删除失败。key={Key}", key);
         }
     }
@@ -87,9 +96,17 @@ internal sealed class RedisCacheService
     public async Task<string?> TryAcquireLockAsync(string lockKey, TimeSpan ttl)
     {
         if (_db is null) return null;
-        var token = Guid.NewGuid().ToString("N");
-        var ok = await _db.StringSetAsync(lockKey, token, ttl, When.NotExists);
-        return ok ? token : null;
+        try
+        {
+            var token = Guid.NewGuid().ToString("N");
+            var ok = await _db.StringSetAsync(lockKey, token, ttl, When.NotExists);
+            return ok ? token : null;
+        }
+        catch (Exception ex)
+        {
+            _provider.RecordFailure(ex, "lock-acquire");
+            return null;
+        }
     }
 
     public async Task ReleaseLockAsync(string lockKey, string token)
@@ -105,7 +122,6 @@ internal sealed class RedisCacheService
         }
         catch (Exception ex)
         {
-            // 释放锁失败不影响主流程；依赖 TTL 自动过期兜底
             _logger.LogWarning(ex, "释放 Redis 锁失败。lockKey={LockKey}", lockKey);
         }
     }

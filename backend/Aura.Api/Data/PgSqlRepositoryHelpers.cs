@@ -1,8 +1,11 @@
 /* 文件：仓储通用辅助（PgSqlRepositoryHelpers.cs） | File: PgSql repository helpers */
 using Microsoft.Extensions.Logging;
 using Npgsql;
+using System.Diagnostics;
 
 namespace Aura.Api.Data;
+
+internal sealed record DbPagedResult<T>(List<T> Rows, int Total, bool Succeeded);
 
 /// <summary>
 /// 统一各 Repository 中重复的「try { 数据库调用 } catch { 记日志返回 fallback }」样板：
@@ -12,6 +15,25 @@ namespace Aura.Api.Data;
 /// </summary>
 internal static class PgSqlRepositoryHelpers
 {
+    private const long SlowOperationWarningMs = 500;
+
+    public static void LogIfSlow(ILogger? logger, string operationLabel, long elapsedMs, object? logContext = null)
+    {
+        if (elapsedMs < SlowOperationWarningMs)
+        {
+            return;
+        }
+
+        if (logContext is null)
+        {
+            logger?.LogWarning("{Operation} 耗时较长。elapsedMs={ElapsedMs}", operationLabel, elapsedMs);
+        }
+        else
+        {
+            logger?.LogWarning("{Operation} 耗时较长。elapsedMs={ElapsedMs}, context={Context}", operationLabel, elapsedMs, logContext);
+        }
+    }
+
     /// <summary>查询型：失败时返回 <paramref name="fallback"/>。</summary>
     public static async Task<T> ExecuteAsync<T>(
         PgSqlConnectionFactory factory,
@@ -22,10 +44,13 @@ internal static class PgSqlRepositoryHelpers
         LogLevel logLevel = LogLevel.Error,
         object? logContext = null)
     {
+        var sw = Stopwatch.StartNew();
         try
         {
             await using var conn = factory.CreateConnection();
-            return await operation(conn).ConfigureAwait(false);
+            var result = await operation(conn).ConfigureAwait(false);
+            LogIfSlow(logger, operationLabel, sw.ElapsedMilliseconds, logContext);
+            return result;
         }
         catch (Exception ex)
         {
@@ -50,10 +75,12 @@ internal static class PgSqlRepositoryHelpers
         LogLevel logLevel = LogLevel.Warning,
         object? logContext = null)
     {
+        var sw = Stopwatch.StartNew();
         try
         {
             await using var conn = factory.CreateConnection();
             await operation(conn).ConfigureAwait(false);
+            LogIfSlow(logger, operationLabel, sw.ElapsedMilliseconds, logContext);
             return true;
         }
         catch (Exception ex)

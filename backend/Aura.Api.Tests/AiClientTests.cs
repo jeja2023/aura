@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using Aura.Api.Ai;
 using Aura.Api.Data;
+using Aura.Api.Extensions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
@@ -9,6 +10,26 @@ namespace Aura.Api.Tests;
 
 public sealed class AiClientTests
 {
+    [Theory]
+    [InlineData("")]
+    [InlineData("PLEASE_REPLACE_WITH_STRONG_PROD_KEY_MIN_32_CHARS")]
+    [InlineData("REPLACE_WITH_LONG_RANDOM_JWT_KEY_MIN_32_CHARS")]
+    [InlineData("aura-dev-jwt-key-please-change-at-prod")]
+    public void IsPlaceholderValue_ShouldRejectKnownSecretPlaceholders(string value)
+    {
+        Assert.True(ServiceExtensions.IsPlaceholderValue(value, "PLEASE_", "REPLACE_", "aura-dev-jwt-key-please-change"));
+    }
+
+    [Fact]
+    public void IsPlaceholderValue_ShouldAllowRandomLookingSecret()
+    {
+        Assert.False(ServiceExtensions.IsPlaceholderValue(
+            "aura-prod-3f8c7d6e5b4a9c2d1e0f112233445566",
+            "PLEASE_",
+            "REPLACE_",
+            "aura-dev-jwt-key-please-change"));
+    }
+
     [Fact]
     public void ResolveBaseUrls_BaseUrlsShouldOverrideSingleBaseUrl()
     {
@@ -196,13 +217,13 @@ public sealed class AiClientTests
             {
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
-                    Content = new StringContent("""{"code":0,"msg":"ok","model_loaded":true}""", Encoding.UTF8, "application/json")
+                    Content = new StringContent("""{"code":0,"msg":"ok","model_loaded":true,"inference_ready":true}""", Encoding.UTF8, "application/json")
                 });
             }
 
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = new StringContent("""{"code":0,"msg":"loading","model_loaded":false}""", Encoding.UTF8, "application/json")
+                Content = new StringContent("""{"code":0,"msg":"loading","model_loaded":false,"inference_ready":false}""", Encoding.UTF8, "application/json")
             });
         });
         var sut = new AiClient(client, ["http://ai-0.local:8000", "http://ai-1.local:8000"], NullLogger<AiClient>.Instance);
@@ -212,7 +233,42 @@ public sealed class AiClientTests
         Assert.Equal(2, health.ConfiguredNodeCount);
         Assert.Equal(2, health.ReachableNodeCount);
         Assert.Equal(1, health.ModelLoadedNodeCount);
+        Assert.Equal(1, health.InferenceReadyNodeCount);
         Assert.True(health.AnyModelLoaded);
+        Assert.True(health.AnyInferenceReady);
+    }
+
+    [Fact]
+    public async Task GetClusterHealthAsync_ShouldTreatStructured503AsReachableButInferenceUnavailable()
+    {
+        using var client = CreateClient("""
+            {"code":50302,"msg":"AI 推理服务当前不可用","model_loaded":true,"inference_ready":false}
+            """, HttpStatusCode.ServiceUnavailable);
+        var sut = new AiClient(client, "http://ai.local", NullLogger<AiClient>.Instance);
+
+        var health = await sut.GetClusterHealthAsync();
+
+        var node = Assert.Single(health.Nodes);
+        Assert.True(node.Reachable);
+        Assert.True(node.ModelLoaded);
+        Assert.False(node.InferenceReady);
+        Assert.Equal(1, health.ReachableNodeCount);
+        Assert.Equal(1, health.ModelLoadedNodeCount);
+        Assert.Equal(0, health.InferenceReadyNodeCount);
+        Assert.False(health.AnyInferenceReady);
+    }
+
+    [Fact]
+    public async Task GetClusterHealthAsync_LegacyNodeShouldUseModelLoadedAsInferenceReady()
+    {
+        using var client = CreateClient("""{"code":0,"msg":"ok","model_loaded":true}""");
+        var sut = new AiClient(client, "http://ai.local", NullLogger<AiClient>.Instance);
+
+        var health = await sut.GetClusterHealthAsync();
+
+        var node = Assert.Single(health.Nodes);
+        Assert.True(node.ModelLoaded);
+        Assert.True(node.InferenceReady);
     }
 
     [Fact]

@@ -48,25 +48,32 @@
         <button type="button" class="btn-secondary aura-modal-close" data-aura-modal-dismiss aria-label="关闭对话框">关闭</button>
       </div>
       <div class="role-modal-fields aura-modal-fields">
-        <input id="roleName" class="aura-input" type="text" placeholder="角色名称，如：楼栋巡查员" />
+        <input id="roleName" name="roleName" class="aura-input" type="text" placeholder="角色名称，如：楼栋巡查员" />
         <div class="role-permission-grid" id="permissionMenu">
-          <label><input type="checkbox" value="campus" /> 集宿资源树</label>
-          <label><input type="checkbox" value="floor" /> 楼层图纸</label>
-          <label><input type="checkbox" value="camera" /> 摄像头布点</label>
-          <label><input type="checkbox" value="roi" /> 重点防区</label>
-          <label><input type="checkbox" value="device" /> NVR 设备</label>
-          <label><input type="checkbox" value="device_diag" /> 设备联调</label>
-          <label><input type="checkbox" value="capture" /> 抓拍记录</label>
-          <label><input type="checkbox" value="scene" /> 三维空间态势</label>
-          <label><input type="checkbox" value="alert" /> 告警中心</label>
-          <label><input type="checkbox" value="judge" /> 归寝研判</label>
-          <label><input type="checkbox" value="track" /> 轨迹回放</label>
-          <label><input type="checkbox" value="search" /> 以图搜轨</label>
-          <label><input type="checkbox" value="stats" /> 统计驾驶舱</label>
-          <label><input type="checkbox" value="export" /> 报表导出</label>
-          <label><input type="checkbox" value="role" /> 角色管理</label>
-          <label><input type="checkbox" value="user" /> 用户管理</label>
-          <label><input type="checkbox" value="log" /> 操作与系统日志</label>
+          <label><input type="checkbox" name="permissions" value="campus" /> 集宿资源树</label>
+          <label><input type="checkbox" name="permissions" value="floor" /> 楼层图纸</label>
+          <label><input type="checkbox" name="permissions" value="camera" /> 摄像头布点</label>
+          <label><input type="checkbox" name="permissions" value="roi" /> 重点防区</label>
+          <label><input type="checkbox" name="permissions" value="device" /> NVR 设备</label>
+          <label><input type="checkbox" name="permissions" value="device_diag" /> 设备联调</label>
+          <label><input type="checkbox" name="permissions" value="device.diag" /> 设备诊断接口</label>
+          <label><input type="checkbox" name="permissions" value="capture" /> 抓拍记录</label>
+          <label><input type="checkbox" name="permissions" value="scene" /> 三维空间态势</label>
+          <label><input type="checkbox" name="permissions" value="alert" /> 告警中心</label>
+          <label><input type="checkbox" name="permissions" value="alert.manage" /> 告警操作</label>
+          <label><input type="checkbox" name="permissions" value="judge" /> 归寝研判</label>
+          <label><input type="checkbox" name="permissions" value="track" /> 轨迹回放</label>
+          <label><input type="checkbox" name="permissions" value="search" /> 以图搜轨</label>
+          <label><input type="checkbox" name="permissions" value="stats" /> 统计驾驶舱</label>
+          <label><input type="checkbox" name="permissions" value="export" /> 报表导出</label>
+          <label><input type="checkbox" name="permissions" value="space.manage" /> 空间能力管理</label>
+          <label><input type="checkbox" name="permissions" value="report.manage" /> 报表计划管理</label>
+          <label><input type="checkbox" name="permissions" value="tenant.manage" /> 多租户管理</label>
+          <label><input type="checkbox" name="permissions" value="ai.settings" /> AI 配置</label>
+          <label><input type="checkbox" name="permissions" value="ai.platform" /> AI 平台管理</label>
+          <label><input type="checkbox" name="permissions" value="role" /> 角色管理</label>
+          <label><input type="checkbox" name="permissions" value="user" /> 用户管理</label>
+          <label><input type="checkbox" name="permissions" value="log" /> 操作与系统日志</label>
         </div>
       </div>
       <div class="aura-modal-actions">

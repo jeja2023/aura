@@ -37,8 +37,11 @@ def build_service_state(
     arango_error: str,
     model_loaded: bool,
     model_error: str,
+    inference_ready: bool | None = None,
+    inference_error: str = "",
 ) -> dict:
     verbose = include_diagnostics()
+    ready = model_loaded if inference_ready is None else inference_ready
     return {
         "time": datetime.now().isoformat(),
         "environment": current_environment(),
@@ -46,6 +49,8 @@ def build_service_state(
         "arangodb_enabled": arango_enabled,
         "arango_error": arango_error if verbose else "",
         "model_loaded": model_loaded,
+        "inference_ready": ready,
         "model_error": model_error if verbose else "",
+        "inference_error": inference_error if verbose else "",
         "diagnostics_visible": verbose,
     }

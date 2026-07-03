@@ -113,3 +113,149 @@ def test_search_unexpected_exception_returns_500_and_records_failed():
     assert deps.index_runtime.records[-1]["status"] == "failed"
     assert deps.index_runtime.records[-1]["reason"] == "internal_exception"
 
+
+def test_search_success_returns_resolved_params_and_records_warnings():
+    deps = _SearchDeps()
+    app = FastAPI()
+    app.include_router(build_api_router(deps))
+    client = TestClient(app)
+
+    original = api_routes_module.search_vectors
+
+    def _fake_search_vectors(**kwargs):
+        assert kwargs["candidate_multiplier"] == 30
+        assert kwargs["candidate_pool"] == 5000
+        assert kwargs["ann_probe"] == 64
+        assert kwargs["rerank_window"] == 200
+        return {
+            "code": 0,
+            "msg": "检索成功",
+            "data": [],
+            "meta": {"engine": "memory", "strategy": "stub", "filters_applied": False},
+        }
+
+    api_routes_module.search_vectors = _fake_search_vectors
+    try:
+        response = client.post(
+            "/ai/search",
+            json={
+                "feature": [0.1] * 512,
+                "top_k": 999,
+                "candidate_multiplier": 64,
+                "candidate_pool": 10000,
+                "ann_probe": 128,
+                "rerank_window": 10000,
+            },
+        )
+    finally:
+        api_routes_module.search_vectors = original
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["code"] == 0
+    assert body["meta"]["resolved_params"] == {
+        "top_k": 50,
+        "min_score": -1.0,
+        "candidate_multiplier": 30,
+        "candidate_pool": 5000,
+        "ann_probe": 64,
+        "rerank_window": 200,
+    }
+    assert body["meta"]["warnings"]
+    assert deps.index_runtime.records[-1]["status"] == "empty"
+    assert deps.index_runtime.records[-1]["warnings"] == body["meta"]["warnings"]
+
+import base64
+import io
+
+import pytest
+from PIL import Image
+
+from utils.vector_utils import ImageTooLargeError, ImageValidationError, decode_image
+
+
+class _ExtractDeps:
+    def __init__(self, *, decode_error: Exception | None = None):
+        self.decode_error = decode_error
+        self.logger = SimpleNamespace(
+            warning=lambda *args, **kwargs: None,
+            info=lambda *args, **kwargs: None,
+            exception=lambda *args, **kwargs: None,
+        )
+        self.retrieval_guard = _FakeGuard()
+
+    def accepts_raw_image_inference(self):
+        return False
+
+    def decode_image(self, image_base64):
+        if self.decode_error is not None:
+            raise self.decode_error
+        return object()
+
+    def decode_image_file(self, image_path):
+        if self.decode_error is not None:
+            raise self.decode_error
+        return object()
+
+    def preprocess(self, img):
+        return img
+
+    async def extract_feature_batched(self, tensor):
+        return [0.25, 0.5]
+
+
+def _png_base64(width=1, height=1):
+    buffer = io.BytesIO()
+    Image.new("RGB", (width, height), color=(255, 0, 0)).save(buffer, format="PNG")
+    return base64.b64encode(buffer.getvalue()).decode("ascii")
+
+
+def test_decode_image_accepts_data_url_png():
+    image = decode_image(f"data:image/png;base64,{_png_base64()}")
+
+    assert image.mode == "RGB"
+    assert image.size == (1, 1)
+
+
+def test_decode_image_rejects_invalid_base64():
+    with pytest.raises(ImageValidationError):
+        decode_image("not-base64")
+
+
+def test_decode_image_respects_base64_limit(monkeypatch):
+    monkeypatch.setenv("AURA_AI_MAX_IMAGE_BASE64_CHARS", "1024")
+
+    with pytest.raises(ImageTooLargeError):
+        decode_image("A" * 1025)
+
+
+def test_decode_image_respects_pixel_limit(monkeypatch):
+    monkeypatch.setenv("AURA_AI_MAX_IMAGE_PIXELS", "3")
+
+    with pytest.raises(ImageTooLargeError):
+        decode_image(_png_base64(width=2, height=2))
+
+
+def test_extract_invalid_image_returns_400():
+    deps = _ExtractDeps(decode_error=ImageValidationError("bad image"))
+    app = FastAPI()
+    app.include_router(build_api_router(deps))
+    client = TestClient(app)
+
+    response = client.post("/ai/extract", json={"image_base64": "not-base64", "metadata_json": "{}"})
+
+    assert response.status_code == 400
+    assert response.json()["code"] == 40002
+
+
+def test_extract_too_large_image_returns_413(monkeypatch):
+    monkeypatch.setenv("AURA_AI_MAX_IMAGE_BASE64_CHARS", "1024")
+    deps = _ExtractDeps()
+    app = FastAPI()
+    app.include_router(build_api_router(deps))
+    client = TestClient(app)
+
+    response = client.post("/ai/extract", json={"image_base64": "A" * 1025, "metadata_json": "{}"})
+
+    assert response.status_code == 413
+    assert response.json()["code"] == 41301

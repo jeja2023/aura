@@ -10,6 +10,7 @@ let devicePage = 1;
 let devicePageSize = 15;
 /** 当前登录角色（来自 /api/auth/me 的 data.role，如 super_admin） */
 let currentUserRole = null;
+let currentUserPermissions = [];
 let currentDeviceView = "manage";
 
 const deviceManagePanelEl = document.getElementById("deviceManagePanel");
@@ -37,9 +38,23 @@ function getVendorActionsApi(vendorKey) {
   return null;
 }
 
-function canAccessHikIsapiDiagnostics(role) {
-  const r = String(role ?? "").trim().toLowerCase();
-  return r === "super_admin" || r === "building_admin";
+function normalizePermission(value) {
+  const key = String(value ?? "").trim().toLowerCase();
+  if (key === "device_diag" || key === "device.diagnostics" || key === "media") return "device.diag";
+  return key;
+}
+
+function hasCurrentPermission(permission) {
+  const role = String(currentUserRole ?? "").trim().toLowerCase();
+  if (role === "super_admin") return true;
+  const required = normalizePermission(permission);
+  const permissions = new Set(currentUserPermissions.map((item) => normalizePermission(item)));
+  return permissions.has("all") || permissions.has(required);
+}
+
+function canAccessHikIsapiDiagnostics() {
+  const r = String(currentUserRole ?? "").trim().toLowerCase();
+  return r === "super_admin" || (r === "building_admin" && hasCurrentPermission("device.diag"));
 }
 
 function getRequestedDeviceView() {
@@ -137,7 +152,7 @@ function renderDeviceTable(rows) {
   devicePage = pageData.page;
   devicePageSize = pageData.pageSize;
   if (!deviceTableHeadEl || !deviceTableBodyEl) return;
-  const showDiagAction = canAccessHikIsapiDiagnostics(currentUserRole);
+  const showDiagAction = canAccessHikIsapiDiagnostics();
   deviceTableHeadEl.innerHTML = `<tr>
     <th class="aura-col-no">序号</th>
     <th class="aura-col-id">设备ID</th>
@@ -250,7 +265,10 @@ async function fetchCurrentUserRole() {
     const res = await fetch(`${apiBase}/api/auth/me`, { credentials: "include" });
     if (!res.ok) return;
     const j = await res.json();
-    if (j && j.code === 0 && j.data) currentUserRole = j.data.role ?? null;
+    if (j && j.code === 0 && j.data) {
+      currentUserRole = j.data.role ?? null;
+      currentUserPermissions = Array.isArray(j.data.permissions) ? j.data.permissions : [];
+    }
   } catch {
     /* 未登录或网络异常时不阻塞页面 */
   }
@@ -262,7 +280,7 @@ function updateRegisterButtonVisibility() {
 }
 
 function updateHikIsapiTabVisibility() {
-  const allowed = canAccessHikIsapiDiagnostics(currentUserRole);
+  const allowed = canAccessHikIsapiDiagnostics();
   const requestView = getRequestedDeviceView();
   if (requestView === "diag" && !allowed) {
     switchDeviceView("manage");
@@ -513,7 +531,7 @@ deviceTableBodyEl?.addEventListener("click", (event) => {
   if (!(btn instanceof HTMLElement)) return;
   const action = String(btn.dataset.deviceAction || "").trim();
   if (action !== "open-hik-diag") return;
-  if (!canAccessHikIsapiDiagnostics(currentUserRole)) return;
+  if (!canAccessHikIsapiDiagnostics()) return;
   const tr = btn.closest("tr[data-device-id]");
   const deviceIdRaw = tr instanceof HTMLElement ? String(tr.dataset.deviceId || "") : "";
   const deviceId = deviceIdRaw ? Number(deviceIdRaw) : 0;

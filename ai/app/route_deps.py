@@ -1,4 +1,4 @@
-# 文件：路由依赖聚合（route_deps.py） | File: Route dependency bundle
+# File: Route dependency bundle
 from dataclasses import dataclass
 
 import numpy as np
@@ -10,7 +10,7 @@ from services.index_runtime_service import IndexRuntimeService
 from services.inference_service import InferenceService
 from services.retrieval_guard_service import RetrievalGuardService
 from utils.service_state import build_service_state
-from utils.vector_utils import cosine, decode_image, normalize_feature, preprocess_image
+from utils.vector_utils import cosine, decode_image, decode_image_file, normalize_feature, preprocess_image
 
 
 @dataclass
@@ -35,16 +35,16 @@ class RouteDeps:
             arango_error=self.arango.error,
             model_loaded=self.inference.model_loaded,
             model_error=self.inference.model_error,
+            inference_ready=self.inference.is_ready,
+            inference_error=self.inference.readiness_error,
         )
         payload["inference_backend"] = self.inference.backend
+        payload["inference_remote"] = self.inference.remote_status()
+        payload["inference_metrics"] = self.inference.inference_metrics()
         guard_state = self.retrieval_guard.get_state()
         payload["retrieval_guard"] = guard_state
         payload["backfill_state"] = self.index_runtime.get_backfill_state()
-        payload["inference_queue"] = {
-            "max_size": self.inference.queue_max_size,
-            "current_size": self.inference.queue_size,
-            "remaining": max(0, self.inference.queue_max_size - self.inference.queue_size),
-        }
+        payload["inference_queue"] = payload["inference_metrics"]["queue"]
         payload["熔断状态"] = guard_state.get("circuit_breaker", {})
         payload["限流状态"] = guard_state.get("rate_limiter", {})
         payload["回填状态"] = payload["backfill_state"]
@@ -59,11 +59,23 @@ class RouteDeps:
     def decode_image(self, image_base64: str) -> Image.Image:
         return decode_image(image_base64)
 
+    def decode_image_file(self, image_path: str) -> Image.Image:
+        return decode_image_file(image_path)
+
     def preprocess(self, img: Image.Image) -> np.ndarray:
         return preprocess_image(img)
 
     async def extract_feature_batched(self, tensor) -> list[float]:
         return await self.inference.extract_feature_batched(tensor)
+
+    def accepts_raw_image_inference(self) -> bool:
+        return self.inference.accepts_raw_image
+
+    async def extract_feature_from_base64(self, image_base64: str, metadata_json: str = "{}") -> list[float]:
+        return await self.inference.extract_feature_from_base64(image_base64, metadata_json)
+
+    async def extract_feature_from_file(self, image_path: str, metadata_json: str = "{}") -> list[float]:
+        return await self.inference.extract_feature_from_file(image_path, metadata_json)
 
     def cosine(self, a: list[float], b: list[float]) -> float:
         return cosine(a, b)

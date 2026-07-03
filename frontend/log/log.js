@@ -1,4 +1,4 @@
-/* 文件：日志页脚本（log.js）| File: Log Script */
+/* 文件：日志页脚本（log.js） | File: Log Script */
 const apiBase = "";
 const resultEl = document.getElementById("result");
 const tableWrapEl = document.getElementById("tableWrap");
@@ -6,13 +6,44 @@ const pagerEl = document.getElementById("pager");
 const tableHeadEl = document.getElementById("tableHead");
 const tableBodyEl = document.getElementById("tableBody");
 const exportLogBtn = document.getElementById("exportLog");
+const logStartTimeEl = document.getElementById("logStartTime");
+const logEndTimeEl = document.getElementById("logEndTime");
+const clearLogFilterBtn = document.getElementById("clearLogFilter");
 let logPage = 1;
 let logPageSize = 15;
 let latestLogRows = [];
 
+const fallbackEscapeHtml = (value) => String(value ?? "")
+  .replaceAll("&", "&amp;")
+  .replaceAll("<", "&lt;")
+  .replaceAll(">", "&gt;")
+  .replaceAll('"', "&quot;")
+  .replaceAll("'", "&#39;");
+const escapeHtml = window.aura?.escapeHtml || fallbackEscapeHtml;
+const pageStatus = window.aura?.createStatusController?.(resultEl) || null;
+const requestJson = window.aura?.requestJson || fallbackRequestJson;
+
+async function fallbackRequestJson(url, options = {}) {
+  const headers = new Headers(options.headers || {});
+  const init = { ...options, credentials: options.credentials || "include", headers };
+  if (options.body && typeof options.body === "object" && !(options.body instanceof FormData)) {
+    if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+    init.body = JSON.stringify(options.body);
+  }
+  const response = await fetch(url, init);
+  const text = await response.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = { code: response.ok ? 0 : -1, msg: text };
+  }
+  return { ok: response.ok, status: response.status, data, response };
+}
+
 function setExportVisible(visible) {
   if (!exportLogBtn) return;
-  if (window.aura && typeof window.aura.setElementVisible === "function") {
+  if (window.aura?.setElementVisible) {
     window.aura.setElementVisible(exportLogBtn, visible);
     return;
   }
@@ -20,94 +51,64 @@ function setExportVisible(visible) {
   exportLogBtn.disabled = !visible;
 }
 
-let successStatusTimer = null;
-const SUCCESS_STATUS_MS = 5000;
-
-function clearSuccessStatusTimer() {
-  if (successStatusTimer != null) {
-    clearTimeout(successStatusTimer);
-    successStatusTimer = null;
-  }
-}
-
-function hideResult() {
-  if (!resultEl) return;
-  resultEl.textContent = "";
-  resultEl.hidden = true;
-  resultEl.classList.remove("is-error");
-}
-
 function hideTable() {
-  if (pagerEl) {
-    pagerEl.hidden = true;
-    pagerEl.innerHTML = "";
+  if (window.aura?.clearTable) {
+    window.aura.clearTable({ wrap: tableWrapEl, head: tableHeadEl, body: tableBodyEl, pager: pagerEl });
+  } else {
+    if (pagerEl) {
+      pagerEl.hidden = true;
+      pagerEl.innerHTML = "";
+    }
+    if (tableHeadEl) tableHeadEl.innerHTML = "";
+    if (tableBodyEl) tableBodyEl.innerHTML = "";
+    if (tableWrapEl) tableWrapEl.hidden = true;
   }
-  if (tableHeadEl) tableHeadEl.innerHTML = "";
-  if (tableBodyEl) tableBodyEl.innerHTML = "";
-  if (tableWrapEl) tableWrapEl.hidden = true;
   latestLogRows = [];
   setExportVisible(false);
 }
 
-function deriveMessage(data) {
-  if (typeof data === "string") return data;
-  if (data && typeof data === "object") {
-    if (typeof data.msg === "string") return data.msg;
-    if (Array.isArray(data.data)) return `共 ${data.data.length} 条结果`;
-    return "操作完成";
-  }
-  return String(data ?? "");
-}
-
-function isErrorPayload(data, message) {
-  if (data && typeof data === "object" && typeof data.code === "number") {
-    return data.code !== 0;
-  }
-  if (typeof message === "string") {
-    return /失败|错误|异常|超时|拒绝|未授权|无权|禁止|非法|无效|无法|不能|不存在|已过期|已失效/i.test(message);
-  }
-  return false;
-}
-
-function setResult(data) {
-  if (!resultEl) return;
-
-  const isEmpty = !data || (typeof data === "string" && data.trim() === "");
-  if (isEmpty) {
-    clearSuccessStatusTimer();
-    hideResult();
+function setResult(data, options = {}) {
+  if (pageStatus) {
+    pageStatus.set(data, options);
     return;
   }
-
-  const message = deriveMessage(data);
-  const isError = isErrorPayload(data, message);
-
-  clearSuccessStatusTimer();
-  resultEl.textContent = message;
-  resultEl.hidden = false;
-  resultEl.classList.toggle("is-error", isError);
-
-  if (!isError) {
-    successStatusTimer = window.setTimeout(() => {
-      successStatusTimer = null;
-      hideResult();
-    }, SUCCESS_STATUS_MS);
-  }
-}
-
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll("\"", "&quot;");
+  if (!resultEl) return;
+  const text = typeof data === "string" ? data : (data?.msg || "");
+  resultEl.textContent = text;
+  resultEl.hidden = !text;
+  resultEl.classList.toggle("is-error", Boolean(options.isError || data?.code));
 }
 
 function formatTableTime(value) {
-  if (typeof window.formatDateTimeDisplay === "function") {
-    return escapeHtml(window.formatDateTimeDisplay(value, "-"));
-  }
+  if (typeof window.formatDateTimeDisplay === "function") return escapeHtml(window.formatDateTimeDisplay(value, "-"));
   return escapeHtml(String(value ?? "-"));
+}
+
+function getDateTimeInput(element) {
+  const text = String(element?.value ?? "").trim();
+  return text || null;
+}
+
+function appendLogFilters(query) {
+  const from = getDateTimeInput(logStartTimeEl);
+  const to = getDateTimeInput(logEndTimeEl);
+  if (from) query.set("from", from);
+  if (to) query.set("to", to);
+}
+
+function buildLogExportParams() {
+  const query = new URLSearchParams({ maxRows: "20000" });
+  appendLogFilters(query);
+  return Object.fromEntries(query.entries());
+}
+
+function clearLogFilters() {
+  const keywordEl = document.getElementById("keyword");
+  if (keywordEl) keywordEl.value = "";
+  if (logStartTimeEl) logStartTimeEl.value = "";
+  if (logEndTimeEl) logEndTimeEl.value = "";
+  logPage = 1;
+  void load({ silentSuccessToast: true });
 }
 
 function buildLogBadge(label, tone = "neutral") {
@@ -134,16 +135,9 @@ function detectLogBadges(row, logType) {
     badges.push(buildLogBadge("处理中", "warn"));
   }
 
-  if (/(ai|向量|feature|extract|search|upsert|cluster|vid)/i.test(haystack)) {
-    badges.push(buildLogBadge("AI", "neutral"));
-  }
-  if (/(vector|向量|index|索引|ann|arango|milvus)/i.test(haystack)) {
-    badges.push(buildLogBadge("向量", "neutral"));
-  }
-  if (/(retry|重试|补偿|queue|队列)/i.test(haystack)) {
-    badges.push(buildLogBadge("重试", "neutral"));
-  }
-
+  if (/(ai|向量|feature|extract|search|upsert|cluster|vid)/i.test(haystack)) badges.push(buildLogBadge("AI", "neutral"));
+  if (/(vector|向量|index|索引|ann|arango|milvus)/i.test(haystack)) badges.push(buildLogBadge("向量", "neutral"));
+  if (/(retry|重试|补偿|queue|队列)/i.test(haystack)) badges.push(buildLogBadge("重试", "neutral"));
   return badges.join("");
 }
 
@@ -153,48 +147,24 @@ function formatLogDetailCell(text) {
   return `<div class="log-detail-cell" title="${escapeHtml(raw)}">${escapeHtml(raw)}</div>`;
 }
 
-function renderOperationTable(rows) {
-  if (!tableHeadEl || !tableBodyEl) return;
-  tableHeadEl.innerHTML = `
-    <tr>
-      <th class="col-time">时间</th>
-      <th class="col-main">操作员</th>
-      <th class="col-main">动作</th>
-      <th class="col-tag">标签</th>
-      <th class="col-detail">详情</th>
-    </tr>
-  `;
-  tableBodyEl.innerHTML = rows.map((row) => `
-    <tr>
-      <td>${formatTableTime(row.createdAt)}</td>
-      <td>${escapeHtml(row.operatorName || "-")}</td>
-      <td>${escapeHtml(row.action || "-")}</td>
-      <td>${detectLogBadges(row, "operation") || '<span class="log-detail-empty">-</span>'}</td>
-      <td>${formatLogDetailCell(row.detail)}</td>
-    </tr>
-  `).join("");
+function operationRowHtml(row) {
+  return `<tr>
+    <td>${formatTableTime(row.createdAt)}</td>
+    <td>${escapeHtml(row.operatorName || "-")}</td>
+    <td>${escapeHtml(row.action || "-")}</td>
+    <td>${detectLogBadges(row, "operation") || '<span class="log-detail-empty">-</span>'}</td>
+    <td>${formatLogDetailCell(row.detail)}</td>
+  </tr>`;
 }
 
-function renderSystemTable(rows) {
-  if (!tableHeadEl || !tableBodyEl) return;
-  tableHeadEl.innerHTML = `
-    <tr>
-      <th class="col-time">时间</th>
-      <th class="col-main">级别</th>
-      <th class="col-main">来源</th>
-      <th class="col-tag">标签</th>
-      <th class="col-detail">内容</th>
-    </tr>
-  `;
-  tableBodyEl.innerHTML = rows.map((row) => `
-    <tr>
-      <td>${formatTableTime(row.createdAt)}</td>
-      <td>${escapeHtml(row.level || "-")}</td>
-      <td>${escapeHtml(row.source || "-")}</td>
-      <td>${detectLogBadges(row, "system") || '<span class="log-detail-empty">-</span>'}</td>
-      <td>${formatLogDetailCell(row.message)}</td>
-    </tr>
-  `).join("");
+function systemRowHtml(row) {
+  return `<tr>
+    <td>${formatTableTime(row.createdAt)}</td>
+    <td>${escapeHtml(row.level || "-")}</td>
+    <td>${escapeHtml(row.source || "-")}</td>
+    <td>${detectLogBadges(row, "system") || '<span class="log-detail-empty">-</span>'}</td>
+    <td>${formatLogDetailCell(row.message)}</td>
+  </tr>`;
 }
 
 function renderTable(logType, payload) {
@@ -202,19 +172,40 @@ function renderTable(logType, payload) {
   latestLogRows = rows;
   setExportVisible(rows.length > 0);
   const pager = payload?.pager || {};
-  if (rows.length === 0) {
-    if (tableHeadEl) tableHeadEl.innerHTML = "";
-    if (tableBodyEl) tableBodyEl.innerHTML = "<tr><td colspan=\"5\">暂无日志记录。</td></tr>";
-    if (pagerEl) {
-      pagerEl.hidden = true;
-      pagerEl.innerHTML = "";
-    }
+  const isSystem = logType === "system";
+  const columns = isSystem
+    ? [
+        { label: "时间", className: "col-time" },
+        { label: "级别", className: "col-main" },
+        { label: "来源", className: "col-main" },
+        { label: "标签", className: "col-tag" },
+        { label: "内容", className: "col-detail" }
+      ]
+    : [
+        { label: "时间", className: "col-time" },
+        { label: "操作员", className: "col-main" },
+        { label: "动作", className: "col-main" },
+        { label: "标签", className: "col-tag" },
+        { label: "详情", className: "col-detail" }
+      ];
+
+  if (window.aura?.renderTable) {
+    window.aura.renderTable({
+      wrap: tableWrapEl,
+      head: tableHeadEl,
+      body: tableBodyEl,
+      columns,
+      rows,
+      emptyText: "暂无日志记录。",
+      rowHtml: isSystem ? systemRowHtml : operationRowHtml
+    });
+  } else if (tableHeadEl && tableBodyEl) {
+    tableHeadEl.innerHTML = `<tr>${columns.map((col) => `<th class="${escapeHtml(col.className)}">${escapeHtml(col.label)}</th>`).join("")}</tr>`;
+    tableBodyEl.innerHTML = rows.length ? rows.map(isSystem ? systemRowHtml : operationRowHtml).join("") : '<tr><td colspan="5">暂无日志记录。</td></tr>';
     if (tableWrapEl) tableWrapEl.hidden = false;
-    return;
   }
-  if (logType === "system") renderSystemTable(rows);
-  else renderOperationTable(rows);
-  if (pagerEl && window.aura && typeof window.aura.renderPager === "function") {
+
+  if (pagerEl && window.aura?.renderPager) {
     window.aura.renderPager(pagerEl, {
       page: Number(pager.page ?? logPage),
       pageSize: Number(pager.pageSize ?? logPageSize),
@@ -231,46 +222,45 @@ function renderTable(logType, payload) {
 }
 
 async function load(options = {}) {
-  const logType = document.getElementById("logType").value;
-  const keyword = document.getElementById("keyword").value.trim();
-  if (!options.keepPageInput) {
-    logPage = Number(logPage || 1);
-    logPageSize = Number(logPageSize || 15);
-  }
-  if (!Number.isFinite(logPage) || logPage <= 0) logPage = 1;
-  if (!Number.isFinite(logPageSize) || logPageSize <= 0) logPageSize = 15;
+  const logType = document.getElementById("logType")?.value || "operation";
+  const keyword = String(document.getElementById("keyword")?.value || "").trim();
+  if (!Number.isFinite(Number(logPage)) || Number(logPage) <= 0) logPage = 1;
+  if (!Number.isFinite(Number(logPageSize)) || Number(logPageSize) <= 0) logPageSize = 15;
   const query = new URLSearchParams({ page: String(logPage), pageSize: String(logPageSize) });
+  if (keyword) query.set("keyword", keyword);
+  appendLogFilters(query);
   setResult("");
   hideTable();
 
-  if (keyword) {
-    query.set("keyword", keyword);
-  }
-
   try {
     const endpoint = logType === "system" ? "/api/system-log/list" : "/api/operation/list";
-    const res = await fetch(`${apiBase}${endpoint}?${query.toString()}`, {
-      credentials: "include"
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setResult(data?.msg || "查询失败");
+    const result = await requestJson(`${apiBase}${endpoint}?${query.toString()}`);
+    const data = result.data;
+    if (!result.ok) {
+      setResult(data?.msg || "查询失败", { isError: true });
       return;
     }
     if (data?.pager) {
       logPage = Number(data.pager.page ?? logPage);
       logPageSize = Number(data.pager.pageSize ?? logPageSize);
     }
-    if (!options.silentSuccessToast && window.aura && typeof window.aura.toast === "function") {
-      window.aura.toast("查询成功");
-    }
+    if (!options.silentSuccessToast && window.aura?.toast) window.aura.toast("查询成功");
     renderTable(logType, data);
   } catch (error) {
-    setResult(`查询失败：${error.message}`);
+    setResult(`查询失败：${error.message}`, { isError: true });
   }
 }
 
-document.getElementById("load").addEventListener("click", load);
+document.getElementById("load")?.addEventListener("click", () => { void load(); });
+clearLogFilterBtn?.addEventListener("click", clearLogFilters);
+[document.getElementById("keyword"), logStartTimeEl, logEndTimeEl].forEach((element) => {
+  element?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    logPage = 1;
+    void load({ silentSuccessToast: true });
+  });
+});
 exportLogBtn?.addEventListener("click", async (event) => {
   event.preventDefault();
   event.stopPropagation();
@@ -278,15 +268,10 @@ exportLogBtn?.addEventListener("click", async (event) => {
   const logType = String(document.getElementById("logType")?.value || "operation").toLowerCase();
   const dataset = logType === "system" ? "system" : "operation";
   const keyword = String(document.getElementById("keyword")?.value || "").trim();
-  if (window.aura && typeof window.aura.exportDataset === "function") {
-    await window.aura.exportDataset({
-      apiBase,
-      dataset,
-      keyword,
-      onError: (message) => setResult(message)
-    });
+  if (window.aura?.exportDataset) {
+    await window.aura.exportDataset({ apiBase, dataset, keyword, params: buildLogExportParams(), onError: (message) => setResult(message, { isError: true }) });
     return;
   }
-  setResult("导出失败：缺少全局导出能力");
+  setResult("导出失败：缺少全局导出能力", { isError: true });
 });
 void load({ silentSuccessToast: true });

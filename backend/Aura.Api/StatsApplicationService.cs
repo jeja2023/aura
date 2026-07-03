@@ -2,9 +2,15 @@ using System.Text.Json;
 using Aura.Api.Ai;
 using Aura.Api.Cache;
 using Aura.Api.Data;
+using Aura.Api.Serialization;
 
 internal sealed class StatsApplicationService
 {
+    private const string OverviewCacheKey = "stats:overview:v1";
+    private const string DashboardCacheKey = "stats:dashboard:v1";
+    private static readonly TimeSpan OverviewCacheTtl = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan DashboardCacheTtl = TimeSpan.FromSeconds(30);
+
     private readonly AppStore _store;
     private readonly PgSqlConnectionFactory _pgSqlConnectionFactory;
     private readonly CaptureRepository _captureRepository;
@@ -12,6 +18,7 @@ internal sealed class StatsApplicationService
     private readonly DeviceRepository _deviceRepository;
     private readonly RetryQueueService _retryQueue;
     private readonly AiClient _aiClient;
+    private readonly RedisCacheService _cache;
 
     public StatsApplicationService(
         AppStore store,
@@ -20,7 +27,8 @@ internal sealed class StatsApplicationService
         MonitoringRepository monitoringRepository,
         DeviceRepository deviceRepository,
         RetryQueueService retryQueue,
-        AiClient aiClient)
+        AiClient aiClient,
+        RedisCacheService cache)
     {
         _store = store;
         _pgSqlConnectionFactory = pgSqlConnectionFactory;
@@ -29,22 +37,34 @@ internal sealed class StatsApplicationService
         _deviceRepository = deviceRepository;
         _retryQueue = retryQueue;
         _aiClient = aiClient;
+        _cache = cache;
     }
 
     public async Task<object> GetOverviewAsync()
     {
+        var cached = await TryGetCachedAsync(OverviewCacheKey);
+        if (cached.HasValue)
+        {
+            return cached.Value;
+        }
+
         var totalCaptureDb = await _captureRepository.GetCaptureCountAsync();
         var totalAlertDb = await _monitoringRepository.GetAlertCountAsync();
         var devices = await _deviceRepository.GetDevicesAsync();
         var useDb = _pgSqlConnectionFactory.IsConfigured;
 
+        if (useDb && (!totalCaptureDb.HasValue || !totalAlertDb.HasValue))
+        {
+            throw new InvalidOperationException("统计概览数据库查询失败。");
+        }
+
         var totalCapture = useDb
-            ? Math.Max(0, (int)(totalCaptureDb ?? 0))
+            ? Math.Max(0, (int)totalCaptureDb!.Value)
             : totalCaptureDb.HasValue && totalCaptureDb.Value >= 0
                 ? totalCaptureDb.Value
                 : _store.Captures.Count;
         var totalAlert = useDb
-            ? Math.Max(0, (int)(totalAlertDb ?? 0))
+            ? Math.Max(0, (int)totalAlertDb!.Value)
             : totalAlertDb.HasValue && totalAlertDb.Value >= 0
                 ? totalAlertDb.Value
                 : _store.Alerts.Count;
@@ -55,11 +75,19 @@ internal sealed class StatsApplicationService
                 : _store.Devices.Count(x => x.Status == "online");
 
         var ai = await BuildAiOverviewAsync();
-        return new { totalCapture, totalAlert, onlineDevice, ai };
+        var result = new { totalCapture, totalAlert, onlineDevice, ai };
+        await SetCachedAsync(OverviewCacheKey, result, OverviewCacheTtl);
+        return result;
     }
 
     public async Task<object> GetDashboardAsync()
     {
+        var cached = await TryGetCachedAsync(DashboardCacheKey);
+        if (cached.HasValue)
+        {
+            return cached.Value;
+        }
+
         var today = DateOnly.FromDateTime(DateTime.Now);
         var start = today.AddDays(-6).ToDateTime(TimeOnly.MinValue);
         var end = today.AddDays(1).ToDateTime(TimeOnly.MinValue);
@@ -67,9 +95,14 @@ internal sealed class StatsApplicationService
         var rangeEnd = new DateTimeOffset(end);
 
         var captures = await GetCaptureSamplesAsync(rangeStart, rangeEnd);
-        var alerts = await _monitoringRepository.GetAlertsInRangeAsync(rangeStart, rangeEnd);
         var useDb = _pgSqlConnectionFactory.IsConfigured;
+        var alertResult = await _monitoringRepository.GetAlertsPagedAsync(null, null, rangeStart, rangeEnd, 1, 1000);
+        if (useDb && !alertResult.Succeeded)
+        {
+            throw new InvalidOperationException("统计图表告警查询失败。");
+        }
 
+        var alerts = alertResult.Rows;
         var sourceAlerts = useDb
             ? alerts.Select(x => new { x.AlertType, CreatedAt = new DateTimeOffset(x.CreatedAt) }).ToList()
             : alerts.Count > 0
@@ -131,7 +164,51 @@ internal sealed class StatsApplicationService
             .ThenByDescending(x => x.count)
             .ToList();
 
-        return new { daily, byDevice, byAlertType, aiDaily, aiStatus };
+        var result = new { daily, byDevice, byAlertType, aiDaily, aiStatus };
+        await SetCachedAsync(DashboardCacheKey, result, DashboardCacheTtl);
+        return result;
+    }
+
+    private async Task<JsonElement?> TryGetCachedAsync(string key)
+    {
+        if (!_cache.Enabled)
+        {
+            return null;
+        }
+
+        try
+        {
+            var cached = await _cache.GetAsync(key);
+            if (string.IsNullOrWhiteSpace(cached))
+            {
+                return null;
+            }
+
+            return JsonSerializer.Deserialize<JsonElement>(cached, AuraJsonSerializerOptions.Default);
+        }
+        catch
+        {
+            await _cache.DeleteAsync(key);
+            return null;
+        }
+    }
+
+    private async Task SetCachedAsync(string key, object value, TimeSpan ttl)
+    {
+        if (!_cache.Enabled)
+        {
+            return;
+        }
+
+        try
+        {
+            var json = JsonSerializer.Serialize(value, AuraJsonSerializerOptions.Default);
+            await _cache.SetAsync(key, json, ttl);
+        }
+        catch
+        {
+            // 缓存写入失败不影响统计接口主流程。
+        }
     }
 
     private async Task<object> BuildAiOverviewAsync()
@@ -186,17 +263,22 @@ internal sealed class StatsApplicationService
 
     private async Task<List<StatsCaptureSample>> GetCaptureSamplesAsync(DateTimeOffset rangeStart, DateTimeOffset rangeEnd)
     {
-        var captures = await _captureRepository.GetCapturesInRangeAsync(rangeStart, rangeEnd);
+        var result = await _captureRepository.GetCapturesPagedAsync(rangeStart, rangeEnd, 1, 1000);
         var useDb = _pgSqlConnectionFactory.IsConfigured;
 
         if (useDb)
         {
-            return captures.Select(MapDbCapture).ToList();
+            if (!result.Succeeded)
+            {
+                throw new InvalidOperationException("统计图表抓拍查询失败。");
+            }
+
+            return result.Rows.Select(MapDbCapture).ToList();
         }
 
-        if (captures.Count > 0)
+        if (result.Rows.Count > 0)
         {
-            return captures.Select(MapDbCapture).ToList();
+            return result.Rows.Select(MapDbCapture).ToList();
         }
 
         return _store.Captures

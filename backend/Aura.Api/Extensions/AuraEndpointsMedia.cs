@@ -23,9 +23,9 @@ internal static class AuraEndpointsMedia
                 playback = "回放：依赖 NVR ISAPI/私有 SDK 或录像文件索引，与 ISAPI 单次 HTTP 封装分层。",
                 hints = "POST /api/media/hikvision/stream-hint 仅返回路径模板与通道号，不返回凭据、不建立媒体会话。"
             }
-        })).RequireAuthorization("楼栋管理员");
+        })).RequireAuthorization("设备诊断");
 
         g.MapPost("/hikvision/stream-hint", async (MediaStreamHintReq req, HikvisionNvrIntegrationService svc, CancellationToken ct) =>
-            await svc.GetMediaStreamHintAsync(req, ct)).RequireAuthorization("楼栋管理员");
+            await svc.GetMediaStreamHintAsync(req, ct)).RequireAuthorization("设备诊断");
     }
 }

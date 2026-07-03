@@ -38,6 +38,10 @@
       ]
     },
     {
+      title: "产品化扩展",
+      items: [{ href: "/extensions/", label: "扩展管理" }]
+    },
+    {
       title: "权限与组织",
       items: [
         { href: "/role/", label: "角色管理" },
@@ -55,6 +59,26 @@
   const SUPER_ADMIN_ONLY_PATHS = new Set(["/role/", "/user/", "/log/", "/ops-settings/"]);
   const ROLE_SCOPED_HREFS = Object.freeze({
     "/device-diag/": new Set(["super_admin", "building_admin"])
+  });
+  const PERMISSION_SCOPED_HREFS = Object.freeze({
+    "/device-diag/": "device.diag",
+    "/ops-settings/": "ai.settings",
+    "/extensions/": ["alert.manage", "space.manage", "report.manage", "tenant.manage", "ai.platform"]
+  });
+  const PERMISSION_ALIASES = Object.freeze({
+    alert: "alert.manage",
+    ai: "ai.settings",
+    ai_settings: "ai.settings",
+    device_diag: "device.diag",
+    "device.diagnostics": "device.diag",
+    media: "device.diag",
+    report: "report.manage",
+    reports: "report.manage",
+    space: "space.manage",
+    tenant: "tenant.manage",
+    tenants: "tenant.manage",
+    ai_platform: "ai.platform",
+    "ai.platform": "ai.platform"
   });
   const PAGE_SESSION_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const PAGE_ENTER_MS = Date.now();
@@ -74,22 +98,49 @@
     return `${normPath(window.location.pathname)}${window.location.search || ""}`;
   }
 
-  function canAccessNavItemByRole(itemHref, role) {
-    const requiredRoles = ROLE_SCOPED_HREFS[itemHref];
-    if (!requiredRoles) return true;
-    return requiredRoles.has(String(role || "").trim().toLowerCase());
+  function normalizePermission(value) {
+    const key = String(value || "").trim().toLowerCase();
+    return PERMISSION_ALIASES[key] || key;
   }
 
-  function renderSidebar(container, role) {
+  function getSessionPermissions(session) {
+    const values = Array.isArray(session?.permissions) ? session.permissions : [];
+    return new Set(values.map((item) => normalizePermission(item)).filter(Boolean));
+  }
+
+  function hasPermission(session, permission) {
+    const role = String(session?.role || "").trim().toLowerCase();
+    if (role === "super_admin") return true;
+    const normalized = normalizePermission(permission);
+    const permissions = getSessionPermissions(session);
+    return permissions.has("all") || permissions.has(normalized);
+  }
+
+  function canAccessNavItem(itemHref, session) {
+    const role = String(session?.role || "").trim().toLowerCase();
+    if (role === "super_admin") return true;
+    const requiredRoles = ROLE_SCOPED_HREFS[itemHref];
+    if (requiredRoles && !requiredRoles.has(role)) return false;
+    const requiredPermission = PERMISSION_SCOPED_HREFS[itemHref];
+    if (Array.isArray(requiredPermission)) {
+      if (!requiredPermission.some((permission) => hasPermission(session, permission))) return false;
+    } else if (requiredPermission && !hasPermission(session, requiredPermission)) {
+      return false;
+    }
+    return true;
+  }
+
+  function renderSidebar(container, session) {
     const cur = currentPath();
     const curWithQuery = currentPathWithQuery();
+    const role = String(session?.role || "").trim().toLowerCase();
     const isSuperAdmin = role === "super_admin";
     let html =
       '<div class="app-brand" title="寓瞳 · 智能集宿区视觉解析平台"><img class="app-brand-icon" src="/common/favicon.svg" alt="寓瞳图标" /><span class="app-brand-text">寓瞳</span></div><nav class="app-nav" aria-label="业务模块导航">';
     for (const g of NAV_GROUPS) {
       const visibleItems = g.items.filter((it) => {
         if (!isSuperAdmin && SUPER_ADMIN_ONLY_PATHS.has(it.href)) return false;
-        return canAccessNavItemByRole(it.href, role);
+        return canAccessNavItem(it.href, session);
       });
       if (visibleItems.length === 0) continue;
       html += `<section class="nav-group"><div class="nav-group-title">${g.title}</div><ul class="nav-group-items">`;
@@ -363,6 +414,7 @@
     const apiBase = String(options.apiBase || "");
     const dataset = String(options.dataset || "").trim().toLowerCase();
     const keyword = String(options.keyword || "").trim();
+    const extraParams = options.params && typeof options.params === "object" ? options.params : {};
     const onError = typeof options.onError === "function" ? options.onError : null;
     const onSuccess = typeof options.onSuccess === "function" ? options.onSuccess : null;
     if (!dataset) {
@@ -373,6 +425,10 @@
     if (!safeType) return false;
     const query = new URLSearchParams({ dataset });
     if (keyword) query.set("keyword", keyword);
+    Object.entries(extraParams).forEach(([key, value]) => {
+      if (!key || value === null || value === undefined || String(value).trim() === "") return;
+      query.set(key, String(value));
+    });
     try {
       const result = await requestJson(`${apiBase}/api/export/${safeType}?${query.toString()}`);
       const data = result.data;
@@ -401,6 +457,217 @@
     if ("disabled" in element) {
       element.disabled = !shown;
     }
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
+  }
+
+  function deriveMessage(data, fallback = "操作完成") {
+    if (typeof data === "string") return data;
+    if (data && typeof data === "object") {
+      if (typeof data.msg === "string") return data.msg;
+      if (Array.isArray(data.data)) return `共 ${data.data.length} 条结果`;
+      return fallback;
+    }
+    return String(data ?? "");
+  }
+
+  function isErrorPayload(data, message = "") {
+    if (data && typeof data === "object" && typeof data.code === "number") {
+      return data.code !== 0;
+    }
+    if (typeof message === "string") {
+      return /失败|错误|异常|超时|拒绝|未授权|无权|禁止|非法|无效|无法|不能|不存在|已过期|已失效/.test(message);
+    }
+    return false;
+  }
+
+  function setStatus(element, data, options = {}) {
+    if (!element) return "";
+    const text = deriveMessage(data, options.fallback || "操作完成").trim();
+    if (!text) {
+      element.textContent = "";
+      element.hidden = true;
+      element.classList.remove("is-error");
+      return "";
+    }
+    const isError = options.isError ?? isErrorPayload(data, text);
+    element.textContent = text;
+    element.hidden = false;
+    element.classList.toggle("is-error", Boolean(isError));
+    return text;
+  }
+
+  function createStatusController(element, options = {}) {
+    let timer = null;
+    const rawSuccessMs = Number(options.successMs);
+    const successMs = Number.isFinite(rawSuccessMs) ? Math.max(0, rawSuccessMs) : 5000;
+
+    const clearTimer = () => {
+      if (timer != null) {
+        window.clearTimeout(timer);
+        timer = null;
+      }
+    };
+
+    const clear = () => {
+      clearTimer();
+      setStatus(element, "");
+    };
+
+    const set = (data, setOptions = {}) => {
+      clearTimer();
+      const text = setStatus(element, data, { ...options, ...setOptions });
+      const isError = setOptions.isError ?? isErrorPayload(data, text);
+      if (text && !isError && successMs > 0) {
+        timer = window.setTimeout(() => {
+          timer = null;
+          setStatus(element, "");
+        }, successMs);
+      }
+      return text;
+    };
+
+    return { clear, set };
+  }
+
+  function setBusy(elements, busy) {
+    const list = Array.isArray(elements) ? elements : [elements];
+    list.forEach((el) => {
+      if (el && "disabled" in el) el.disabled = Boolean(busy);
+    });
+  }
+
+  function readForm(root, options = {}) {
+    const scope = typeof root === "string" ? document.querySelector(root) : root;
+    if (!scope) return {};
+    const values = {};
+    const fields = scope.querySelectorAll("input[name], select[name], textarea[name], [data-aura-field]");
+    fields.forEach((field) => {
+      const name = field.getAttribute("name") || field.getAttribute("data-aura-field");
+      if (!name) return;
+      if (field instanceof HTMLInputElement) {
+        if (field.type === "checkbox") {
+          if (options.checkboxMode === "array") {
+            if (!Array.isArray(values[name])) values[name] = [];
+            if (field.checked) values[name].push(field.value);
+          } else {
+            values[name] = field.checked;
+          }
+          return;
+        }
+        if (field.type === "radio") {
+          if (field.checked) values[name] = field.value;
+          return;
+        }
+      }
+      values[name] = String(field.value ?? "").trim();
+    });
+    return values;
+  }
+
+  function resetForm(root, options = {}) {
+    const scope = typeof root === "string" ? document.querySelector(root) : root;
+    if (!scope) return;
+    const fields = scope.querySelectorAll("input, select, textarea");
+    fields.forEach((field) => {
+      if (field instanceof HTMLInputElement) {
+        if (field.type === "checkbox" || field.type === "radio") {
+          field.checked = Boolean(options.checked);
+          return;
+        }
+      }
+      if (field instanceof HTMLSelectElement) {
+        field.selectedIndex = 0;
+        return;
+      }
+      field.value = "";
+    });
+  }
+
+  function renderTable(options = {}) {
+    const headEl = options.head;
+    const bodyEl = options.body;
+    if (!headEl || !bodyEl) return;
+    const rows = Array.isArray(options.rows) ? options.rows : [];
+    const columns = Array.isArray(options.columns) ? options.columns : [];
+    const emptyText = options.emptyText || "暂无数据。";
+    const emptyColspan = Math.max(1, Number(options.emptyColspan) || columns.length || 1);
+    const rowHtml = typeof options.rowHtml === "function" ? options.rowHtml : null;
+
+    if (options.wrap) options.wrap.hidden = false;
+    if (columns.length) {
+      headEl.innerHTML = `<tr>${columns
+        .map((col) => {
+          const label = typeof col === "string" ? col : col.label;
+          const cls = typeof col === "object" && col.className ? ` class="${escapeHtml(col.className)}"` : "";
+          const scope = typeof col === "object" && col.scope ? ` scope="${escapeHtml(col.scope)}"` : "";
+          return `<th${cls}${scope}>${escapeHtml(label || "")}</th>`;
+        })
+        .join("")}</tr>`;
+    } else if (options.clearHead !== false) {
+      headEl.innerHTML = "";
+    }
+
+    if (!rows.length) {
+      bodyEl.innerHTML = `<tr><td colspan="${emptyColspan}">${escapeHtml(emptyText)}</td></tr>`;
+      return;
+    }
+
+    bodyEl.innerHTML = rows
+      .map((row, index) => (rowHtml ? rowHtml(row, index) : `<tr><td>${escapeHtml(String(row ?? ""))}</td></tr>`))
+      .join("");
+  }
+
+  function clearTable(options = {}) {
+    if (options.pager) {
+      options.pager.hidden = true;
+      options.pager.innerHTML = "";
+    }
+    if (options.head) options.head.innerHTML = "";
+    if (options.body) options.body.innerHTML = "";
+    if (options.wrap) options.wrap.hidden = true;
+  }
+
+  function openModal(root, options = {}) {
+    if (!root) return;
+    if (root.hidden) {
+      root.dataset.auraPrevOverflow = document.body.style.overflow || "";
+    }
+    root.hidden = false;
+    document.body.style.overflow = "hidden";
+    const focusTarget = options.focus
+      ? root.querySelector(options.focus)
+      : root.querySelector("input:not([type=hidden]), select, textarea, button");
+    if (focusTarget && typeof focusTarget.focus === "function") {
+      focusTarget.focus();
+      if (options.select && typeof focusTarget.select === "function") focusTarget.select();
+    }
+  }
+
+  function closeModal(root) {
+    if (!root) return;
+    root.hidden = true;
+    document.body.style.overflow = root.dataset.auraPrevOverflow || "";
+    delete root.dataset.auraPrevOverflow;
+  }
+
+  function bindModalDismiss(root, options = {}) {
+    if (!root) return;
+    const dismissSelector = options.dismissSelector || "[data-aura-modal-dismiss]";
+    const onClose = typeof options.onClose === "function" ? options.onClose : () => closeModal(root);
+    root.querySelectorAll(dismissSelector).forEach((el) => {
+      el.addEventListener("click", () => onClose());
+    });
+    root.querySelectorAll(".aura-modal-backdrop").forEach((el) => {
+      el.addEventListener("click", () => onClose());
+    });
   }
 
   function bridgeStatusToToast() {
@@ -469,7 +736,7 @@
     }
     const sidebar = document.getElementById("auraSidebar");
     if (sidebar) {
-      renderSidebar(sidebar, session?.role || "");
+      renderSidebar(sidebar, session);
     }
     setPageTitle();
     mountThemeControl();
@@ -587,6 +854,20 @@
     exportDataset: (options) => exportDataset(options),
     requestJson: (url, options) => requestJson(url, options),
     setElementVisible: (element, visible) => setElementVisible(element, visible),
+    escapeHtml: (value) => escapeHtml(value),
+    deriveMessage: (data, fallback) => deriveMessage(data, fallback),
+    isErrorPayload: (data, message) => isErrorPayload(data, message),
+    setStatus: (element, data, options) => setStatus(element, data, options),
+    createStatusController: (element, options) => createStatusController(element, options),
+    setBusy: (elements, busy) => setBusy(elements, busy),
+    readForm: (root, options) => readForm(root, options),
+    resetForm: (root, options) => resetForm(root, options),
+    renderTable: (options) => renderTable(options),
+    clearTable: (options) => clearTable(options),
+    openModal: (root, options) => openModal(root, options),
+    closeModal: (root) => closeModal(root),
+    bindModalDismiss: (root, options) => bindModalDismiss(root, options),
+    formatDateTime: (value, empty) => window.formatDateTimeDisplay(value, empty),
     toast: (message, isError = false, durationMs = 2200) => showToast(message, isError, durationMs),
     animateNumber: (el, target, duration = 1000) => {
       let startTime = null;

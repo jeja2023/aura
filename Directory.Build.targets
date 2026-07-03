@@ -1,0 +1,7 @@
+﻿<Project>
+  <!--
+    Keep build inputs single-sourced under backend/Aura.Api.
+    Generated review artifacts must not replace production compile items here;
+    Docker, local builds, and CI should compile the same source tree.
+  -->
+</Project>

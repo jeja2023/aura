@@ -1,6 +1,7 @@
 /* 文件：统计页脚本（stats.js）| File: Stats Script */
 const apiBase = "";
 const statusEl = document.getElementById("statsStatus");
+const requestJson = window.aura?.requestJson || fallbackRequestJson;
 
 const overviewEls = {
   totalCapture: document.getElementById("metricTotalCapture"),
@@ -27,6 +28,33 @@ let lastDashboardData = null;
 let renderRetryTimer = null;
 let renderRetryCount = 0;
 const MAX_RENDER_RETRY = 40;
+
+async function fallbackRequestJson(url, options = {}) {
+  const headers = new Headers(options.headers || {});
+  const init = {
+    ...options,
+    credentials: options.credentials || "include",
+    headers
+  };
+  const body = options.body;
+  const isJsonBody = body && typeof body === "object" && !(body instanceof FormData) && !(body instanceof Blob) && !(body instanceof URLSearchParams);
+  if (isJsonBody) {
+    if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+    init.body = JSON.stringify(body);
+  }
+
+  const response = await fetch(url, init);
+  const text = await response.text();
+  let data = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { code: response.ok ? 0 : -1, msg: text };
+    }
+  }
+  return { ok: response.ok, status: response.status, data, response };
+}
 
 function setStatus(message, isError = false) {
   if (!statusEl) return;
@@ -396,12 +424,12 @@ async function load() {
 
   try {
     const [overviewRes, dashboardRes] = await Promise.all([
-      fetch(`${apiBase}/api/stats/overview`, { credentials: "include" }),
-      fetch(`${apiBase}/api/stats/dashboard`, { credentials: "include" })
+      requestJson(`${apiBase}/api/stats/overview`),
+      requestJson(`${apiBase}/api/stats/dashboard`)
     ]);
 
-    const overview = await overviewRes.json();
-    const dashboard = await dashboardRes.json();
+    const overview = overviewRes.data || {};
+    const dashboard = dashboardRes.data || {};
 
     if (!overviewRes.ok) {
       setStatus(`概览请求失败：HTTP ${overviewRes.status}`, true);
