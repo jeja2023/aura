@@ -7,6 +7,7 @@ on:
       - "backend/**"
       - "ai/**"
       - "frontend/**"
+      - "frontend-overrides/**"
       - "start_services.py"
       - "database/**"
       - "Aura.sln"
@@ -22,6 +23,7 @@ on:
       - "backend/**"
       - "ai/**"
       - "frontend/**"
+      - "frontend-overrides/**"
       - "start_services.py"
       - "database/**"
       - "Aura.sln"
@@ -68,6 +70,7 @@ jobs:
               - "deploy/**"
             frontend:
               - "frontend/**"
+              - "frontend-overrides/**"
               - ".github/workflows/**"
               - ".editorconfig"
               - ".env.example"
@@ -117,6 +120,38 @@ jobs:
       - name: Run backend integration tests
         run: dotnet test "${{ github.workspace }}/backend/Aura.Api.Integration.Tests/Aura.Api.Integration.Tests.csproj" -c Release --no-build --no-restore --verbosity normal
 
+  ai:
+    name: AI Pytest
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: detect-changes
+    if: needs.detect-changes.outputs.ai == 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: ai/requirements-dev.txt
+
+      - name: Install AI test dependencies
+        working-directory: ai
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+
+      - name: Check AI Python dependencies
+        working-directory: ai
+        run: python -m pip check
+
+      - name: Run AI tests
+        working-directory: ai
+        run: python -m pytest -p no:cacheprovider
+
   frontend:
     name: Frontend Lint
     runs-on: ubuntu-latest
@@ -143,6 +178,16 @@ jobs:
         working-directory: frontend
         run: npm run lint
 
+      - name: Check frontend override scripts
+        shell: bash
+        run: |
+          if [ -d "frontend-overrides" ]; then
+            find frontend-overrides -type f -name '*.js' | sort | while IFS= read -r file; do
+              [ -n "$file" ] || continue
+              node --check "$file"
+            done
+          fi
+
   summary:
     name: CI Summary
     runs-on: ubuntu-latest
@@ -150,6 +195,7 @@ jobs:
     needs:
       - detect-changes
       - backend
+      - ai
       - frontend
 
     steps:
@@ -159,18 +205,32 @@ jobs:
           BACKEND_CHANGED: ${{ needs.detect-changes.outputs.backend }}
           FRONTEND_CHANGED: ${{ needs.detect-changes.outputs.frontend }}
           AI_CHANGED: ${{ needs.detect-changes.outputs.ai }}
+          DETECT_RESULT: ${{ needs.detect-changes.result }}
           BACKEND_RESULT: ${{ needs.backend.result }}
+          AI_RESULT: ${{ needs.ai.result }}
           FRONTEND_RESULT: ${{ needs.frontend.result }}
         run: |
           echo "## CI Summary" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "| Area | Changed | Result |" >> "$GITHUB_STEP_SUMMARY"
           echo "| --- | --- | --- |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Detect Changes | n/a | ${DETECT_RESULT} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Backend | ${BACKEND_CHANGED} | ${BACKEND_RESULT} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| AI | ${AI_CHANGED} | ${AI_RESULT} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Frontend | ${FRONTEND_CHANGED} | ${FRONTEND_RESULT} |" >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "$DETECT_RESULT" != "success" ]]; then
+            echo "Change detection failed or was cancelled." >&2
+            exit 1
+          fi
 
           if [[ "$BACKEND_CHANGED" == "true" && "$BACKEND_RESULT" != "success" ]]; then
             echo "Backend checks failed or were cancelled." >&2
+            exit 1
+          fi
+
+          if [[ "$AI_CHANGED" == "true" && "$AI_RESULT" != "success" ]]; then
+            echo "AI checks failed or were cancelled." >&2
             exit 1
           fi
 

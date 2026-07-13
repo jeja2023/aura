@@ -242,11 +242,11 @@ def test_extract_unavailable_returns_503_status():
     assert body["msg"] == "AI 推理服务当前不可用，请稍后重试"
 
 
-def test_extract_file_rejects_path_outside_allowed_roots():
+def test_extract_file_rejects_path_outside_allowed_roots(tmp_path):
     app = FastAPI()
     app.include_router(build_api_router(_FakeDeps()))
     client = TestClient(app)
-    base = Path(".codex-artifacts") / "ai-route-path-guard"
+    base = tmp_path / "ai-route-path-guard"
     allowed_root = base / "allowed"
     outside_file = base / "outside.txt"
     allowed_root.mkdir(parents=True, exist_ok=True)

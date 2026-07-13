@@ -2,6 +2,32 @@
 
 本文档记录仓库关键版本与阶段性改动，便于联调、回归与发布追踪。
 
+## 0.1.33（2026-07-13）
+### CI 门禁与测试覆盖升级
+- `.github/workflows/dotnet-ci.yml` 扩展触发范围，`push` / `pull_request` 与 frontend 变更检测均纳入 `frontend-overrides/**`，避免覆盖层脚本改动绕过前端门禁。
+- 新增独立 `AI Pytest` job：使用 Python 3.12、pip 缓存、`ai/requirements-dev.txt` 安装测试依赖，执行 `python -m pip check` 与 `python -m pytest -p no:cacheprovider`。
+- CI summary 增加 `Detect Changes` 与 `AI` 结果行，并在变更检测、后端、AI、前端任一应运行区域失败或取消时显式失败。
+- 前端 job 在 `npm run lint` 后增加 `frontend-overrides/**/*.js` 的 `node --check` 语法检查，补齐 ESLint 基准目录外覆盖脚本的验证空白。
+
+### AI 测试与维护文档
+- 新增 `ai/requirements-dev.txt`，集中声明 AI 测试依赖，便于本机与 CI 使用同一套 pytest/httpx/pytest-asyncio 版本。
+- `README.md` 补充 AI 测试维护命令，明确维护者可在 `ai` 目录安装 dev requirements 后运行 pytest。
+- `ai/tests/test_ai_routes_and_index.py` 的 `/ai/extract-file` 路径保护测试改用 `tmp_path`，不再依赖本地 `.codex-artifacts` 可写性，提高 Windows、CI 与沙箱环境下的可移植性。
+- `docs/运维上线手册.md` 的发布检查清单同步到 `0.1.33`，补充发布前需通过后端、AI、前端与覆盖层脚本检查。
+
+### 验证
+- `npm run lint`：通过。
+- `node --check frontend-overrides/**/*.js`：通过。
+- `python -m pip check`：通过。
+- `python -m pytest -p no:cacheprovider`：32 passed，保留第三方 multipart pending deprecation 与刻意触发的 Pillow DecompressionBombWarning。
+- `dotnet build Aura.sln --no-restore -v:minimal /m:1`：通过，0 warning / 0 error。
+- `dotnet test Aura.sln --no-build --no-restore -v:minimal`：`Aura.Api.Tests` 45 passed，`Aura.Api.Integration.Tests` 42 passed。
+- `git diff --check`：通过；仅有 Windows Git 的 LF/CRLF 策略提示。
+
+### 版本
+- 启用版本 `0.1.33`：`.NET` 统一版本写入 `Directory.Build.props`，AI FastAPI OpenAPI 版本同步为 `0.1.33`。
+- `docker/.env.registry.example` 默认业务镜像标签与离线包文件名升级到 `v0.1.33`。
+
 ## 0.1.32（2026-07-03）
 ### 启动迁移与配置对齐
 - `start_services.py` 在本地一键启动前自动执行 `Aura.DbMigrator migrate`，复用 `.env` / `appsettings.Development.json` 的 PostgreSQL 连接串，并使用 `DB_MIGRATION_COMMAND_TIMEOUT_SECONDS`、`DB_MIGRATION_LOCK_TIMEOUT_SECONDS` 控制超时。
@@ -1549,4 +1575,4 @@
 ## 版本规范
 
 - 版本号遵循 `MAJOR.MINOR.PATCH`
-- 当前版本：`0.1.32`
+- 当前版本：`0.1.33`

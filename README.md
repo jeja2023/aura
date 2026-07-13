@@ -4,7 +4,7 @@
 
 ## 项目状态
 
-- 当前版本：`0.1.32`（细目见 **`CHANGELOG.md`**）
+- 当前版本：`0.1.33`（细目见 **`CHANGELOG.md`**）
 - 阶段状态：第一至第五阶段均已验收通过
 - 交付结论：计划项已全部完成并在 `docs/archive/开发计划.md` 归档勾选
 - 工程状态：后端可构建（推荐打开根目录 **`Aura.sln`** 或 `dotnet build backend/Aura.Api/Aura.Api.csproj`）、前端页面可访问、核心链路可联调
@@ -20,6 +20,7 @@
   - `0.1.30`：依赖漏洞审计清零、完整 .NET 构建/测试恢复、静态资源启动管线修复和临时产物清理。
   - `0.1.31`：构建源一致性、反向代理/Cookie/HMAC/CIDR 安全加固、Redis 降级、AI 图片输入限额、前端安全渲染与完整验证闭环。
   - `0.1.32`：本地一键启动自动执行数据库迁移，`.env`/`.env.docker` 与示例模板键集合和顺序对齐，并补齐自动/手动迁移边界说明。
+  - `0.1.33`：CI 门禁扩展到 AI pytest 与前端覆盖脚本语法检查，补齐 AI 测试依赖、维护说明和路径保护测试的可移植性。
 
 ## 目录结构
 
@@ -74,6 +75,8 @@ deactivate
 ```
 
 > 说明：若本机 `--reload` 模式不稳定，优先使用以上稳定启动命令。需要热重载时可改为 `python -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload`。
+
+> 维护者运行 AI 测试时，可先执行 `cd ai` 后的 `python -m pip install -r requirements-dev.txt`，再运行 `python -m pytest -p no:cacheprovider`。
 
 ### 3) 启动后端服务
 
