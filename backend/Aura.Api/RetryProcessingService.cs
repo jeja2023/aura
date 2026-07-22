@@ -3,6 +3,7 @@ using Aura.Api.Cache;
 using Aura.Api.Data;
 using Aura.Api.Internal;
 using Aura.Api.Models;
+using Aura.Api.Vector;
 
 internal sealed class RetryProcessingService
 {
@@ -12,6 +13,7 @@ internal sealed class RetryProcessingService
     private readonly RedisCacheService _cache;
     private readonly RetryQueueService _retryQueue;
     private readonly AiClient _aiClient;
+    private readonly LegacyVectorBridge _vectorBridge;
 
     public RetryProcessingService(
         AppStore store,
@@ -19,7 +21,8 @@ internal sealed class RetryProcessingService
         AuditRepository auditRepository,
         RedisCacheService cache,
         RetryQueueService retryQueue,
-        AiClient aiClient)
+        AiClient aiClient,
+        LegacyVectorBridge vectorBridge)
     {
         _store = store;
         _captureRepository = captureRepository;
@@ -27,6 +30,7 @@ internal sealed class RetryProcessingService
         _cache = cache;
         _retryQueue = retryQueue;
         _aiClient = aiClient;
+        _vectorBridge = vectorBridge;
     }
 
     public async Task<IResult> GetStatusAsync()
@@ -84,7 +88,7 @@ internal sealed class RetryProcessingService
                     {
                         vectorId = $"C_{task.CaptureId}";
                         _ = await _captureRepository.UpdateCaptureFeatureIdAsync(task.CaptureId, vectorId);
-                        upsert = await _aiClient.UpsertAsync(vectorId, ai.Feature);
+                        upsert = await _vectorBridge.UpsertAsync(vectorId, ai.Feature, task.CaptureId);
                         if (!upsert.Success)
                         {
                             failed++;

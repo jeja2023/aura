@@ -9,6 +9,7 @@ using Aura.Api.Internal;
 using Aura.Api.Ops;
 using Aura.Api.Services;
 using Aura.Api.Services.Hikvision;
+using Aura.Api.Vector;
 
 namespace Aura.Api.Extensions;
 
@@ -79,6 +80,7 @@ public static partial class ServiceExtensions
         services.AddScoped<OutputApplicationService>();
         services.AddScoped<VectorApplicationService>(sp => new VectorApplicationService(
             sp.GetRequiredService<AiClient>(),
+            sp.GetRequiredService<LegacyVectorBridge>(),
             sp.GetRequiredService<CaptureRepository>(),
             sp.GetRequiredService<RedisCacheService>(),
             configuration.GetValue("Limits:MaxImageBase64Chars", 5_000_000),
@@ -93,6 +95,7 @@ public static partial class ServiceExtensions
             sp.GetRequiredService<AuditRepository>(),
             sp.GetRequiredService<RetryQueueService>(),
             sp.GetRequiredService<AiClient>(),
+            sp.GetRequiredService<LegacyVectorBridge>(),
             sp.GetRequiredService<EventDispatchService>(),
             ProjectPaths.ResolveStorageRoot(hostEnvironment),
             ResolveCaptureRetryFolder(configuration, hostEnvironment),
@@ -107,6 +110,7 @@ public static partial class ServiceExtensions
             sp.GetRequiredService<AuditRepository>(),
             ProjectPaths.ResolveStorageRoot(hostEnvironment)));
         services.AddScoped<OperationQueryService>();
+        services.AddSingleton<MediaPlatformReadinessService>();
         services.AddScoped<SystemLogQueryService>();
         services.AddScoped<CaptureOpsService>(sp => new CaptureOpsService(
             sp.GetRequiredService<AppStore>(),

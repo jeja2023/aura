@@ -33,18 +33,22 @@ read_env() {
 }
 
 echo "Env file: $ENV_FILE"
-compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" build ai api
+compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" build ai api media-provider-simulator
 
 BUILT_API_IMAGE="$(read_env API_IMAGE aura-api:local)"
 BUILT_AI_IMAGE="$(read_env AI_IMAGE aura-ai:local)"
+BUILT_SIMULATOR_IMAGE="$(read_env MEDIA_PROVIDER_SIMULATOR_IMAGE aura-media-provider-simulator:local)"
 API_IMAGE_REPO="${API_IMAGE_REPO:-aura-api}"
 AI_IMAGE_REPO="${AI_IMAGE_REPO:-aura-ai}"
+MEDIA_PROVIDER_SIMULATOR_IMAGE_REPO="${MEDIA_PROVIDER_SIMULATOR_IMAGE_REPO:-aura-media-provider-simulator}"
 IMAGE_TAG="${IMAGE_TAG:-$(date +%Y%m%d-%H%M%S)}"
 
 docker tag "$BUILT_API_IMAGE" "${API_IMAGE_REPO}:${IMAGE_TAG}"
 docker tag "$BUILT_AI_IMAGE" "${AI_IMAGE_REPO}:${IMAGE_TAG}"
+docker tag "$BUILT_SIMULATOR_IMAGE" "${MEDIA_PROVIDER_SIMULATOR_IMAGE_REPO}:${IMAGE_TAG}"
 
 echo ""
 echo "Built and tagged:"
 echo "  ${API_IMAGE_REPO}:${IMAGE_TAG}"
 echo "  ${AI_IMAGE_REPO}:${IMAGE_TAG}"
+echo "  ${MEDIA_PROVIDER_SIMULATOR_IMAGE_REPO}:${IMAGE_TAG}"

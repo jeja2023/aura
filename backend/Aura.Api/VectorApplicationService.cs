@@ -8,6 +8,7 @@ using Aura.Api.Data;
 using Aura.Api.Internal;
 using Aura.Api.Models;
 using Aura.Api.Serialization;
+using Aura.Api.Vector;
 using Microsoft.AspNetCore.Http;
 
 internal sealed class VectorApplicationService
@@ -18,6 +19,7 @@ internal sealed class VectorApplicationService
     private static readonly TimeSpan SearchCacheTtl = TimeSpan.FromSeconds(20);
 
     private readonly AiClient _aiClient;
+    private readonly LegacyVectorBridge _vectorBridge;
     private readonly CaptureRepository _captureRepository;
     private readonly RedisCacheService _cache;
     private readonly int _maxImageBase64Chars;
@@ -25,12 +27,14 @@ internal sealed class VectorApplicationService
 
     public VectorApplicationService(
         AiClient aiClient,
+        LegacyVectorBridge vectorBridge,
         CaptureRepository captureRepository,
         RedisCacheService cache,
         int maxImageBase64Chars,
         int maxMetadataJsonChars)
     {
         _aiClient = aiClient;
+        _vectorBridge = vectorBridge;
         _captureRepository = captureRepository;
         _cache = cache;
         _maxImageBase64Chars = maxImageBase64Chars;
@@ -94,34 +98,38 @@ internal sealed class VectorApplicationService
             return Results.Ok(new { code = 0, msg = "查询成功", data = cached });
         }
 
-        var rows = await _aiClient.SearchAsync(req.Feature, topK);
-        if (!rows.Success)
+        IReadOnlyList<VectorIndexHit> rows;
+        try
         {
-            return AuraApiResults.BadGateway(rows.Message, 50271);
+            rows = await _vectorBridge.SearchAsync(req.Feature, topK);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return AuraApiResults.BadGateway(ex.Message, 50271);
         }
 
-        if (rows.Items.Count == 0)
+        if (rows.Count == 0)
         {
             var empty = Array.Empty<VectorSearchHit>();
             await SetCachedAsync(cacheKey, empty, SearchCacheTtl);
             return Results.Ok(new { code = 0, msg = "查询成功", data = empty });
         }
 
-        var vids = rows.Items
-            .Select(x => x.vid)
+        var vids = rows
+            .Select(x => x.Vid)
             .Where(x => !string.IsNullOrWhiteSpace(x))
             .Distinct(StringComparer.Ordinal)
             .ToList();
         var imageMap = vids.Count > 0
             ? await _captureRepository.GetBestCaptureImageByVidsAsync(vids)
             : new Dictionary<string, string>(StringComparer.Ordinal);
-        var data = rows.Items
+        var data = rows
             .Select(x =>
             {
-                var vid = x.vid ?? string.Empty;
+                var vid = x.Vid;
                 return new VectorSearchHit(
                     vid,
-                    x.score,
+                    x.Score,
                     imageMap.TryGetValue(vid, out var imageUrl) ? imageUrl : null);
             })
             .ToList();

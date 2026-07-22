@@ -2,6 +2,82 @@
 
 本文档记录仓库关键版本与阶段性改动，便于联调、回归与发布追踪。
 
+## 0.2.0（2026-07-22）
+
+### 通用媒体解析架构与契约
+
+- 新增通用媒体解析平台能力，Aura 可按租户配置解析提供方、处理管线、媒体源、视频流订阅和分析任务，覆盖图片同步解析、视频异步解析以及持续视频流解析；实现不绑定任何特定厂商客户端。
+- 新增标准 HTTP 提供方适配器与 `IMediaAnalysisProvider` 扩展边界，支持能力发现、任务提交和查询、流订阅、媒体结果与制品拉取，后续接入其他解析平台只需实现统一契约。
+- 新增 OpenAPI、标准事件 JSON Schema、Webhook 签名规范和凭据配置说明，明确 Aura 下发任务、提供方回推标准化事件、Aura 可靠消费的双向协议。
+- 新增通用提供方模拟器，支持图片、视频、视频流、事件重放、制品获取以及超时、失败、重复、乱序等故障注入，可用于本地和集成环境联调。
+- 新增《通用媒体解析与多模数据架构开发计划》和《媒体解析平台运维手册》，记录总体架构、职责边界、开发阶段、容量策略和故障处置流程。
+
+### 提供方接入与安全
+
+- 出站认证支持无认证、HMAC、Bearer、OAuth2 Client Credentials 和 mTLS；提供方 API 凭据 `secret_ref` 与入站 Webhook 凭据 `webhook_secret_ref` 分离管理。
+- 密钥引用只允许环境变量、配置或 Secret 引用语法，拒绝把明文密钥写入业务表；提供方管理和诊断接口不回显密钥内容。
+- 提供方 HTTP 调用增加连接/尝试/总超时、重试、熔断、按提供方并发控制以及请求和响应体积上限。
+- 外部地址访问增加 SSRF 防护、主机白名单、私网和明文 HTTP 显式开关；媒体制品下载限制重定向、类型和大小。
+- 入站 Webhook 增加 HMAC 签名、时间戳窗口、nonce 防重放、常量时间比较以及单条和批量事件入口。
+
+### 可靠事件处理与业务投影
+
+- 引入 PostgreSQL Inbox，事件接收先持久化再确认；Worker 使用租约和 `SKIP LOCKED` 并发领取，支持重试、死信、人工重放和积压观测。
+- 对事件 ID、序列号、重复和乱序进行幂等处理；同一数据库事务内写入标准化事件、业务事实与 Outbox，避免重复投递产生重复告警或图关系。
+- 新增检测事实、轨迹映射、抓拍、向量元数据与来源、身份候选、ROI、行为、告警/研判和制品归档投影；提供方轨迹、Aura 轨迹、实体和向量标识保持独立且可追溯。
+- 新增任务状态轮询、流订阅续租、Inbox 消费、制品归档、向量补偿和图投影等后台 Worker，并纳入心跳与 readiness。
+
+### PostgreSQL、pgvector 与 ArangoDB 分工
+
+- PostgreSQL 作为配置、任务、原始事件、业务事实、Inbox/Outbox 和审计记录的唯一权威数据源，所有跨存储投影均可从 PostgreSQL 对账或重建。
+- 启用 PostgreSQL `pgvector`，建立 512 维权威向量表和 HNSW 索引，支持按租户、模型版本和业务对象过滤的相似度检索；默认读写引擎均切换为 `pgvector`，旧 Arango 向量读取回退默认关闭。
+- 新增向量路由、旧向量回填、迁移检查点、双写失败补偿和影子评测能力，为历史数据迁移、召回率对比和受控回滚保留操作路径。
+- ArangoDB 保留为关系图专用存储，通过 PostgreSQL Outbox 异步投影空间、设备、人员、轨迹、访问和共现关系；禁止在业务请求中直接同步双写。
+- 新增确定性的租户安全图键、图集合与边定义、投影检查点、失败重试/死信/重放、全量重建，以及摄像头可达性/路径、人员访问/共现、房间人员等图查询。
+- 图查询增加最大深度、结果数、运行时间和响应体积限制；ArangoDB 不可用时 PostgreSQL 业务写入继续，恢复后由 Outbox 追平。
+
+### 控制面、权限与前端
+
+- 新增提供方、处理管线、媒体源、流订阅、分析任务、Inbox、制品、向量迁移、图投影和 readiness 管理 API。
+- 新增媒体解析管理页面，按权限展示提供方、管线、来源、订阅、任务、Inbox、制品、向量、图和就绪状态，并复用当前租户上下文。
+- 新增统一租户范围校验：超级管理员可跨租户，其他角色必须具备明确的 `tenant_role_scope`；全局提供方仅允许超级管理员管理。
+- 内置楼栋管理员默认获得本租户媒体查看、管理、操作和图查询权限；事件重放、向量迁移和图管理继续要求显式高权限或超级管理员。
+- 更新导航、角色权限配置和全局 readiness，使新能力从管理界面可发现、可授权、可操作。
+
+### 可观测性与运维
+
+- 新增提供方调用量、时延、超时分类、Webhook 认证与接收结果、Inbox 传输/处理延迟、任务结果与耗时、积压与最老事件年龄等指标。
+- 新增 pgvector 检索、图投影/查询/重建以及 Worker 心跳指标；readiness 可分别报告 PostgreSQL/pgvector、提供方、Inbox、Outbox、制品归档和 Arango 图状态。
+- Docker Compose 的 PostgreSQL 镜像切换为 `pgvector/pgvector:pg16`，ArangoDB 使用独立图数据库和最小权限账号；通用模拟器加入 `dev-tools` profile。
+- 构建、推送、离线导出脚本统一处理 API、AI 和通用提供方模拟器三类业务镜像；离线包包含 pgvector 基础镜像、ArangoDB 和全部业务镜像。
+
+### 数据库迁移
+
+- 新增 `015` 至 `024` 共 10 个增量迁移，覆盖媒体解析控制面、Inbox/Outbox、pgvector、空间拓扑约束、投影检查点、业务事实、向量补偿、制品归档、凭据分离和默认权限。
+- 空数据库 `bootstrap` 已验证应用 `001` 至 `024`，迁移状态为 applied 24、pending 0、unknown/drift 0；pgvector 0.8.5、pg_trgm 1.6 和 HNSW 索引均已确认可用。
+
+### 验证
+
+- `dotnet build Aura.sln --no-restore /nodeReuse:false`：通过，0 warning / 0 error。
+- `Aura.Api.Tests`：84 passed；`Aura.Api.Integration.Tests`：46 passed。
+- `python -m pytest -p no:cacheprovider ai/tests`：32 passed，保留第三方 multipart pending deprecation 与测试主动触发的 Pillow DecompressionBombWarning。
+- `npm run lint`：通过。
+- `docker compose --env-file .env.docker.example -f docker/docker-compose.yml config --quiet`：通过。
+- 新 PostgreSQL + pgvector 数据库迁移、API readiness、租户隔离、图片/视频/视频流模拟器、HMAC 正反例、制品归档、向量写入检索和乱序事件路径均已通过端到端验证。
+- 100 次投递同一个事件时，接收结果为 1 次 accepted、99 次 duplicate，数据库仅产生 1 条 Inbox、1 条标准事件、1 条检测事实和 1 条图 Outbox。
+- `git diff --check`：通过；仅有 Windows Git 的 LF/CRLF 策略提示。
+
+### 已知验证边界
+
+- 真实 ArangoDB 容器验收因本机 Docker 镜像代理无法拉取 ArangoDB 3.12 镜像而未执行；图初始化、键规则、深度限制和投影逻辑已有自动化测试，生产发布前仍需在可访问镜像仓库的集成环境补跑真实图投影与遍历。
+- 前端截图级视觉验收因本机浏览器执行环境初始化失败而未完成；前端 ESLint 已通过，仍需在目标浏览器做人工页面回归。
+- 当前 Windows 环境没有 `sh`，因此 Linux shell 脚本未做本机语法执行验证；对应 PowerShell 脚本解析和 Compose 配置验证已通过。
+
+### 版本
+
+- 启用版本 `0.2.0`：`.NET` 程序集、AI FastAPI OpenAPI、默认业务镜像标签和离线包名称统一升级。
+- 默认发布标签为 `v0.2.0`，默认离线归档名为 `aura-images-v0.2.0.tar`。
+
 ## 0.1.33（2026-07-13）
 ### CI 门禁与测试覆盖升级
 - `.github/workflows/dotnet-ci.yml` 扩展触发范围，`push` / `pull_request` 与 frontend 变更检测均纳入 `frontend-overrides/**`，避免覆盖层脚本改动绕过前端门禁。
@@ -1575,4 +1651,4 @@
 ## 版本规范
 
 - 版本号遵循 `MAJOR.MINOR.PATCH`
-- 当前版本：`0.1.33`
+- 当前版本：`0.2.0`

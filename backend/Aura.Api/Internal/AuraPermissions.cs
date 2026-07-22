@@ -15,6 +15,13 @@ internal static class AuraPermissions
     internal const string SpaceManage = "space.manage";
     internal const string TenantManage = "tenant.manage";
     internal const string AiPlatform = "ai.platform";
+    internal const string MediaAnalysisView = "media.analysis.view";
+    internal const string MediaAnalysisManage = "media.analysis.manage";
+    internal const string MediaAnalysisOperate = "media.analysis.operate";
+    internal const string MediaAnalysisReplay = "media.analysis.replay";
+    internal const string VectorIndexManage = "vector.index.manage";
+    internal const string GraphView = "graph.view";
+    internal const string GraphAdmin = "graph.admin";
 
     public static IReadOnlyList<string> ParsePermissionJson(string? permissionJson)
     {
@@ -87,6 +94,13 @@ internal static class AuraPermissions
             "space" => SpaceManage,
             "tenant" or "tenants" => TenantManage,
             "ai_platform" or "ai.platform" => AiPlatform,
+            "media_analysis_view" => MediaAnalysisView,
+            "media_analysis_manage" => MediaAnalysisManage,
+            "media_analysis_operate" => MediaAnalysisOperate,
+            "media_analysis_replay" => MediaAnalysisReplay,
+            "vector_index_manage" => VectorIndexManage,
+            "graph_view" => GraphView,
+            "graph_admin" => GraphAdmin,
             "all" => All,
             var other => other
         };

@@ -9,11 +9,11 @@ Docker 目录已收敛为一套主入口：一份 Compose、一份 Docker 环境
 - `up.ps1` / `up.sh`：按 `.env.docker` 启动；默认不构建，首次联网部署可加 `-Build` / `--build`。
 - `down.ps1` / `down.sh`：停止容器，默认保留命名卷。
 - `check.ps1` / `check.sh`：检查 AI `/live`、AI `/ready`、API `/api/health`。
-- `build-images.ps1` / `build-images.sh`：构建 `aura-api:local` 与 `aura-ai:local`。
+- `build-images.ps1` / `build-images.sh`：构建 `aura-api:local`、`aura-ai:local` 与 `aura-media-provider-simulator:local`。
 - `save-images.*` / `load-images.*`：离线导出/导入业务镜像。
 - `offline-pack.*`：生成完整离线部署/更新包，包含基础镜像、业务镜像和部署文件。
 - `login-registry.*` / `push-images.*`：登录并推送业务镜像到内网仓库。
-- `backend.Dockerfile` / `ai.Dockerfile`：业务镜像构建文件。
+- `backend.Dockerfile` / `ai.Dockerfile` / `../tools/Aura.MediaAnalysis.ProviderSimulator/Dockerfile`：业务镜像构建文件。
 
 ## 首次联网部署
 
@@ -61,15 +61,15 @@ Docker 目录已收敛为一套主入口：一份 Compose、一份 Docker 环境
 - Windows：`powershell -ExecutionPolicy Bypass -File .\docker\build-images.ps1`
 - Linux/macOS：`sh ./docker/build-images.sh`
 
-构建脚本会生成 `aura-api:local` 与 `aura-ai:local`，并按 `API_IMAGE_REPO`、`AI_IMAGE_REPO`、`IMAGE_TAG` 额外打标签；未指定 `IMAGE_TAG` 时自动使用时间戳。
+构建脚本会生成 `aura-api:local`、`aura-ai:local` 与 `aura-media-provider-simulator:local`，并按 `API_IMAGE_REPO`、`AI_IMAGE_REPO`、`MEDIA_PROVIDER_SIMULATOR_IMAGE_REPO`、`IMAGE_TAG` 额外打标签；未指定 `IMAGE_TAG` 时自动使用时间戳。模拟器用于 `dev-tools` profile 的契约联调，不应作为生产解析服务启用。
 
 ## 镜像分发
 
-当前发布版本默认业务镜像标签为 `v0.1.33`，如现场使用自定义标签，请确保 API、AI 与离线包文件名保持一致。
+当前发布版本默认业务镜像标签为 `v0.2.0`，如现场使用自定义标签，请确保 API、AI、通用提供方模拟器与离线包文件名保持一致。
 
 推送到内网仓库：
 
-1. 复制 `docker/.env.registry.example`，按实际环境设置 `REGISTRY_HOST`、`REGISTRY_USER`、`REGISTRY_PASSWORD`、`API_IMAGE_REPO`、`AI_IMAGE_REPO`、`IMAGE_TAG`。
+1. 复制 `docker/.env.registry.example`，按实际环境设置 `REGISTRY_HOST`、`REGISTRY_USER`、`REGISTRY_PASSWORD`、`API_IMAGE_REPO`、`AI_IMAGE_REPO`、`MEDIA_PROVIDER_SIMULATOR_IMAGE_REPO`、`IMAGE_TAG`。
 2. 登录：`.\docker\login-registry.ps1` 或 `sh ./docker/login-registry.sh`
 3. 推送：`.\docker\push-images.ps1` 或 `sh ./docker/push-images.sh`
 
@@ -78,13 +78,13 @@ Docker 目录已收敛为一套主入口：一份 Compose、一份 Docker 环境
 - 导出：设置 `IMAGE_TAG` 后执行 `save-images.*`
 - 导入：设置 `IMAGE_ARCHIVE_FILE` 后执行 `load-images.*`
 
-基础镜像 PostgreSQL、Redis、ArangoDB、Python、.NET SDK/Runtime 需要由部署环境预先提供，或通过内网仓库地址写入 `.env.docker`。
+基础镜像 pgvector PostgreSQL、Redis、ArangoDB、Python、.NET SDK/Runtime 需要由部署环境预先提供，或通过内网仓库地址写入 `.env.docker`。`offline-pack.*` 会把当前 Compose 引用的基础镜像与 API、AI、通用提供方模拟器一并导出。
 
 ## 断网后的升级更新
 
 服务器断网后，后续升级在有互联网的构建机上准备离线包：
 
-1. 准备 `.env.docker`，确保 `POSTGRES_IMAGE`、`REDIS_IMAGE`、`ARANGO_IMAGE`、`API_IMAGE`、`AI_IMAGE` 都是目标环境可使用的标签。
+1. 准备 `.env.docker`，确保 `POSTGRES_IMAGE` 使用支持 pgvector 的 PostgreSQL 16 镜像，并确认 `REDIS_IMAGE`、`ARANGO_IMAGE`、`API_IMAGE`、`AI_IMAGE`、`MEDIA_PROVIDER_SIMULATOR_IMAGE` 都是目标环境可使用的标签。
 2. 构建业务镜像：`build-images.*`
 3. 生成完整离线包：`offline-pack.*`
 4. 将 `docker/dist/aura-offline-<时间戳>/` 整个目录上传到已断网服务器。

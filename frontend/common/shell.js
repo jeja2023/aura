@@ -17,7 +17,8 @@
       items: [
         { href: "/device/", label: "NVR 设备" },
         { href: "/device-diag/", label: "设备联调" },
-        { href: "/capture/", label: "抓拍记录" }
+        { href: "/capture/", label: "抓拍记录" },
+        { href: "/media-analysis/", label: "媒体解析平台" }
       ]
     },
     { title: "态势与可视化", items: [{ href: "/scene/", label: "三维空间态势" }] },
@@ -62,6 +63,7 @@
   });
   const PERMISSION_SCOPED_HREFS = Object.freeze({
     "/device-diag/": "device.diag",
+    "/media-analysis/": "media.analysis.view",
     "/ops-settings/": "ai.settings",
     "/extensions/": ["alert.manage", "space.manage", "report.manage", "tenant.manage", "ai.platform"]
   });
@@ -78,7 +80,14 @@
     tenant: "tenant.manage",
     tenants: "tenant.manage",
     ai_platform: "ai.platform",
-    "ai.platform": "ai.platform"
+    "ai.platform": "ai.platform",
+    media_analysis_view: "media.analysis.view",
+    media_analysis_manage: "media.analysis.manage",
+    media_analysis_operate: "media.analysis.operate",
+    media_analysis_replay: "media.analysis.replay",
+    vector_index_manage: "vector.index.manage",
+    graph_view: "graph.view",
+    graph_admin: "graph.admin"
   });
   const PAGE_SESSION_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const PAGE_ENTER_MS = Date.now();

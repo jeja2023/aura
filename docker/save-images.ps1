@@ -4,6 +4,7 @@ $ErrorActionPreference = "Stop"
 
 $apiRepo = if ($env:API_IMAGE_REPO) { $env:API_IMAGE_REPO } else { "aura-api" }
 $aiRepo = if ($env:AI_IMAGE_REPO) { $env:AI_IMAGE_REPO } else { "aura-ai" }
+$simulatorRepo = if ($env:MEDIA_PROVIDER_SIMULATOR_IMAGE_REPO) { $env:MEDIA_PROVIDER_SIMULATOR_IMAGE_REPO } else { "aura-media-provider-simulator" }
 $tag = if ($env:IMAGE_TAG) { $env:IMAGE_TAG } else { throw "Set IMAGE_TAG first." }
 $outDir = if ($env:IMAGE_ARCHIVE_DIR) { $env:IMAGE_ARCHIVE_DIR } else { "docker\dist" }
 
@@ -13,9 +14,10 @@ if (-not (Test-Path $outDir)) {
 
 $apiImage = "$apiRepo`:$tag"
 $aiImage = "$aiRepo`:$tag"
+$simulatorImage = "$simulatorRepo`:$tag"
 $archive = Join-Path $outDir "aura-images-$tag.tar"
 
-docker save -o "$archive" $apiImage $aiImage
+docker save -o "$archive" $apiImage $aiImage $simulatorImage
 if ($LASTEXITCODE -ne 0) {
     throw "Image export failed."
 }

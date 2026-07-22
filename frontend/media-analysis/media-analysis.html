@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>媒体解析平台</title>
+  <script src="../common/theme-pref.js"></script>
+  <link rel="stylesheet" href="../common/theme.css" />
+  <link rel="stylesheet" href="../common/shell.css" />
+  <link rel="stylesheet" href="../common/forms.css" />
+  <link rel="stylesheet" href="./media-analysis.css" />
+</head>
+<body class="app-body" data-shell-title="媒体解析平台">
+  <aside class="app-sidebar" id="auraSidebar" aria-label="主导航"></aside>
+  <div class="app-frame">
+    <header class="app-topbar">
+      <button type="button" class="app-sidebar-toggle" id="auraSidebarToggle" aria-label="展开或收起导航">菜单</button>
+      <h1 class="app-page-title"></h1>
+      <div class="app-topbar-actions"></div>
+    </header>
+    <main class="app-content">
+      <div class="media-page">
+        <div class="media-contextbar">
+          <label><span>租户范围</span><select class="aura-input" id="tenantScope"></select></label>
+          <div class="media-context-actions">
+            <span id="platformState" class="media-state">未检查</span>
+            <button class="btn-secondary media-icon-command" id="refreshAll" type="button" title="刷新当前视图" aria-label="刷新当前视图">&#8635;</button>
+          </div>
+        </div>
+        <div class="media-toolbar">
+          <div class="media-tabs" role="tablist" aria-label="媒体解析视图">
+            <button class="media-tab is-active" type="button" data-tab="overview">运行概览</button>
+            <button class="media-tab" type="button" data-tab="control">接入配置</button>
+            <button class="media-tab" type="button" data-tab="subscriptions">流订阅</button>
+            <button class="media-tab" type="button" data-tab="jobs">解析任务</button>
+            <button class="media-tab" type="button" data-tab="events">事件队列</button>
+            <button class="media-tab" type="button" data-tab="artifacts">媒体归档</button>
+            <button class="media-tab" type="button" data-tab="engines">数据引擎</button>
+          </div>
+        </div>
+
+        <section class="media-view is-active" data-view="overview">
+          <div class="media-health-grid" id="readinessSummary">
+            <div class="media-health"><span>平台</span><strong id="readyHealth">-</strong></div>
+            <div class="media-health"><span>pgvector</span><strong id="readyVector">-</strong></div>
+            <div class="media-health"><span>提供方 / 流</span><strong id="readyProviders">-</strong></div>
+            <div class="media-health"><span>Inbox</span><strong id="readyInbox">-</strong></div>
+            <div class="media-health"><span>Outbox</span><strong id="readyOutbox">-</strong></div>
+            <div class="media-health"><span>ArangoDB</span><strong id="readyGraph">-</strong></div>
+          </div>
+          <div class="media-section-head"><h2>后台任务</h2><span id="readinessCheckedAt">-</span></div>
+          <div class="media-table-wrap"><table class="aura-data-table"><thead><tr><th>Worker</th><th>实例</th><th>状态</th><th>最近成功</th><th>延迟</th><th>错误</th></tr></thead><tbody id="workerRows"></tbody></table></div>
+        </section>
+
+        <section class="media-view" data-view="control" hidden>
+          <div class="media-split">
+            <form class="media-form" id="providerForm" data-permission="media.analysis.manage">
+              <h2>提供方</h2>
+              <div class="media-form-grid">
+                <label><span>代码</span><input class="aura-input" name="providerCode" maxlength="64" required /></label>
+                <label><span>显示名称</span><input class="aura-input" name="displayName" maxlength="128" required /></label>
+                <label class="media-wide"><span>基础地址</span><input class="aura-input" name="baseUrl" type="url" required /></label>
+                <label><span>出站认证</span><select class="aura-input" name="authType"><option value="hmac">HMAC</option><option value="bearer">Bearer</option><option value="oauth2_client">OAuth2 Client</option><option value="mtls">mTLS</option><option value="none">无</option></select></label>
+                <label><span>出站密钥引用</span><input class="aura-input" name="secretRef" /></label>
+                <label><span>Webhook 密钥引用</span><input class="aura-input" name="webhookSecretRef" required /></label>
+                <label><span>超时（秒）</span><input class="aura-input" name="timeoutSeconds" type="number" min="1" max="300" value="10" /></label>
+                <label><span>最大并发</span><input class="aura-input" name="maxConcurrency" type="number" min="1" max="10000" value="16" /></label>
+                <label class="media-check" data-super-only><input name="globalProvider" type="checkbox" /><span>全局提供方</span></label>
+                <label class="media-check"><input name="enabled" type="checkbox" checked /><span>启用</span></label>
+              </div>
+              <div class="media-actions"><button class="btn-primary" type="submit">保存提供方</button><button class="btn-secondary" type="reset">清空</button></div>
+            </form>
+            <div class="media-table-section">
+              <div class="media-section-head"><h2>提供方清单</h2><span id="providerCount">0</span></div>
+              <div class="media-table-wrap"><table class="aura-data-table"><thead><tr><th>ID / 代码</th><th>范围</th><th>认证</th><th>协议</th><th>状态</th><th>操作</th></tr></thead><tbody id="providerRows"></tbody></table></div>
+            </div>
+          </div>
+
+          <div class="media-split media-secondary-config">
+            <form class="media-form" id="pipelineForm" data-permission="media.analysis.manage">
+              <h2>解析流水线</h2>
+              <div class="media-form-grid">
+                <label><span>提供方</span><select class="aura-input" name="providerId" data-provider-select required></select></label>
+                <label><span>流水线代码</span><input class="aura-input" name="pipelineCode" required /></label>
+                <label><span>显示名称</span><input class="aura-input" name="displayName" required /></label>
+                <label><span>模型版本</span><input class="aura-input" name="modelVersion" value="default" /></label>
+                <label><span>输入类型</span><select class="aura-input" name="inputType"><option value="image">图片</option><option value="video">视频</option><option value="stream">视频流</option></select></label>
+                <label><span>向量维度</span><input class="aura-input" name="embeddingDimension" type="number" min="1" max="65535" value="512" /></label>
+              </div>
+              <div class="media-actions"><button class="btn-primary" type="submit">新增流水线</button></div>
+            </form>
+            <form class="media-form" id="sourceForm" data-permission="media.analysis.manage">
+              <h2>媒体源</h2>
+              <div class="media-form-grid">
+                <label><span>摄像头 ID</span><input class="aura-input" name="cameraId" type="number" min="1" required /></label>
+                <label><span>源代码</span><input class="aura-input" name="sourceCode" required /></label>
+                <label><span>类型</span><select class="aura-input" name="sourceType"><option value="rtsp">RTSP</option><option value="http">HTTP</option><option value="https">HTTPS</option><option value="object">对象存储</option></select></label>
+                <label><span>流配置</span><select class="aura-input" name="streamProfile"><option value="sub">子码流</option><option value="main">主码流</option></select></label>
+                <label class="media-wide"><span>URI 模板</span><input class="aura-input" name="uriTemplate" required /></label>
+                <label class="media-wide"><span>凭据引用</span><input class="aura-input" name="credentialRef" /></label>
+              </div>
+              <div class="media-actions"><button class="btn-primary" type="submit">新增媒体源</button></div>
+            </form>
+          </div>
+
+          <div class="media-config-tables">
+            <div><div class="media-section-head"><h2>流水线</h2><span id="pipelineCount">0</span></div><div class="media-table-wrap"><table class="aura-data-table"><thead><tr><th>ID</th><th>提供方</th><th>代码</th><th>模型</th><th>输入</th><th>向量</th></tr></thead><tbody id="pipelineRows"></tbody></table></div></div>
+            <div><div class="media-section-head"><h2>媒体源</h2><span id="sourceCount">0</span></div><div class="media-table-wrap"><table class="aura-data-table"><thead><tr><th>ID</th><th>代码</th><th>摄像头</th><th>类型</th><th>版本</th><th>状态</th></tr></thead><tbody id="sourceRows"></tbody></table></div></div>
+          </div>
+        </section>
+
+        <section class="media-view" data-view="subscriptions" hidden>
+          <form class="media-inline-form" id="subscriptionForm" data-permission="media.analysis.manage">
+            <label><span>提供方</span><select class="aura-input" name="providerId" data-provider-select required></select></label>
+            <label><span>媒体源</span><select class="aura-input" name="sourceId" data-source-select required></select></label>
+            <label><span>流水线</span><select class="aura-input" name="pipelineId" data-pipeline-select data-input="stream" required></select></label>
+            <button class="btn-primary" type="submit">创建并启动</button>
+          </form>
+          <div class="media-table-wrap"><table class="aura-data-table"><thead><tr><th>ID</th><th>客户端订阅</th><th>目标</th><th>期望</th><th>观测</th><th>心跳</th><th>错误</th><th>操作</th></tr></thead><tbody id="subscriptionRows"></tbody></table></div>
+        </section>
+
+        <section class="media-view" data-view="jobs" hidden>
+          <form class="media-inline-form" id="jobForm" data-permission="media.analysis.operate">
+            <label><span>提供方</span><select class="aura-input" name="providerId" data-provider-select required></select></label>
+            <label><span>流水线</span><select class="aura-input" name="pipelineId" data-pipeline-select required></select></label>
+            <label><span>媒体源</span><select class="aura-input" name="sourceId" data-source-select data-optional><option value="">不绑定</option></select></label>
+            <label><span>媒体类型</span><select class="aura-input" name="mediaType"><option value="image">图片</option><option value="video">视频</option></select></label>
+            <label class="media-grow"><span>媒体 URI</span><input class="aura-input" name="mediaUri" type="url" required /></label>
+            <button class="btn-primary" type="submit">提交任务</button>
+          </form>
+          <div class="media-table-wrap"><table class="aura-data-table"><thead><tr><th>ID</th><th>类型</th><th>提供方任务</th><th>状态</th><th>进度</th><th>提交时间</th><th>错误</th><th>操作</th></tr></thead><tbody id="jobRows"></tbody></table></div>
+        </section>
+
+        <section class="media-view" data-view="events" hidden>
+          <div class="media-filterbar">
+            <label><span>Inbox 状态</span><select class="aura-input" id="inboxStatus"><option value="">全部</option><option value="received">待处理</option><option value="retry_wait">重试</option><option value="dead_letter">死信</option><option value="unsupported">不支持</option><option value="processed">已处理</option></select></label>
+            <button class="btn-secondary" id="replayDeadLetters" type="button" data-permission="media.analysis.replay">重放死信</button>
+          </div>
+          <div class="media-summary" id="inboxSummary"></div>
+          <div class="media-table-wrap"><table class="aura-data-table"><thead><tr><th>ID</th><th>事件</th><th>类型</th><th>状态</th><th>尝试</th><th>事件时间</th><th>Trace</th></tr></thead><tbody id="inboxRows"></tbody></table></div>
+        </section>
+
+        <section class="media-view" data-view="artifacts" hidden>
+          <div class="media-filterbar"><button class="btn-secondary" id="replayArtifacts" type="button" data-permission="media.analysis.replay">重放归档死信</button></div>
+          <div class="media-summary" id="artifactSummary"></div>
+          <div class="media-table-wrap"><table class="aura-data-table"><thead><tr><th>ID</th><th>事件</th><th>类型</th><th>状态</th><th>大小</th><th>尝试</th><th>归档时间</th><th>错误</th></tr></thead><tbody id="artifactRows"></tbody></table></div>
+        </section>
+
+        <section class="media-view" data-view="engines" hidden>
+          <div class="media-health-grid">
+            <div class="media-health"><span>pgvector</span><strong id="vectorHealth">-</strong></div>
+            <div class="media-health"><span>ArangoDB 图</span><strong id="graphHealth">-</strong></div>
+            <div class="media-health"><span>Outbox</span><strong id="outboxHealth">-</strong></div>
+          </div>
+          <div class="media-actions" data-permission="graph.admin"><button class="btn-primary" id="rebuildGraph" type="button">全量重建图</button><button class="btn-secondary" id="replayOutbox" type="button">重放 Outbox 死信</button></div>
+          <div class="media-split media-engine-tools">
+            <form class="media-form" id="vectorBackfillForm" data-permission="vector.index.manage">
+              <h2>向量回填</h2>
+              <div class="media-form-grid">
+                <label><span>迁移名称</span><input class="aura-input" name="migrationName" value="legacy-arango-to-pgvector" required /></label>
+                <label><span>模型 ID</span><input class="aura-input" name="modelId" type="number" min="1" required /></label>
+                <label><span>批大小</span><input class="aura-input" name="batchSize" type="number" min="1" max="5000" value="500" /></label>
+                <label><span>最大批次</span><input class="aura-input" name="maxBatches" type="number" min="1" max="1000" value="10" /></label>
+                <label class="media-check"><input name="restart" type="checkbox" /><span>从头开始</span></label>
+              </div>
+              <div class="media-actions"><button class="btn-primary" type="submit">执行回填</button></div>
+            </form>
+            <form class="media-form" id="vectorShadowForm" data-permission="vector.index.manage">
+              <h2>向量影子评测</h2>
+              <div class="media-form-grid">
+                <label><span>模型 ID</span><input class="aura-input" name="modelId" type="number" min="1" required /></label>
+                <label><span>样本数</span><input class="aura-input" name="sampleCount" type="number" min="1" max="1000" value="100" /></label>
+                <label><span>Top K</span><input class="aura-input" name="topK" type="number" min="1" max="50" value="10" /></label>
+              </div>
+              <div class="media-actions"><button class="btn-primary" type="submit">开始评测</button></div>
+            </form>
+          </div>
+          <form class="media-inline-form" id="graphPathForm" data-permission="graph.view">
+            <label><span>起点摄像头</span><input class="aura-input" name="fromCameraId" type="number" min="1" required /></label>
+            <label><span>终点摄像头</span><input class="aura-input" name="toCameraId" type="number" min="1" required /></label>
+            <label><span>最大深度</span><input class="aura-input" name="maxDepth" type="number" min="1" max="20" value="8" /></label>
+            <button class="btn-secondary" type="submit">查询候选路径</button>
+          </form>
+          <pre class="media-detail" id="engineDetail"></pre>
+        </section>
+
+        <pre id="mediaStatus" class="aura-status aura-display-box" hidden aria-live="polite"></pre>
+      </div>
+    </main>
+  </div>
+  <script defer src="../common/shell.js"></script>
+  <script defer src="./media-analysis.js"></script>
+</body>
+</html>

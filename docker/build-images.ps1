@@ -30,21 +30,25 @@ function Get-EnvValue([string]$Name, [string]$DefaultValue) {
 }
 
 Write-Host "Env file: $envFile"
-Invoke-DockerCompose @("--env-file", "$envFile", "-f", "$composeFile", "build", "ai", "api")
+Invoke-DockerCompose @("--env-file", "$envFile", "-f", "$composeFile", "build", "ai", "api", "media-provider-simulator")
 if ($LASTEXITCODE -ne 0) {
     throw "Image build failed."
 }
 
 $builtApiImage = Get-EnvValue "API_IMAGE" "aura-api:local"
 $builtAiImage = Get-EnvValue "AI_IMAGE" "aura-ai:local"
+$builtSimulatorImage = Get-EnvValue "MEDIA_PROVIDER_SIMULATOR_IMAGE" "aura-media-provider-simulator:local"
 $apiRepo = if ($env:API_IMAGE_REPO) { $env:API_IMAGE_REPO } else { "aura-api" }
 $aiRepo = if ($env:AI_IMAGE_REPO) { $env:AI_IMAGE_REPO } else { "aura-ai" }
+$simulatorRepo = if ($env:MEDIA_PROVIDER_SIMULATOR_IMAGE_REPO) { $env:MEDIA_PROVIDER_SIMULATOR_IMAGE_REPO } else { "aura-media-provider-simulator" }
 $tag = if ($env:IMAGE_TAG) { $env:IMAGE_TAG } else { (Get-Date -Format "yyyyMMdd-HHmmss") }
 
 docker tag $builtApiImage "$apiRepo`:$tag"
 docker tag $builtAiImage "$aiRepo`:$tag"
+docker tag $builtSimulatorImage "$simulatorRepo`:$tag"
 
 Write-Host ""
 Write-Host "Built and tagged:"
 Write-Host "  $apiRepo`:$tag"
 Write-Host "  $aiRepo`:$tag"
+Write-Host "  $simulatorRepo`:$tag"

@@ -64,9 +64,12 @@ services:
       TZ: ${TZ:-Asia/Shanghai}
       ARANGO_ROOT_PASSWORD: ${ARANGO_ROOT_PASSWORD}
       ARANGO_DB: ${ARANGO_DB}
+      ARANGO_GRAPH_DB: ${ARANGO_GRAPH_DB:-aura_graph}
+      ARANGO_GRAPH_USER: ${ARANGO_GRAPH_USER:-aura_graph}
+      ARANGO_GRAPH_PASSWORD: ${ARANGO_GRAPH_PASSWORD:-${ARANGO_ROOT_PASSWORD}}
     entrypoint: ["sh", "-c"]
     command:
-      - "until arangosh --server.endpoint tcp://arangodb:8529 --server.username root --server.password \"$$ARANGO_ROOT_PASSWORD\" --javascript.execute-string \"db._version()\" >/dev/null 2>&1; do echo \"Waiting for ArangoDB...\"; sleep 2; done; arangosh --server.endpoint tcp://arangodb:8529 --server.username root --server.password \"$$ARANGO_ROOT_PASSWORD\" --javascript.execute-string \"const name = '$$ARANGO_DB'; if (!db._databases().includes(name)) { db._createDatabase(name); }\""
+      - "until arangosh --server.endpoint tcp://arangodb:8529 --server.username root --server.password \"$$ARANGO_ROOT_PASSWORD\" --javascript.execute-string \"db._version()\" >/dev/null 2>&1; do echo \"Waiting for ArangoDB...\"; sleep 2; done; arangosh --server.endpoint tcp://arangodb:8529 --server.username root --server.password \"$$ARANGO_ROOT_PASSWORD\" --javascript.execute-string \"const env=require('internal').env; const users=require('@arangodb/users'); const legacy=env.ARANGO_DB; const graph=env.ARANGO_GRAPH_DB; const user=env.ARANGO_GRAPH_USER; const password=env.ARANGO_GRAPH_PASSWORD; if (!db._databases().includes(legacy)) db._createDatabase(legacy); if (!db._databases().includes(graph)) db._createDatabase(graph, {}, [{username:user,passwd:password,active:true}]); if (!users.exists(user)) users.save(user,password,true); else users.update(user,password,true); users.grantDatabase(user,graph,'rw');\""
 
   ai:
     image: ${AI_IMAGE:-aura-ai:local}
@@ -163,6 +166,8 @@ services:
     container_name: aura-api
     restart: unless-stopped
     depends_on:
+      arango-init:
+        condition: service_completed_successfully
       pgsql:
         condition: service_healthy
       redis:
@@ -181,6 +186,35 @@ services:
       Ai__BaseUrl: http://ai:8000
       Ai__BaseUrls: ${AI_BASE_URLS:-}
       Ai__ApiKey: ${AURA_API_KEY:-}
+      MediaAnalysis__PublicWebhookUrl: ${MEDIA_ANALYSIS_PUBLIC_WEBHOOK_URL:-http://aura-api:5000/api/integrations/media-analysis/v1/events}
+      MediaAnalysis__Workers__Enabled: ${MEDIA_ANALYSIS_WORKERS_ENABLED:-true}
+      MEDIA_ANALYSIS_PROVIDER_SECRET: ${MEDIA_ANALYSIS_PROVIDER_SECRET:-}
+      MEDIA_ANALYSIS_WEBHOOK_SECRET: ${MEDIA_ANALYSIS_WEBHOOK_SECRET:-}
+      MediaAnalysis__Http__TotalTimeoutSeconds: ${MEDIA_ANALYSIS_HTTP_TOTAL_TIMEOUT_SECONDS:-120}
+      MediaAnalysis__Http__AttemptTimeoutSeconds: ${MEDIA_ANALYSIS_HTTP_ATTEMPT_TIMEOUT_SECONDS:-30}
+      MediaAnalysis__Http__ConnectTimeoutSeconds: ${MEDIA_ANALYSIS_HTTP_CONNECT_TIMEOUT_SECONDS:-10}
+      MediaAnalysis__Http__MaxRetryAttempts: ${MEDIA_ANALYSIS_HTTP_MAX_RETRY_ATTEMPTS:-2}
+      MediaAnalysis__Http__MaxRequestBytes: ${MEDIA_ANALYSIS_HTTP_MAX_REQUEST_BYTES:-1048576}
+      MediaAnalysis__Http__MaxResponseBytes: ${MEDIA_ANALYSIS_HTTP_MAX_RESPONSE_BYTES:-4194304}
+      MediaAnalysis__OutboundSecurity__AllowedHosts__0: ${MEDIA_ANALYSIS_OUTBOUND_ALLOWED_HOST_0:-}
+      MediaAnalysis__OutboundSecurity__AllowedHosts__1: ${MEDIA_ANALYSIS_OUTBOUND_ALLOWED_HOST_1:-}
+      MediaAnalysis__OutboundSecurity__AllowedHosts__2: ${MEDIA_ANALYSIS_OUTBOUND_ALLOWED_HOST_2:-}
+      MediaAnalysis__OutboundSecurity__AllowPrivateNetworks: ${MEDIA_ANALYSIS_OUTBOUND_ALLOW_PRIVATE_NETWORKS:-false}
+      MediaAnalysis__OutboundSecurity__AllowHttp: ${MEDIA_ANALYSIS_OUTBOUND_ALLOW_HTTP:-false}
+      MediaAnalysis__Http__Mtls__CertificatePath: ${MEDIA_ANALYSIS_MTLS_CERTIFICATE_PATH:-}
+      MediaAnalysis__Http__Mtls__CertificatePasswordEnvironmentVariable: ${MEDIA_ANALYSIS_MTLS_CERTIFICATE_PASSWORD_ENVIRONMENT_VARIABLE:-}
+      VectorIndex__ReadEngine: ${VECTOR_INDEX_READ_ENGINE:-pgvector}
+      VectorIndex__WriteMode: ${VECTOR_INDEX_WRITE_MODE:-pgvector}
+      VectorIndex__AllowLegacyReadFallback: ${VECTOR_INDEX_ALLOW_LEGACY_READ_FALLBACK:-false}
+      Graph__Enabled: ${GRAPH_ENABLED:-true}
+      Graph__Arango__BaseUrl: http://arangodb:8529
+      Graph__Arango__Database: ${ARANGO_GRAPH_DB:-aura_graph}
+      Graph__Arango__GraphName: ${ARANGO_GRAPH_NAME:-aura_domain}
+      Graph__Arango__Username: ${ARANGO_GRAPH_USER:-aura_graph}
+      Graph__Arango__Password: ${ARANGO_GRAPH_PASSWORD:-${ARANGO_ROOT_PASSWORD}}
+      Graph__Arango__QueryMaxRuntimeSeconds: ${ARANGO_GRAPH_QUERY_MAX_RUNTIME_SECONDS:-15}
+      Graph__Arango__ConnectTimeoutSeconds: ${ARANGO_GRAPH_CONNECT_TIMEOUT_SECONDS:-10}
+      Graph__Arango__MaxResponseBytes: ${ARANGO_GRAPH_MAX_RESPONSE_BYTES:-16777216}
       SignalR__RedisBackplane__Enabled: ${SIGNALR__REDISBACKPLANE__ENABLED:-false}
       SignalR__RedisBackplane__ConnectionString: redis:6379
       SignalR__RedisBackplane__ChannelPrefix: ${SIGNALR__REDISBACKPLANE__CHANNELPREFIX:-aura:signalr}
@@ -211,6 +245,31 @@ services:
       interval: 15s
       timeout: 5s
       retries: 10
+
+  media-provider-simulator:
+    profiles: ["dev-tools"]
+    image: ${MEDIA_PROVIDER_SIMULATOR_IMAGE:-aura-media-provider-simulator:local}
+    pull_policy: ${IMAGE_PULL_POLICY:-never}
+    build:
+      context: ../
+      dockerfile: tools/Aura.MediaAnalysis.ProviderSimulator/Dockerfile
+      args:
+        DOTNET_SDK_IMAGE: ${DOTNET_SDK_IMAGE}
+        DOTNET_ASPNET_IMAGE: ${DOTNET_ASPNET_IMAGE}
+    container_name: aura-media-provider-simulator
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      ASPNETCORE_URLS: http://0.0.0.0:8080
+      Simulator__ProviderCode: ${MEDIA_PROVIDER_SIMULATOR_CODE:-simulator}
+      Simulator__TenantCode: ${MEDIA_PROVIDER_SIMULATOR_TENANT:-aura-default}
+      Simulator__WebhookSecret: ${MEDIA_PROVIDER_SIMULATOR_SECRET:-development-only-secret}
+      Simulator__AuraWebhookUrl: http://api:5000/api/integrations/media-analysis/v1/events
+    ports:
+      - "${MEDIA_PROVIDER_SIMULATOR_BIND_ADDRESS:-127.0.0.1}:${MEDIA_PROVIDER_SIMULATOR_PORT:-18080}:8080"
 
 networks:
   gpu-bridge:

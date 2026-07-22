@@ -92,6 +92,13 @@ public static partial class ServiceExtensions
             options.AddPolicy("SpaceManage", policy => RequirePermission(policy, AuraPermissions.SpaceManage));
             options.AddPolicy("TenantManage", policy => RequirePermission(policy, AuraPermissions.TenantManage));
             options.AddPolicy("AiPlatform", policy => RequirePermission(policy, AuraPermissions.AiPlatform));
+            options.AddPolicy("MediaAnalysisView", policy => RequirePermission(policy, AuraPermissions.MediaAnalysisView));
+            options.AddPolicy("MediaAnalysisManage", policy => RequirePermission(policy, AuraPermissions.MediaAnalysisManage));
+            options.AddPolicy("MediaAnalysisOperate", policy => RequirePermission(policy, AuraPermissions.MediaAnalysisOperate));
+            options.AddPolicy("MediaAnalysisReplay", policy => RequirePermission(policy, AuraPermissions.MediaAnalysisReplay));
+            options.AddPolicy("VectorIndexManage", policy => RequirePermission(policy, AuraPermissions.VectorIndexManage));
+            options.AddPolicy("GraphView", policy => RequirePermission(policy, AuraPermissions.GraphView));
+            options.AddPolicy("GraphAdmin", policy => RequirePermission(policy, AuraPermissions.GraphAdmin));
         });
     }
 

@@ -1,0 +1,202 @@
+openapi: 3.1.0
+info:
+  title: Aura Standard Media Analysis Provider Protocol
+  version: 1.0.0
+  description: Provider-neutral contract implemented by external image, video, and stream analysis platforms.
+servers:
+  - url: https://provider.example
+security:
+  - bearerAuth: []
+  - hmacAuth: []
+paths:
+  /v1/capabilities:
+    get:
+      operationId: getCapabilities
+      responses:
+        "200":
+          description: Provider capabilities
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Capabilities"
+  /v1/analysis/images:
+    post:
+      operationId: analyzeImage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnalysisRequest"
+      responses:
+        "200":
+          description: Synchronous result or accepted job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Submission"
+        "202":
+          description: Accepted asynchronous job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Submission"
+  /v1/analysis/videos:
+    post:
+      operationId: submitVideo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnalysisRequest"
+      responses:
+        "202":
+          description: Accepted asynchronous job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Submission"
+  /v1/analysis/jobs/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ExternalId"
+    get:
+      operationId: getJob
+      responses:
+        "200":
+          description: Current job state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ObservedState"
+  /v1/analysis/jobs/{id}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/ExternalId"
+    post:
+      operationId: cancelJob
+      responses:
+        "204":
+          description: Cancellation accepted
+  /v1/analysis/streams/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ExternalId"
+    put:
+      operationId: upsertStream
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StreamRequest"
+      responses:
+        "200":
+          description: Observed subscription state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ObservedState"
+    get:
+      operationId: getStream
+      responses:
+        "200":
+          description: Observed subscription state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ObservedState"
+    delete:
+      operationId: stopStream
+      responses:
+        "204":
+          description: Stop accepted
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+    hmacAuth:
+      type: apiKey
+      in: header
+      name: X-Aura-Signature
+  parameters:
+    ExternalId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        maxLength: 255
+  schemas:
+    Capabilities:
+      type: object
+      required: [protocol_version, capabilities, pipelines]
+      properties:
+        protocol_version:
+          const: "1.0"
+        capabilities:
+          type: array
+          uniqueItems: true
+          items:
+            enum: [image.sync, video.async, stream.subscription, event.webhook, event.replay, embedding.reference, embedding.value, artifact.presigned-url]
+        pipelines:
+          type: array
+          items:
+            type: object
+            required: [code, models]
+            properties:
+              code: { type: string, maxLength: 64 }
+              models: { type: array, items: { type: string } }
+              embedding_dimension: { type: [integer, "null"], minimum: 1 }
+    AnalysisRequest:
+      type: object
+      required: [protocol_version, media_type]
+      properties:
+        protocol_version: { const: "1.0" }
+        media_type: { enum: [image, video] }
+        media_uri: { type: [string, "null"], format: uri }
+        source_id: { type: [integer, "null"] }
+        options: { type: [object, "null"], additionalProperties: true }
+    StreamRequest:
+      type: object
+      required: [protocol_version, tenant_code, client_subscription_id, source, pipeline, delivery]
+      properties:
+        protocol_version: { const: "1.0" }
+        tenant_code: { type: string, maxLength: 64 }
+        client_subscription_id: { type: string, maxLength: 128 }
+        source:
+          type: object
+          required: [source_id, type, uri]
+          properties:
+            source_id: { type: string }
+            type: { enum: [rtsp, http, https, file, object] }
+            uri: { type: string }
+            credential_ref: { type: [string, "null"] }
+            stream_profile: { type: string }
+        pipeline:
+          type: object
+          required: [code, model_version]
+          properties:
+            code: { type: string }
+            model_version: { type: string }
+            options: { type: object, additionalProperties: true }
+        delivery:
+          type: object
+          required: [mode, endpoint]
+          properties:
+            mode: { const: webhook }
+            endpoint: { type: string, format: uri }
+    Submission:
+      type: object
+      required: [external_id, state]
+      properties:
+        external_id: { type: string }
+        state: { enum: [accepted, running, completed, rejected, failed] }
+        result: { type: [object, "null"], additionalProperties: true }
+    ObservedState:
+      allOf:
+        - $ref: "#/components/schemas/Submission"
+        - type: object
+          properties:
+            progress: { type: [number, "null"], minimum: 0, maximum: 100 }
+            error_code: { type: [string, "null"] }
+            error_message: { type: [string, "null"] }

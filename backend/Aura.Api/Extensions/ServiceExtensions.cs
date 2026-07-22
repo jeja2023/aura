@@ -40,6 +40,9 @@ public static partial class ServiceExtensions
         AddAuraAlertNotifier(services, configuration, alertWebhookUrl, alertNotifyFilePath);
         AddAuraHostedServices(services);
         AddAuraAiClient(services, configuration);
+        AddMediaAnalysisServices(services, configuration);
+        AddVectorIndexServices(services, configuration);
+        AddGraphServices(services, configuration);
         AddAuraApplicationServices(services, configuration, hostEnvironment, jwtKey, jwtIssuer, jwtAudience, jwtExpireMinutes);
         AddAuraHikvisionServices(services, configuration);
         AddAuraRateLimiting(services);

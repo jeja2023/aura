@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aura.local/schemas/media-analysis-event-v1.schema.json",
+  "title": "Aura media analysis event envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "event_id",
+    "tenant_code",
+    "provider_code",
+    "event_type",
+    "event_time",
+    "payload"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "event_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "provider_event_id": { "type": ["string", "null"], "maxLength": 255 },
+    "tenant_code": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "provider_code": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "subscription_id": { "type": ["string", "null"], "maxLength": 128 },
+    "source_id": { "type": ["string", "null"], "maxLength": 128 },
+    "sequence": { "type": ["integer", "null"], "minimum": 0 },
+    "event_type": {
+      "enum": [
+        "analysis.job.started",
+        "analysis.job.progress",
+        "analysis.job.completed",
+        "analysis.job.failed",
+        "stream.started",
+        "stream.heartbeat",
+        "stream.degraded",
+        "stream.stopped",
+        "object.detected",
+        "track.started",
+        "track.updated",
+        "track.ended",
+        "identity.candidate",
+        "behavior.detected",
+        "artifact.ready"
+      ]
+    },
+    "event_time": { "type": "string", "format": "date-time" },
+    "produced_at": { "type": ["string", "null"], "format": "date-time" },
+    "trace_id": { "type": ["string", "null"], "maxLength": 64 },
+    "payload": { "type": "object", "additionalProperties": true }
+  }
+}

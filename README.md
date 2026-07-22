@@ -1,12 +1,12 @@
 # 寓瞳系统
 
-本仓库已按《docs/archive/开发计划.md》《开发规范.md》完成第一至第五阶段开发，覆盖接入网关、AI 特征链路、空间引擎、业务研判、3D/2D 态势、统计导出与外联输出。
+本仓库已按《docs/archive/开发计划.md》《开发规范.md》完成第一至第五阶段开发，并完成通用媒体解析与多模数据架构升级，覆盖接入网关、外部解析提供方、可靠事件处理、AI 特征链路、向量检索、关系图、空间引擎、业务研判、3D/2D 态势、统计导出与外联输出。
 
 ## 项目状态
 
-- 当前版本：`0.1.33`（细目见 **`CHANGELOG.md`**）
-- 阶段状态：第一至第五阶段均已验收通过
-- 交付结论：计划项已全部完成并在 `docs/archive/开发计划.md` 归档勾选
+- 当前版本：`0.2.0`（细目见 **`CHANGELOG.md`**）
+- 阶段状态：第一至第五阶段及通用媒体解析开发项已完成代码与自动化验收
+- 交付结论：原计划项已在 `docs/archive/开发计划.md` 归档；新增架构、落地索引和剩余生产验收项见 `docs/通用媒体解析与多模数据架构开发计划.md`
 - 工程状态：后端可构建（推荐打开根目录 **`Aura.sln`** 或 `dotnet build backend/Aura.Api/Aura.Api.csproj`）、前端页面可访问、核心链路可联调
 - 运维状态：已提供回归脚本、联调压测脚本、部署与上线检查文档
 - 修复记录：见根目录 **`2026-07-03-fix-optimization-notes.md`**，包含本轮数据库错误语义、前端覆盖层、GPU 网络预检和受限验证说明。
@@ -21,6 +21,7 @@
   - `0.1.31`：构建源一致性、反向代理/Cookie/HMAC/CIDR 安全加固、Redis 降级、AI 图片输入限额、前端安全渲染与完整验证闭环。
   - `0.1.32`：本地一键启动自动执行数据库迁移，`.env`/`.env.docker` 与示例模板键集合和顺序对齐，并补齐自动/手动迁移边界说明。
   - `0.1.33`：CI 门禁扩展到 AI pytest 与前端覆盖脚本语法检查，补齐 AI 测试依赖、维护说明和路径保护测试的可移植性。
+  - `0.2.0`：新增通用媒体解析控制面和标准提供方契约、可靠 Inbox/Outbox、pgvector 权威向量索引、ArangoDB 派生关系图、管理页面、模拟器及完整运维链路。
 
 ## 目录结构
 
@@ -30,14 +31,22 @@
 - `backend/Aura.Api`：.NET 10 WebAPI 中枢服务；启动入口为 **`Program.cs`**，服务注册在 **`Extensions/ServiceExtensions.cs`**，路由按域拆分在 **`Extensions/AuraEndpoints*.cs`**，安全头与前端路由中间件在 **`Middleware/`**
 - `backend/Aura.Api.Tests`：轻量自检工程（聚类/导出等），可选执行
 - `backend/Aura.Api.Integration.Tests`：xUnit 集成测试（`WebApplicationFactory`，环境为 `Testing`）。**维护提示**：若修改 `backend/Aura.Api/appsettings.Testing.json` 中的 **`Jwt:Key` / `Jwt:Issuer` / `Jwt:Audience`**，必须同步修改 **`backend/Aura.Api.Integration.Tests/TestingJwt.cs`** 内同名常量，否则 `dotnet test` 会失败。
+- `backend/Aura.Api/MediaAnalysis`：通用媒体解析提供方、任务/订阅控制面、可靠事件入口、业务投影和制品归档。
+- `backend/Aura.Api/Vector`：pgvector 权威索引、检索路由、历史迁移、补偿和影子评测。
+- `backend/Aura.Api/Graph`：PostgreSQL Outbox 到 ArangoDB 的关系图投影、重建和多跳查询。
 - `ai`：Python FastAPI AI 服务（特征提取/检索），主入口 `main.py` 已收敛为应用装配入口，核心拆分为 `app/`（启动装配/生命周期/中间件）、`routes/`（API 路由）、`vector_store/`（向量索引存取）、`services/`（Arango/推理/聚类能力）、`models/`（请求模型）
 - `database/schema.pgsql.sql`：PostgreSQL 表结构
 - `frontend`：Vanilla JS 前端页面（根目录含 **`package.json`**，维护者可执行 **`npm ci`** 与 **`npm run lint`** 做 ESLint 检查）。**NVR 设备**与**海康 ISAPI 联调**分别对应 `frontend/device/` 与 `frontend/device-diag/`（入口见下文「关键页面入口」）
+- `frontend/media-analysis`：提供方、管线、媒体源、订阅、任务、Inbox、制品、向量、图和 readiness 管理页面。
+- `tools/Aura.MediaAnalysis.ProviderSimulator`：通用解析提供方模拟器，用于图片、视频、视频流及故障场景联调。
 - `deploy/k8s`：Kubernetes 示例（Ingress 拒绝公网 **`/metrics`**、NetworkPolicy 入站基线）与说明文档
 - `寓瞳开放式集宿区智能分析系统建设方案（领导汇报版）.md`：面向立项/汇报的建设方案、预算测算、实施计划与验收指标说明
 - `docs/抓拍链路端到端测试清单.md`：抓拍链路测试清单
 - `scripts/ops/aura-ops.ps1`：统一运维脚本入口（上线就绪、AI 巡检、抓拍回归、全系统联调、数据库状态/备份/迁移/恢复）
 - `docs/运维上线手册.md`：部署、上线检查、readiness 与 AI 生产检查统一手册
+- `docs/通用媒体解析与多模数据架构开发计划.md`：PostgreSQL、pgvector、ArangoDB 的职责边界、完整开发方案和实施索引
+- `docs/媒体解析平台运维手册.md`：提供方接入、事件重放、向量迁移、图重建和容量运维
+- `docs/2026-07-22-0.2.0发布说明与验收记录.md`：本版本升级步骤、验证矩阵、已知边界和回滚原则
 - `docs/2026-06-09-自动化验收记录.md`：`0.1.27` 本机自动化验收记录，覆盖后端构建/测试、AI pytest、前端 ESLint、Docker 配置解析与未覆盖现场项
 - `docs/archive/最终交付清单.md`：历史交付范围清单
 
@@ -46,6 +55,9 @@
 - 认证与权限：JWT + RBAC（超级管理员/楼栋管理员）
 - 多协议抓拍接入：海康 ISAPI、ONVIF、C++ SDK
 - 抓拍链路：抓拍入库、AI 提特征、向量检索、重试队列
+- 通用媒体解析：图片、视频和视频流任务编排，标准 HTTP 提供方、Webhook 和制品接入
+- 可靠事件处理：HMAC 防重放、Inbox/Outbox、幂等消费、重试、死信和人工重放
+- 多模数据存储：PostgreSQL 权威业务数据、pgvector 权威向量索引、ArangoDB 可重建关系图
 - 空间引擎：楼层图、摄像头点位、ROI 编辑、空间碰撞、轨迹事件
 - 业务研判：归寝、群租/异常滞留、夜不归宿
 - 态势能力：SignalR 实时事件流，Three.js 3D 白模与 2D 切片下钻
@@ -56,7 +68,7 @@
 
 ### 1) 初始化数据库
 
-导入 `database/schema.pgsql.sql` 到 PostgreSQL 16+。
+空环境可将 `database/schema.pgsql.sql` 导入支持 pgvector 的 PostgreSQL 16+；推荐直接执行 `dotnet run --project backend/Aura.DbMigrator -- bootstrap`。已有数据库只能执行增量 `migrate`，禁止使用 `bootstrap`。
 
 ### 2) 启动 AI 服务
 

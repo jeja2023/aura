@@ -78,7 +78,7 @@ internal static class AuraEndpointsCore
             return Results.Ok(new { code = 0, msg = "上报成功" });
         }).RequireAuthorization();
 
-        app.MapGet("/api/ops/readiness", async () =>
+        app.MapGet("/api/ops/readiness", async (MediaPlatformReadinessService mediaReadiness, CancellationToken ct) =>
         {
             var now = DateTimeOffset.Now;
             var alertWindowMinutes = int.TryParse(configuration["Ops:Alert:HealthFailIfRecentFailureMinutes"], out var win) ? win : 10;
@@ -109,6 +109,15 @@ internal static class AuraEndpointsCore
             var jwtSecret = configuration["Jwt:Key"] ?? string.Empty;
             var hmacSecret = configuration["Security:HmacSecret"] ?? string.Empty;
             var pgsqlOk = await pgsql.TryPingAsync();
+            MediaPlatformReadiness? mediaPlatform = null;
+            try
+            {
+                mediaPlatform = await mediaReadiness.GetAsync(ct);
+            }
+            catch (Exception ex)
+            {
+                readinessLogger.LogWarning(ex, "媒体解析平台就绪检查异常");
+            }
 
             var checks = new Dictionary<string, bool>
             {
@@ -119,6 +128,7 @@ internal static class AuraEndpointsCore
                 ["ai_service"] = aiReady,
                 ["ai_model"] = aiModelLoaded,
                 ["ai_inference"] = aiInferenceReady,
+                ["media_platform"] = mediaPlatform?.Ready == true,
                 ["alertNotify"] = !alertNotifyRecentFailure
             };
             var ready = checks.Values.All(v => v);
@@ -140,7 +150,8 @@ internal static class AuraEndpointsCore
                             modelLoadedNodes = aiHealth.ModelLoadedNodeCount,
                             inferenceReadyNodes = aiHealth.InferenceReadyNodeCount,
                             nodes = aiHealth.Nodes
-                        }
+                        },
+                    mediaAnalysis = mediaPlatform
                 },
                 time = now
             });

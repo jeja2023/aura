@@ -30,11 +30,12 @@ $null = New-Item -ItemType Directory -Path $packageRoot -Force
 $imagesArchive = Join-Path $packageRoot "aura-images.tar"
 
 $images = @(
-    (Get-EnvValue "POSTGRES_IMAGE" "postgres:16-alpine"),
+    (Get-EnvValue "POSTGRES_IMAGE" "pgvector/pgvector:pg16"),
     (Get-EnvValue "REDIS_IMAGE" "redis:7-alpine"),
     (Get-EnvValue "ARANGO_IMAGE" "arangodb:3.12"),
     (Get-EnvValue "API_IMAGE" "aura-api:local"),
-    (Get-EnvValue "AI_IMAGE" "aura-ai:local")
+    (Get-EnvValue "AI_IMAGE" "aura-ai:local"),
+    (Get-EnvValue "MEDIA_PROVIDER_SIMULATOR_IMAGE" "aura-media-provider-simulator:local")
 )
 $images = $images | Select-Object -Unique
 

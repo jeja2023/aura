@@ -16,6 +16,9 @@ public static class EndpointExtensions
         AuraEndpointsHikvisionIsapi.Map(app, ctx);
         AuraEndpointsMedia.Map(app, ctx);
         AuraEndpointsDomain.Map(app, ctx);
+        AuraEndpointsMediaAnalysis.Map(app);
+        AuraEndpointsVectorIndex.Map(app);
+        AuraEndpointsGraph.Map(app);
         return app;
     }
 }

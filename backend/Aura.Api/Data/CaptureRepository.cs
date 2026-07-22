@@ -29,8 +29,19 @@ internal sealed class CaptureRepository
             await using var conn = CreateConnection();
             return await conn.ExecuteScalarAsync<long>(
                 """
-                INSERT INTO capture_record(device_id, channel_no, capture_time, image_path, metadata_json, created_at)
-                VALUES(@DeviceId, @ChannelNo, @CaptureTime, @ImagePath, CAST(@MetadataJson AS jsonb), NOW())
+                WITH source_mapping AS (
+                  SELECT c.camera_id,s.tenant_id
+                  FROM map_camera c
+                  LEFT JOIN media_source s ON s.camera_id=c.camera_id AND s.enabled=TRUE
+                  WHERE c.device_id=@DeviceId AND c.channel_no=@ChannelNo
+                  ORDER BY s.tenant_id NULLS LAST,s.source_id
+                  LIMIT 1
+                )
+                INSERT INTO capture_record(device_id, channel_no, capture_time, image_path, metadata_json,
+                  tenant_id,camera_id,created_at)
+                SELECT @DeviceId,@ChannelNo,@CaptureTime,@ImagePath,CAST(@MetadataJson AS jsonb),
+                  mapping.tenant_id,mapping.camera_id,NOW()
+                FROM (SELECT 1) seed LEFT JOIN source_mapping mapping ON TRUE
                 RETURNING capture_id
                 """,
                 new { DeviceId = deviceId, ChannelNo = channelNo, CaptureTime = captureTimeLocal, ImagePath = imagePath, MetadataJson = metadataJson });

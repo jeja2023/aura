@@ -28,7 +28,7 @@ PACKAGE_ROOT="$ROOT_DIR/docker/dist/aura-offline-$TIMESTAMP"
 mkdir -p "$PACKAGE_ROOT"
 IMAGES_ARCHIVE="$PACKAGE_ROOT/aura-images.tar"
 
-IMAGES="$(read_env POSTGRES_IMAGE postgres:16-alpine) $(read_env REDIS_IMAGE redis:7-alpine) $(read_env ARANGO_IMAGE arangodb:3.12) $(read_env API_IMAGE aura-api:local) $(read_env AI_IMAGE aura-ai:local)"
+IMAGES="$(read_env POSTGRES_IMAGE pgvector/pgvector:pg16) $(read_env REDIS_IMAGE redis:7-alpine) $(read_env ARANGO_IMAGE arangodb:3.12) $(read_env API_IMAGE aura-api:local) $(read_env AI_IMAGE aura-ai:local) $(read_env MEDIA_PROVIDER_SIMULATOR_IMAGE aura-media-provider-simulator:local)"
 
 echo "==> Exporting images"
 # shellcheck disable=SC2086

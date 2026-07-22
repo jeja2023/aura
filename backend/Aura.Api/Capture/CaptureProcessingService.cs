@@ -4,6 +4,7 @@ using Aura.Api.Capture;
 using Aura.Api.Data;
 using Aura.Api.Models;
 using Aura.Api.Ops;
+using Aura.Api.Vector;
 using Microsoft.AspNetCore.Http;
 
 internal sealed class CaptureProcessingService
@@ -14,6 +15,7 @@ internal sealed class CaptureProcessingService
     private readonly AuditRepository _auditRepository;
     private readonly RetryQueueService _retryQueue;
     private readonly AiClient _aiClient;
+    private readonly LegacyVectorBridge _vectorBridge;
     private readonly EventDispatchService _eventDispatchService;
     private readonly string _storageRoot;
     private readonly string _captureRetryImageFolder;
@@ -28,6 +30,7 @@ internal sealed class CaptureProcessingService
         AuditRepository auditRepository,
         RetryQueueService retryQueue,
         AiClient aiClient,
+        LegacyVectorBridge vectorBridge,
         EventDispatchService eventDispatchService,
         string storageRoot,
         string captureRetryImageFolder,
@@ -41,6 +44,7 @@ internal sealed class CaptureProcessingService
         _auditRepository = auditRepository;
         _retryQueue = retryQueue;
         _aiClient = aiClient;
+        _vectorBridge = vectorBridge;
         _eventDispatchService = eventDispatchService;
         _storageRoot = storageRoot;
         _captureRetryImageFolder = captureRetryImageFolder;
@@ -109,7 +113,7 @@ internal sealed class CaptureProcessingService
                 _ = await _captureRepository.UpdateCaptureFeatureIdAsync(saved.CaptureId, vectorId);
             }
 
-            vectorUpsertResult = await _aiClient.UpsertAsync(vectorId, aiResult.Feature);
+            vectorUpsertResult = await _vectorBridge.UpsertAsync(vectorId, aiResult.Feature, saved.CaptureId);
             if (!vectorUpsertResult.Success)
             {
                 await _auditRepository.InsertOperationAsync("AI向量索引", "向量写入失败", $"captureId={saved.CaptureId}, vectorId={vectorId}, 原因={vectorUpsertResult.Message}");
