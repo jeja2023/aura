@@ -16,7 +16,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Run Trivy filesystem scan
         # 固定到不可变 commit SHA，降低 tag 漂移与供应链风险（对应 v0.36.0）
