@@ -2,6 +2,43 @@
 
 本文档记录仓库关键版本与阶段性改动，便于联调、回归与发布追踪。
 
+## 0.2.1（2026-07-26）
+
+### 依赖治理与 Dependabot 策略
+
+- `.github/dependabot.yml` 补充 `/backend/Aura.DbMigrator` NuGet 生态：该项目与 `Aura.Api` 共用 `Npgsql`，此前缺少配置会导致两者版本分叉。
+- 七个生态全部启用 `groups`，补丁与次版本更新合并为单个 PR，避免依赖分支堆积。
+- npm 侧单独设置 `eslint` 分组，强制 `eslint`、`@eslint/*` 与 `globals` 同步升级，避免扁平配置因 `js.configs.recommended` 版本错配而失败。
+- 新增三条主版本忽略规则并在配置内写明原因：`Microsoft.OpenApi` 保持 2.x（该显式引用是 GHSA-v5pm-xwqc-g5wc 的安全覆盖，且 `Microsoft.AspNetCore.OpenApi` 10.0.x 依赖 2.x）、`StackExchange.Redis` 保持 2.x（SignalR Redis backplane 针对 2.x 编译）、`Npgsql` 保持 8.x（沿用既有决策，且须与 `Aura.DbMigrator` 同步升级）。
+
+### 前端 ESLint 10 升级
+
+- `eslint` 升级到 10.7.0，`@eslint/js` 同步升级到 10.0.1，`globals` 升级到 17.7.0；三者版本号不同步，需按各自最新稳定版配对。
+- ESLint 10 的 `js.configs.recommended` 新增 `no-useless-assignment` 规则，修复 `extensions`、`log`、`ops-settings`、`role` 四个页面脚本中 `let data = null` 初值从未被读取的无用赋值；`frontend-overrides/extensions/extensions.js` 同步修改，保持覆盖层与主文件一致。
+- `npm run lint` 通过，覆盖层脚本 `node --check` 语法检查通过。
+
+### AI 依赖升级
+
+- `fastapi` 0.115.6→0.136.1、`pydantic` 2.10.3→2.13.3、`numpy` 2.1.3→2.4.4、`onnxruntime` 1.20.1→1.25.0、`python-arango` 8.1.4→8.3.2。
+- `fastapi` 0.136.1 带动 `starlette` 升级到 1.3.1，后者已弃用配合 `httpx` 使用 `TestClient`；测试依赖由 `httpx==0.28.1` 迁移到 `httpx2==2.9.1`，弃用告警消除。
+- `python -m pip check` 无冲突；`python -m pytest -p no:cacheprovider` 32 项全部通过。
+
+### 后端依赖对齐
+
+- `Aura.Api.Integration.Tests` 的 `Microsoft.AspNetCore.Mvc.Testing` 由 10.0.5 对齐到 10.0.9，与 `Aura.Api` 中同为 10.0.9 的 ASP.NET Core 系列包保持一致。
+- 本次未升级 `Microsoft.NET.Test.Sdk`：两个测试项目当前同为 17.14.1 且已对齐，升级到 18.x 涉及测试平台级变更，需单独排期并在 CI 中验证。
+
+### 版本
+
+- 启用版本 `0.2.1`：`.NET` 统一版本写入 `Directory.Build.props`，AI FastAPI OpenAPI 版本同步为 `0.2.1`。
+- `docker/.env.registry.example` 默认业务镜像标签与离线包文件名升级到 `v0.2.1`。
+
+### 验证说明
+
+- 前端与 AI 改动已在本机（Node 24.13.1、Python 3.12）完成验证。
+- 后端 `.csproj` 改动因本机未安装 .NET SDK 未做编译验证，由 CI 门禁确认。
+- GitHub Actions 版本升级未在本地改动，由 Dependabot 分组 PR 提交并经 CI 验证。
+
 ## 0.2.0（2026-07-22）
 
 ### 通用媒体解析架构与契约
