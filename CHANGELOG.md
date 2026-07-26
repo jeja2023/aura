@@ -28,16 +28,28 @@
 - `Aura.Api.Integration.Tests` 的 `Microsoft.AspNetCore.Mvc.Testing` 由 10.0.5 对齐到 10.0.9，与 `Aura.Api` 中同为 10.0.9 的 ASP.NET Core 系列包保持一致。
 - 本次未升级 `Microsoft.NET.Test.Sdk`：两个测试项目当前同为 17.14.1 且已对齐，升级到 18.x 涉及测试平台级变更，需单独排期并在 CI 中验证。
 
+### GitHub Actions 升级
+
+- `actions/cache` 4→5、`dorny/paths-filter` 3→4、`github/codeql-action` 3→4（`codeql.yml` 三处与 `trivy.yml` 的 `upload-sarif` 共四处同步）、`gitleaks/gitleaks-action` 2→3。
+- `aquasecurity/trivy-action` 由 v0.35.0 对应的 SHA 升级到 v0.36.0 对应的 `ed142fd0673e97e23eac54620cfb913e5ce36c25`，保持不可变 SHA 固定策略，并同步修正其上方注释中的版本标注。
+- 合并前经三方合并演算验证：0.1.33 引入的 AI Pytest 任务、前端覆盖层语法检查步骤与 `frontend-overrides` 路径过滤均完整保留，净变化仅为版本引用行。
+
 ### 版本
 
 - 启用版本 `0.2.1`：`.NET` 统一版本写入 `Directory.Build.props`，AI FastAPI OpenAPI 版本同步为 `0.2.1`。
 - `docker/.env.registry.example` 默认业务镜像标签与离线包文件名升级到 `v0.2.1`。
 
+### 依赖分支清理
+
+- 以下 Dependabot 分支的目标版本与本次升级结果一致，内容已实现，予以关闭：`fastapi-0.136.1`、`numpy-2.4.4`、`onnxruntime-1.25.0`、`pydantic-2.13.3`、`python-arango-8.3.2`、`Microsoft.AspNetCore.Mvc.Testing-10.0.9`。
+- `eslint-10.7.0` 与 `globals-17.7.0` 两个分支因基点陈旧，合并会将 `@eslint/js` 退回 9.39.4、`globals` 退回 16.0.0 或 `eslint` 退回 9.39.4，造成回退，予以关闭。
+- `Npgsql-10.0.3`、`StackExchange.Redis-3.0.17`、`Microsoft.OpenApi-3.8.0`、`Microsoft.NET.Test.Sdk-18.7.0` 保留待单独排期；其中 `Npgsql-10.0.3` 基点落后五个提交，其分支上的 `Aura.Api.csproj` 缺少 `Microsoft.OpenApi` 2.7.5 安全固定项且多个包版本偏低，解决冲突时须以 main 为准。
+
 ### 验证说明
 
 - 前端与 AI 改动已在本机（Node 24.13.1、Python 3.12）完成验证。
 - 后端 `.csproj` 改动因本机未安装 .NET SDK 未做编译验证，由 CI 门禁确认。
-- GitHub Actions 版本升级未在本地改动，由 Dependabot 分组 PR 提交并经 CI 验证。
+- GitHub Actions 升级仅能由 GitHub 侧运行验证，由 CI 门禁确认。
 
 ## 0.2.0（2026-07-22）
 
