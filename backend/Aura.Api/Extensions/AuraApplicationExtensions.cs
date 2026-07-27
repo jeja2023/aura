@@ -168,11 +168,8 @@ public static class AuraApplicationExtensions
             Directory.CreateDirectory(storageRoot);
         }
 
-        app.UseStaticFiles(new StaticFileOptions
-        {
-            FileProvider = new PhysicalFileProvider(storageRoot),
-            RequestPath = "/storage"
-        });
+        // Private runtime artifacts are served by AuraEndpointsStorage after
+        // authentication and domain-specific authorization checks.
     }
 
     private static IFileProvider CreateFrontendProvider(string frontendRoot, string overlayRoot)

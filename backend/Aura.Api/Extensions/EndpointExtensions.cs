@@ -20,6 +20,7 @@ public static class EndpointExtensions
         AuraEndpointsVectorIndex.Map(app);
         AuraEndpointsGraph.Map(app);
         AuraEndpointsProduct.Map(app);
+        AuraEndpointsStorage.Map(app);
         return app;
     }
 }

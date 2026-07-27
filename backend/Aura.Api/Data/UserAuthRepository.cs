@@ -3,6 +3,7 @@ using Dapper;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using System.Diagnostics;
+using System.Runtime.ExceptionServices;
 
 namespace Aura.Api.Data;
 
@@ -39,7 +40,7 @@ internal sealed class UserAuthRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库查询用户失败。userName={UserName}", userName);
-            return null;
+            return FallbackOrThrow(ex, "query user", default(DbUser?));
         }
     }
 
@@ -59,7 +60,7 @@ internal sealed class UserAuthRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库查询角色列表失败。");
-            return [];
+            return FallbackOrThrow(ex, "query roles", new List<DbRole>());
         }
     }
 
@@ -79,7 +80,7 @@ internal sealed class UserAuthRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库写入角色失败。roleName={RoleName}", roleName);
-            return null;
+            return FallbackOrThrow(ex, "insert role", default(long?));
         }
     }
 
@@ -103,7 +104,7 @@ internal sealed class UserAuthRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库查询用户列表失败。");
-            return [];
+            return FallbackOrThrow(ex, "query users", new List<DbUserListItem>());
         }
     }
 
@@ -161,7 +162,7 @@ internal sealed class UserAuthRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库分页查询用户列表失败。keyword={Keyword}, page={Page}, pageSize={PageSize}", keyword, page, pageSize);
-            return new DbPagedResult<DbUserListItem>([], 0, false);
+            return FallbackOrThrow(ex, "query users page", new DbPagedResult<DbUserListItem>([], 0, false));
         }
     }
 
@@ -181,7 +182,7 @@ internal sealed class UserAuthRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库写入用户失败。userName={UserName}, roleId={RoleId}", userName, roleId);
-            return null;
+            return FallbackOrThrow(ex, "insert user", default(long?));
         }
     }
 
@@ -202,7 +203,7 @@ internal sealed class UserAuthRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库重置用户密码失败。userName={UserName}", userName);
-            return false;
+            return FallbackOrThrow(ex, "update user password", false);
         }
     }
 
@@ -219,7 +220,7 @@ internal sealed class UserAuthRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库更新用户状态失败。userId={UserId}, status={Status}", userId, status);
-            return false;
+            return FallbackOrThrow(ex, "update user status", false);
         }
     }
 
@@ -239,6 +240,10 @@ internal sealed class UserAuthRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库更新用户资料失败。userId={UserId}", userId);
+            if (_connectionFactory.IsConfigured && ex is not PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+            {
+                throw new DataAccessUnavailableException("update user profile", ex);
+            }
             throw;
         }
     }
@@ -260,7 +265,7 @@ internal sealed class UserAuthRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库按用户ID重置密码失败。userId={UserId}", userId);
-            return false;
+            return FallbackOrThrow(ex, "reset user password", false);
         }
     }
 
@@ -277,7 +282,30 @@ internal sealed class UserAuthRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库删除用户失败。userId={UserId}", userId);
-            return false;
+            return FallbackOrThrow(ex, "delete user", false);
+        }
+    }
+
+    public async Task<List<Guid>> RevokeUserSessionsAsync(long userId, string actor, string reason, Guid? exceptSessionId = null)
+    {
+        try
+        {
+            await using var conn = CreateConnection();
+            var rows = await conn.QueryAsync<Guid>(
+                """
+                UPDATE auth_session
+                SET revoked_at=CURRENT_TIMESTAMP, revoked_by=@Actor, revoke_reason=@Reason
+                WHERE user_id=@UserId AND revoked_at IS NULL
+                  AND (@ExceptSessionId IS NULL OR session_id<>@ExceptSessionId)
+                RETURNING session_id
+                """,
+                new { UserId = userId, Actor = actor, Reason = reason, ExceptSessionId = exceptSessionId });
+            return rows.ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "数据库撤销用户会话失败。userId={UserId}", userId);
+            return FallbackOrThrow(ex, "revoke user sessions", new List<Guid>());
         }
     }
 
@@ -301,5 +329,20 @@ internal sealed class UserAuthRepository
             _logger?.LogWarning(ex, "数据库更新最后登录时间失败。userName={UserName}", userName);
             return false;
         }
+    }
+
+    private T FallbackOrThrow<T>(Exception exception, string operation, T fallback)
+    {
+        if (!_connectionFactory.IsConfigured)
+        {
+            return fallback;
+        }
+
+        if (exception is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            ExceptionDispatchInfo.Capture(exception).Throw();
+        }
+
+        throw new DataAccessUnavailableException(operation, exception);
     }
 }

@@ -3,6 +3,7 @@ import logging
 
 from app.bootstrap import build_runtime
 from app.middlewares import register_middlewares
+from app.security import is_production, validate_production_security
 from app.lifespan import build_lifespan
 from fastapi import FastAPI
 from routes.api_routes import build_api_router
@@ -20,9 +21,15 @@ _deps, _arango, _inference, _index_runtime = build_runtime(
 )
 
 def create_app() -> FastAPI:
+    validate_production_security()
+    production = is_production()
+
     app = FastAPI(
         title="Aura AI 推理服务",
-        version="0.3.1",
+        version="0.4.0",
+        docs_url=None if production else "/docs",
+        redoc_url=None if production else "/redoc",
+        openapi_url=None if production else "/openapi.json",
         lifespan=build_lifespan(
             arango=_arango,
             inference=_inference,

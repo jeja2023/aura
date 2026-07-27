@@ -75,6 +75,24 @@ internal sealed class RedisCacheService
         }
     }
 
+    public async Task<bool?> TryAddAsync(string key, string value, TimeSpan ttl)
+    {
+        if (_db is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return await _db.StringSetAsync(key, value, ttl, When.NotExists);
+        }
+        catch (Exception ex)
+        {
+            _provider.RecordFailure(ex, "cache-add-if-absent");
+            return null;
+        }
+    }
+
     /// <summary>删除缓存键（设备列表等变更后主动失效）。</summary>
     public async Task DeleteAsync(string key)
     {
@@ -114,15 +132,44 @@ internal sealed class RedisCacheService
         if (_db is null) return;
         try
         {
-            var current = await _db.StringGetAsync(lockKey);
-            if (current.HasValue && current.ToString() == token)
-            {
-                await _db.KeyDeleteAsync(lockKey);
-            }
+            const string releaseScript = """
+                if redis.call('get', KEYS[1]) == ARGV[1] then
+                    return redis.call('del', KEYS[1])
+                end
+                return 0
+                """;
+            await _db.ScriptEvaluateAsync(
+                releaseScript,
+                [new RedisKey(lockKey)],
+                [new RedisValue(token)]);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "释放 Redis 锁失败。lockKey={LockKey}", lockKey);
+        }
+    }
+
+    public async Task<bool> RenewLockAsync(string lockKey, string token, TimeSpan ttl)
+    {
+        if (_db is null) return false;
+        try
+        {
+            const string renewScript = """
+                if redis.call('get', KEYS[1]) == ARGV[1] then
+                    return redis.call('pexpire', KEYS[1], ARGV[2])
+                end
+                return 0
+                """;
+            var result = await _db.ScriptEvaluateAsync(
+                renewScript,
+                [new RedisKey(lockKey)],
+                [new RedisValue(token), new RedisValue(((long)Math.Ceiling(ttl.TotalMilliseconds)).ToString(System.Globalization.CultureInfo.InvariantCulture))]);
+            return (long)result == 1;
+        }
+        catch (Exception ex)
+        {
+            _provider.RecordFailure(ex, "lock-renew");
+            return false;
         }
     }
 }

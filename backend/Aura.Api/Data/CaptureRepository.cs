@@ -49,6 +49,10 @@ internal sealed class CaptureRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库写入抓拍记录失败。deviceId={DeviceId}, channelNo={ChannelNo}", deviceId, channelNo);
+            if (_connectionFactory.IsConfigured)
+            {
+                throw new DataAccessUnavailableException("insert capture", ex);
+            }
             return null;
         }
     }
@@ -70,6 +74,7 @@ internal sealed class CaptureRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库更新抓拍元数据失败。captureId={CaptureId}", captureId);
+            PgSqlRepositoryHelpers.ThrowIfConfigured(_connectionFactory, ex, "update capture metadata");
             return false;
         }
     }
@@ -91,6 +96,7 @@ internal sealed class CaptureRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库更新抓拍向量ID失败。captureId={CaptureId}, featureId={FeatureId}", captureId, featureId);
+            PgSqlRepositoryHelpers.ThrowIfConfigured(_connectionFactory, ex, "update capture feature id");
             return false;
         }
     }
@@ -115,6 +121,7 @@ internal sealed class CaptureRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库查询抓拍列表失败。limit={Limit}", limit);
+            PgSqlRepositoryHelpers.ThrowIfConfigured(_connectionFactory, ex, "query captures");
             return [];
         }
     }
@@ -129,6 +136,7 @@ internal sealed class CaptureRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库统计抓拍总数失败。");
+            PgSqlRepositoryHelpers.ThrowIfConfigured(_connectionFactory, ex, "count captures");
             return null;
         }
     }
@@ -156,6 +164,7 @@ internal sealed class CaptureRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库按时间范围查询抓拍失败。start={Start}, end={End}, maxRows={MaxRows}", start, end, maxRows);
+            PgSqlRepositoryHelpers.ThrowIfConfigured(_connectionFactory, ex, "query captures by time range");
             return [];
         }
     }
@@ -227,6 +236,7 @@ internal sealed class CaptureRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库分页查询抓拍失败。from={From}, to={To}, deviceId={DeviceId}, channelNo={ChannelNo}, page={Page}, pageSize={PageSize}", from, to, deviceId, channelNo, page, pageSize);
+            PgSqlRepositoryHelpers.ThrowIfConfigured(_connectionFactory, ex, "query capture page");
             return new DbPagedResult<DbCapture>([], 0, false);
         }
     }
@@ -255,6 +265,7 @@ internal sealed class CaptureRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库查询 ROI 列表失败。limit={Limit}", limit);
+            PgSqlRepositoryHelpers.ThrowIfConfigured(_connectionFactory, ex, "query regions of interest");
             return [];
         }
     }
@@ -275,6 +286,7 @@ internal sealed class CaptureRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库写入 ROI 失败。cameraId={CameraId}, roomNodeId={RoomNodeId}", cameraId, roomNodeId);
+            PgSqlRepositoryHelpers.ThrowIfConfigured(_connectionFactory, ex, "insert region of interest");
             return null;
         }
     }
@@ -296,6 +308,7 @@ internal sealed class CaptureRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库写入轨迹事件失败。vid={Vid}, cameraId={CameraId}, roiId={RoiId}", vid, cameraId, roiId);
+            PgSqlRepositoryHelpers.ThrowIfConfigured(_connectionFactory, ex, "insert track event");
             return null;
         }
     }
@@ -326,6 +339,7 @@ internal sealed class CaptureRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库查询轨迹失败。vid={Vid}, limit={Limit}", vid, limit);
+            PgSqlRepositoryHelpers.ThrowIfConfigured(_connectionFactory, ex, "query track events");
             return [];
         }
     }
@@ -354,6 +368,7 @@ internal sealed class CaptureRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库按时间范围查询轨迹失败。start={Start}, end={End}, maxRows={MaxRows}", start, end, maxRows);
+            PgSqlRepositoryHelpers.ThrowIfConfigured(_connectionFactory, ex, "query track events by time range");
             return [];
         }
     }
@@ -459,6 +474,7 @@ internal sealed class CaptureRepository
         catch (Exception ex)
         {
             _logger?.LogWarning(ex, "数据库按 VID 查询命中图片失败。vidCount={VidCount}", normalized.Length);
+            PgSqlRepositoryHelpers.ThrowIfConfigured(_connectionFactory, ex, "query capture images by VID");
         }
 
         return result;

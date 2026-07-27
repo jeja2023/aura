@@ -73,7 +73,7 @@
         <button type="button" class="btn-secondary aura-modal-close" data-capture-onboard-dismiss aria-label="关闭对话框">关闭</button>
       </div>
       <div class="aura-modal-doc">
-        <p class="aura-modal-doc-intro">业务抓拍使用 <code class="hik-isapi-code">POST</code> <code class="hik-isapi-code" id="capturePushUrlDoc"></code>，JSON 包含 <code class="hik-isapi-code">deviceId</code>、<code class="hik-isapi-code">channelNo</code>、<code class="hik-isapi-code">captureTime</code>、<code class="hik-isapi-code">imageBase64</code>；请求头 <code class="hik-isapi-code">X-Signature</code> 为 <code class="hik-isapi-code">deviceId|channelNo|captureTime</code> 的 HMAC-SHA256 小写十六进制签名。</p>
+        <p class="aura-modal-doc-intro">业务抓拍使用 <code class="hik-isapi-code">POST</code> <code class="hik-isapi-code" id="capturePushUrlDoc"></code>，JSON 包含 <code class="hik-isapi-code">deviceId</code>、<code class="hik-isapi-code">channelNo</code>、<code class="hik-isapi-code">captureTime</code>、<code class="hik-isapi-code">imageBase64</code>；请求头需提供 Unix 秒时间戳、唯一 nonce，以及覆盖 <code class="hik-isapi-code">deviceId\nchannelNo\ntimestamp\nnonce\nSHA256(rawBody)</code> 的 HMAC-SHA256 签名。</p>
         <p class="aura-modal-doc-intro">完整步骤与字段说明请前往 <a href="../device-diag/">设备联调</a> 页面查看“设备接入说明”。</p>
       </div>
       <div class="aura-modal-actions">

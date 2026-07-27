@@ -2,6 +2,7 @@ using Aura.Api.Ai;
 using Aura.Api.Cache;
 using Aura.Api.Capture;
 using Aura.Api.Data;
+using Aura.Api.Internal;
 using Aura.Api.Models;
 using Aura.Api.Ops;
 using Aura.Api.Vector;
@@ -22,6 +23,7 @@ internal sealed class CaptureProcessingService
     private readonly bool _captureRetryPreferInlineBase64;
     private readonly bool _captureRetryAllowInlineFallback;
     private readonly bool _saveCaptureImageOnSuccess;
+    private readonly bool _allowInMemoryFallback;
 
     public CaptureProcessingService(
         AppStore store,
@@ -36,7 +38,8 @@ internal sealed class CaptureProcessingService
         string captureRetryImageFolder,
         bool captureRetryPreferInlineBase64,
         bool captureRetryAllowInlineFallback,
-        bool saveCaptureImageOnSuccess)
+        bool saveCaptureImageOnSuccess,
+        bool allowInMemoryFallback)
     {
         _store = store;
         _captureRepository = captureRepository;
@@ -51,6 +54,7 @@ internal sealed class CaptureProcessingService
         _captureRetryPreferInlineBase64 = captureRetryPreferInlineBase64;
         _captureRetryAllowInlineFallback = captureRetryAllowInlineFallback;
         _saveCaptureImageOnSuccess = saveCaptureImageOnSuccess;
+        _allowInMemoryFallback = allowInMemoryFallback;
     }
 
     public async Task<IResult> ProcessAsync(CapturePayload normalized, string source)
@@ -102,6 +106,11 @@ internal sealed class CaptureProcessingService
         var saved = dbId.HasValue ? record with { CaptureId = dbId.Value } : record;
         if (!dbId.HasValue)
         {
+            if (!_allowInMemoryFallback)
+            {
+                if (!string.IsNullOrWhiteSpace(retryImagePath)) TryDeleteFile(retryImagePath);
+                return AuraApiResults.ServiceUnavailable("数据库写入失败，抓拍未被接收", 50310);
+            }
             _store.Captures.Add(saved);
         }
 
@@ -153,7 +162,7 @@ internal sealed class CaptureProcessingService
 
         if ((!aiResult.Success || (vectorUpsertResult is not null && !vectorUpsertResult.Success)) && shouldEnqueueRetry)
         {
-            await _retryQueue.EnqueueAsync(new RetryTask(
+            retryQueued = await _retryQueue.EnqueueAsync(new RetryTask(
                 saved.CaptureId,
                 normalized.DeviceId,
                 normalized.ChannelNo,
@@ -163,7 +172,11 @@ internal sealed class CaptureProcessingService
                 source,
                 0,
                 DateTimeOffset.Now));
-            retryQueued = true;
+            if (!retryQueued)
+            {
+                retryReason = "AI 处理失败，重试任务入队失败";
+                await _auditRepository.InsertOperationAsync("重试任务", "AI重试入队失败", $"captureId={saved.CaptureId}");
+            }
         }
         else if (!aiResult.Success)
         {
@@ -212,7 +225,7 @@ internal sealed class CaptureProcessingService
             var alertId = await _monitoringRepository.InsertAlertAsync(alert.AlertType, alert.Detail);
             if (!alertId.HasValue)
             {
-                _store.Alerts.Add(alert);
+                if (_allowInMemoryFallback) _store.Alerts.Add(alert);
             }
             await _eventDispatchService.NotifyAlertAsync(alert.AlertType, alert.Detail, "抓拍关键词命中");
             await _eventDispatchService.BroadcastRoleEventAsync("alert.created", new { alertType = alert.AlertType, detail = alert.Detail, at = alert.CreatedAt });
@@ -223,6 +236,7 @@ internal sealed class CaptureProcessingService
 
     private void AddOperationLog(string operatorName, string action, string detail)
     {
+        if (!_allowInMemoryFallback) return;
         _store.Operations.Add(new OperationEntity(
             OperationId: Interlocked.Increment(ref _store.OperationSeed),
             OperatorName: operatorName,

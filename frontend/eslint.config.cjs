@@ -35,6 +35,17 @@ module.exports = [
       sourceType: "commonjs",
       globals: {
         ...globals.node,
+        ...globals.browser,
+      },
+    },
+  },
+  {
+    files: ["**/*.cjs"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "commonjs",
+      globals: {
+        ...globals.node,
       },
     },
   },

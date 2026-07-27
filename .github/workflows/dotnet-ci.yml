@@ -192,6 +192,14 @@ jobs:
         working-directory: frontend
         run: npm run lint
 
+      - name: Install Playwright browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run frontend smoke tests
+        working-directory: frontend
+        run: npm run test:smoke
+
       - name: Check frontend override scripts
         shell: bash
         run: |

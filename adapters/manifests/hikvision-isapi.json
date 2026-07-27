@@ -6,7 +6,7 @@
   "protocol": "ISAPI/HTTPS",
   "lifecycle": "experimental",
   "implementationStatus": "supported",
-  "auraVersions": ["0.3.x"],
+  "auraVersions": ["0.3.x", "0.4.x"],
   "capabilities": ["device-health", "snapshot", "alert-stream", "channel-discovery"],
   "configuration": { "type": "object", "required": ["baseUri", "credentialRef"], "properties": { "baseUri": { "type": "string", "format": "uri" }, "credentialRef": { "type": "string", "pattern": "^(env|file|vault|keyvault|aws-secrets-manager)://" } } },
   "contract": {

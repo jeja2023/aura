@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS nvr_device (
   protocol VARCHAR(32) NOT NULL,
   hmac_secret VARCHAR(255) NULL,
   status VARCHAR(16) NOT NULL DEFAULT 'offline',
+  last_seen_at TIMESTAMPTZ NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

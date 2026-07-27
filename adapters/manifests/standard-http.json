@@ -6,7 +6,7 @@
   "protocol": "HTTPS/JSON",
   "lifecycle": "experimental",
   "implementationStatus": "supported",
-  "auraVersions": ["0.3.x"],
+  "auraVersions": ["0.3.x", "0.4.x"],
   "capabilities": ["health", "capability-discovery", "image-task", "video-task", "stream-task", "webhook"],
   "configuration": { "$ref": "../../docs/contracts/media-analysis-provider-v1.openapi.yaml" },
   "contract": {

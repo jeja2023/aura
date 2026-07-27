@@ -1,7 +1,7 @@
 namespace Aura.Api.Data;
 
 internal sealed record DbUser(string UserName, string PasswordHash, string? RoleName, string PermissionJson, bool MustChangePassword);
-internal sealed record DbDevice(long DeviceId, string Name, string Ip, int Port, string Brand, string Protocol, string Status, DateTime CreatedAt);
+internal sealed record DbDevice(long DeviceId, string Name, string Ip, int Port, string Brand, string Protocol, string Status, DateTime CreatedAt, DateTime? LastSeenAt = null);
 internal sealed record DbCapture(long CaptureId, long DeviceId, int ChannelNo, DateTime CaptureTime, string MetadataJson, string? ImagePath = null);
 internal sealed record DbAlert(long AlertId, string AlertType, string Detail, DateTime CreatedAt);
 internal sealed record DbOperation(long OperationId, string OperatorName, string Action, string Detail, DateTime CreatedAt);

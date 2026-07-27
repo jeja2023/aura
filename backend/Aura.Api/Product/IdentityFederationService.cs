@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Aura.Api.Data;
+using Aura.Api.Cache;
 using Aura.Api.Internal;
 using Aura.Api.MediaAnalysis;
 using Dapper;
@@ -23,6 +24,7 @@ internal sealed class IdentityFederationService(
     IDataProtectionProvider dataProtection,
     IHttpClientFactory httpClientFactory,
     IConfiguration applicationConfiguration,
+    RedisCacheService cache,
     AuditRepository audit,
     ILogger<IdentityFederationService> logger)
 {
@@ -438,6 +440,7 @@ internal sealed class IdentityFederationService(
         var count = await connection.ExecuteAsync(new CommandDefinition(
             "UPDATE auth_session SET revoked_at=CURRENT_TIMESTAMP,revoked_by=@Actor,revoke_reason=@Reason WHERE session_id=@Id AND revoked_at IS NULL",
             new { Id = sessionId, Actor = actor, Reason = request.Reason.Trim()[..Math.Min(request.Reason.Trim().Length, 512)] }, cancellationToken: cancellationToken));
+        if (count > 0) await cache.DeleteAsync($"aura:auth:session:{sessionId:N}");
         return count > 0 ? ProductCommandResult.Ok(new { sessionId, status = "revoked" }) : new(ProductCommandStatus.NotFound, Message: "Active session not found");
     }
 

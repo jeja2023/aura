@@ -26,7 +26,8 @@ internal sealed class DeviceRepository
             var rows = await conn.QueryAsync<DbDevice>(
                 """
                 SELECT device_id AS DeviceId, name AS Name, ip AS Ip, port AS Port,
-                       brand AS Brand, protocol AS Protocol, status AS Status, created_at AS CreatedAt
+                       brand AS Brand, protocol AS Protocol, status AS Status, created_at AS CreatedAt,
+                       last_seen_at AS LastSeenAt
                 FROM nvr_device
                 ORDER BY device_id DESC
                 """);
@@ -35,6 +36,7 @@ internal sealed class DeviceRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库查询设备列表失败。");
+            ThrowIfConfigured(ex, "query device list");
             return [];
         }
     }
@@ -47,7 +49,8 @@ internal sealed class DeviceRepository
             return await conn.QueryFirstOrDefaultAsync<DbDevice>(
                 """
                 SELECT device_id AS DeviceId, name AS Name, ip AS Ip, port AS Port,
-                       brand AS Brand, protocol AS Protocol, status AS Status, created_at AS CreatedAt
+                       brand AS Brand, protocol AS Protocol, status AS Status, created_at AS CreatedAt,
+                       last_seen_at AS LastSeenAt
                 FROM nvr_device
                 WHERE device_id=@DeviceId
                 """,
@@ -56,6 +59,7 @@ internal sealed class DeviceRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库按ID查询设备失败。deviceId={DeviceId}", deviceId);
+            ThrowIfConfigured(ex, "query device");
             return null;
         }
     }
@@ -77,6 +81,7 @@ internal sealed class DeviceRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库写入设备失败。name={Name}, ip={Ip}, port={Port}", name, ip, port);
+            ThrowIfConfigured(ex, "insert device");
             return null;
         }
     }
@@ -98,7 +103,40 @@ internal sealed class DeviceRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库查询设备级 HMAC 密钥失败。deviceId={DeviceId}", deviceId);
+            ThrowIfConfigured(ex, "query device HMAC secret");
             return null;
+        }
+    }
+
+    public async Task<DbDevice?> UpdateHeartbeatAsync(long deviceId, DateTimeOffset seenAt)
+    {
+        try
+        {
+            await using var conn = CreateConnection();
+            return await conn.QuerySingleOrDefaultAsync<DbDevice>(
+                """
+                UPDATE nvr_device
+                SET status='online', last_seen_at=@SeenAt
+                WHERE device_id=@DeviceId
+                RETURNING device_id AS DeviceId, name AS Name, ip AS Ip, port AS Port,
+                  brand AS Brand, protocol AS Protocol, status AS Status, created_at AS CreatedAt,
+                  last_seen_at AS LastSeenAt
+                """,
+                new { DeviceId = deviceId, SeenAt = seenAt.ToUniversalTime() });
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "数据库更新设备心跳失败。deviceId={DeviceId}", deviceId);
+            ThrowIfConfigured(ex, "update device heartbeat");
+            return null;
+        }
+    }
+
+    private void ThrowIfConfigured(Exception exception, string operation)
+    {
+        if (_connectionFactory.IsConfigured)
+        {
+            throw new DataAccessUnavailableException(operation, exception);
         }
     }
 }

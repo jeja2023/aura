@@ -10,6 +10,7 @@ using Aura.Api.Ops;
 using Aura.Api.Product;
 using Aura.Api.Services;
 using Aura.Api.Services.Hikvision;
+using Aura.Api.Security;
 using Aura.Api.Vector;
 
 namespace Aura.Api.Extensions;
@@ -56,6 +57,8 @@ public static partial class ServiceExtensions
         services.AddSingleton<AppStore>();
         services.AddSingleton<FeatureClusteringService>();
         services.AddSingleton<TabularExportService>();
+        var allowInMemoryFallback = configuration.GetValue("Aura:AllowInMemoryDataFallback", false)
+            && string.IsNullOrWhiteSpace(configuration.GetConnectionString("PgSql"));
 
         services.AddScoped<IdentityAdminService>(sp =>
             new IdentityAdminService(
@@ -69,9 +72,17 @@ public static partial class ServiceExtensions
                 jwtKey,
                 jwtIssuer,
                 jwtAudience,
-                jwtExpireMinutes));
+                jwtExpireMinutes,
+                allowInMemoryFallback));
 
-        services.AddScoped<DeviceManagementService>();
+        services.AddScoped<DeviceManagementService>(sp => new DeviceManagementService(
+            sp.GetRequiredService<AppStore>(),
+            sp.GetRequiredService<PgSqlConnectionFactory>(),
+            sp.GetRequiredService<DeviceRepository>(),
+            sp.GetRequiredService<AuditRepository>(),
+            sp.GetRequiredService<RedisCacheService>(),
+            sp.GetRequiredService<ILogger<DeviceManagementService>>(),
+            allowInMemoryFallback));
         services.AddScoped<EventDispatchService>();
         services.AddScoped<ClusterApplicationService>();
         services.AddScoped<StatsApplicationService>();
@@ -95,7 +106,14 @@ public static partial class ServiceExtensions
             configuration.GetValue("Limits:MaxMetadataJsonChars", 200_000)));
         services.AddScoped<SpaceCollisionService>();
         services.AddScoped<JudgeService>();
-        services.AddScoped<MonitoringQueryService>();
+        services.AddScoped<MonitoringQueryService>(sp => new MonitoringQueryService(
+            sp.GetRequiredService<AppStore>(),
+            sp.GetRequiredService<PgSqlConnectionFactory>(),
+            sp.GetRequiredService<CaptureRepository>(),
+            sp.GetRequiredService<MonitoringRepository>(),
+            sp.GetRequiredService<AuditRepository>(),
+            sp.GetRequiredService<EventDispatchService>(),
+            allowInMemoryFallback));
         services.AddScoped<CaptureProcessingService>(sp => new CaptureProcessingService(
             sp.GetRequiredService<AppStore>(),
             sp.GetRequiredService<CaptureRepository>(),
@@ -109,14 +127,9 @@ public static partial class ServiceExtensions
             ResolveCaptureRetryFolder(configuration, hostEnvironment),
             configuration.GetValue("CaptureRetry:PreferInlineBase64", false),
             configuration.GetValue("CaptureRetry:AllowInlineBase64Fallback", false),
-            configuration.GetValue("Storage:SaveCaptureImageOnSuccess", true)));
+            configuration.GetValue("Storage:SaveCaptureImageOnSuccess", true),
+            allowInMemoryFallback));
         services.AddScoped<RetryProcessingService>();
-        services.AddScoped<ResourceManagementService>(sp => new ResourceManagementService(
-            sp.GetRequiredService<AppStore>(),
-            sp.GetRequiredService<CampusResourceRepository>(),
-            sp.GetRequiredService<CaptureRepository>(),
-            sp.GetRequiredService<AuditRepository>(),
-            ProjectPaths.ResolveStorageRoot(hostEnvironment)));
         services.AddScoped<OperationQueryService>();
         services.AddSingleton<MediaPlatformReadinessService>();
         services.AddScoped<SystemLogQueryService>();
@@ -125,7 +138,8 @@ public static partial class ServiceExtensions
             sp.GetRequiredService<PgSqlConnectionFactory>(),
             sp.GetRequiredService<CaptureRepository>(),
             sp.GetRequiredService<MonitoringRepository>(),
-            sp.GetRequiredService<AuditRepository>()));
+            sp.GetRequiredService<AuditRepository>(),
+            allowInMemoryFallback));
         services.AddScoped<UserQueryService>(sp => new UserQueryService(
             sp.GetRequiredService<AppStore>(),
             sp.GetRequiredService<PgSqlConnectionFactory>(),
@@ -153,5 +167,6 @@ public static partial class ServiceExtensions
         services.AddScoped<AiGovernanceService>();
         services.AddScoped<BreakGlassService>();
         services.AddScoped<ProductInsightsService>();
+        services.AddScoped<ProtectedStorageService>();
     }
 }

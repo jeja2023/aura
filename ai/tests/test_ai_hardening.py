@@ -6,6 +6,8 @@ from fastapi.testclient import TestClient
 
 import routes.api_routes as api_routes_module
 from app.bootstrap import _env_float, _env_int
+from app.middlewares import register_middlewares
+from app.security import validate_production_security
 from routes.api_routes import build_api_router
 from utils.service_state import build_service_state
 
@@ -259,3 +261,38 @@ def test_extract_too_large_image_returns_413(monkeypatch):
 
     assert response.status_code == 413
     assert response.json()["code"] == 41301
+
+
+def test_production_requires_non_placeholder_api_key(monkeypatch):
+    monkeypatch.setenv("AURA_ENV", "Production")
+    monkeypatch.delenv("AURA_API_KEY", raising=False)
+
+    with pytest.raises(RuntimeError, match="AURA_API_KEY"):
+        validate_production_security()
+
+
+def test_production_disables_unscoped_extract_file(monkeypatch):
+    monkeypatch.setenv("AURA_ENV", "Production")
+    monkeypatch.delenv("AURA_AI_EXTRACT_FILE_ROOTS", raising=False)
+    deps = _ExtractDeps()
+    app = FastAPI()
+    app.include_router(build_api_router(deps))
+    client = TestClient(app)
+
+    response = client.post("/ai/extract-file", json={"image_path": "/tmp/private.jpg", "metadata_json": "{}"})
+
+    assert response.status_code == 403
+
+
+def test_api_key_middleware_rejects_wrong_key(monkeypatch):
+    monkeypatch.setenv("AURA_API_KEY", "test-ai-key-that-is-long-enough")
+    app = FastAPI()
+    register_middlewares(app)
+
+    @app.post("/private")
+    async def _private():
+        return {"ok": True}
+
+    response = TestClient(app).post("/private", headers={"X-Aura-Ai-Key": "wrong"})
+
+    assert response.status_code == 401

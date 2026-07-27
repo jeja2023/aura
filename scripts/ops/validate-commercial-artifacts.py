@@ -59,11 +59,17 @@ def validate_version(errors: list[str]) -> str:
         return "unknown"
     checks = {
         ROOT / "ai" / "main.py": f'version="{version}"',
+        ROOT / "README.md": f"当前版本：`{version}`",
+        ROOT / "CHANGELOG.md": f"## {version}（",
         ROOT / "docs" / "commercial" / "能力与支持矩阵.md": f"# Aura {version} 能力与支持矩阵",
+        ROOT / "docker" / ".env.registry.example": f"IMAGE_TAG=v{version}",
     }
     for path, marker in checks.items():
         if not path.exists() or marker not in path.read_text(encoding="utf-8"):
             fail(errors, f"version {version} is not synchronized in {path.relative_to(ROOT)}")
+    registry = (ROOT / "docker" / ".env.registry.example").read_text(encoding="utf-8")
+    if f"aura-images-v{version}.tar" not in registry:
+        fail(errors, f"version {version} is not synchronized in docker/.env.registry.example archive name")
     release_records = (ROOT / "docs").glob(f"????-??-??-{version}商业产品化实施与验收记录.md")
     if not any(f"# Aura {version}" in path.read_text(encoding="utf-8") for path in release_records):
         fail(errors, f"version {version} has no synchronized commercial acceptance record")
@@ -154,8 +160,8 @@ def validate_contracts(errors: list[str]) -> None:
     if '"--configuration", "Release"' not in start_script or '"--no-build"' not in start_script:
         fail(errors, "local commercial API startup must run the prebuilt Release output")
     gate_source = (ROOT / "scripts" / "ops" / "release-gate.py").read_text(encoding="utf-8")
-    if 'default="036"' not in gate_source or "decode_output" not in gate_source:
-        fail(errors, "release gate must default to migration 036 and safely decode cross-platform command output")
+    if 'default="037"' not in gate_source or "decode_output" not in gate_source:
+        fail(errors, "release gate must default to migration 037 and safely decode cross-platform command output")
     openapi = ROOT / "docs" / "contracts" / "media-analysis-provider-v1.openapi.yaml"
     if "openapi: 3." not in openapi.read_text(encoding="utf-8"):
         fail(errors, "media provider OpenAPI contract has no OpenAPI 3 version")

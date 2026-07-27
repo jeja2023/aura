@@ -38,6 +38,8 @@ Database migration conventions for PostgreSQL
    - `033_add_release_gate_evidence.sql`
    - `034_add_notification_delivery_operations.sql`
    - `035_add_product_execution_workflows.sql`
+   - `036_complete_commercial_workflows.sql`
+   - `037_harden_capture_ingest_and_device_heartbeat.sql`
 4. Starting with `003_sync_identity_sequences.sql`, the application no longer repairs `sys_role` and `sys_user` identity sequences at runtime. Upgrade existing databases with that script before deploying the new backend.
 5. `004_add_log_search_trgm_indexes.sql` enables the `pg_trgm` extension and adds GIN trigram indexes for `log_operation` and `log_system` fuzzy search.
 6. `005_add_capture_track_lookup_indexes.sql` adds lookup indexes for capture image matching and VID track playback.
@@ -62,17 +64,18 @@ Database migration conventions for PostgreSQL
 25. `024_add_media_analysis_default_permissions.sql` grants the built-in building administrator tenant-scoped media operations and graph queries while keeping replay and global maintenance explicit.
 26. `025`-`035` add the commercial event/case, investigation, governance, identity, notification, and product execution domains.
 27. `036_complete_commercial_workflows.sql` adds case templates/checklists/relations, configurable notification channels, derived-store deletion proofs, mobile push subscriptions, and controlled-query safety evaluation records.
-28. Use `backend/Aura.DbMigrator` to manage migration status and execution:
+28. `037_harden_capture_ingest_and_device_heartbeat.sql` adds durable device heartbeat timestamps used by the device status API.
+29. Use `backend/Aura.DbMigrator` to manage migration status and execution:
    - `dotnet run --project backend/Aura.DbMigrator -- status --fail-on-drift`
    - `dotnet run --project backend/Aura.DbMigrator -- status --fail-on-pending --fail-on-drift`
    - `dotnet run --project backend/Aura.DbMigrator -- migrate --command-timeout 300 --lock-timeout 60`
    - `dotnet run --project backend/Aura.DbMigrator -- bootstrap`
-29. `bootstrap` is only for empty databases. It applies the consolidated `database/schema.pgsql.sql` baseline (through migration 024), records those scripts as baseline, and executes every newer migration in the same transaction.
-30. `migrate` and `bootstrap` use a PostgreSQL advisory lock to prevent concurrent schema upgrades. A lock timeout exits with code 3.
-31. `status --fail-on-pending` is intended for post-deployment verification; `status --fail-on-drift` catches migration history that exists in the database but not in the current artifact.
-32. Back up the target database before running migrations. In production, apply them inside a maintenance window or a controlled deployment step.
-33. Rollback is backup-based, not down-script based. Prefer `scripts/ops/aura-ops.ps1 db-rollback` to verify and restore a known-good backup, then run `db-status`. Use `db-rollback-migrate` when the restored database should be rolled forward to the current release artifact immediately after restore.
-34. Runtime entrypoint behavior:
+30. `bootstrap` is only for empty databases. It applies the consolidated `database/schema.pgsql.sql` baseline (through migration 024), records those scripts as baseline, and executes every newer migration in the same transaction.
+31. `migrate` and `bootstrap` use a PostgreSQL advisory lock to prevent concurrent schema upgrades. A lock timeout exits with code 3.
+32. `status --fail-on-pending` is intended for post-deployment verification; `status --fail-on-drift` catches migration history that exists in the database but not in the current artifact.
+33. Back up the target database before running migrations. In production, apply them inside a maintenance window or a controlled deployment step.
+34. Rollback is backup-based, not down-script based. Prefer `scripts/ops/aura-ops.ps1 db-rollback` to verify and restore a known-good backup, then run `db-status`. Use `db-rollback-migrate` when the restored database should be rolled forward to the current release artifact immediately after restore.
+35. Runtime entrypoint behavior:
    - Docker Compose runs the `db-migrate` service before the API container starts.
    - Local `python start_services.py` runs `Aura.DbMigrator migrate` before starting AI/API unless `--skip-db-migrate` is passed or `AURA_SKIP_DB_MIGRATE=1` is set.
    - Direct `dotnet run --project backend/Aura.Api` does not auto-migrate; run the migrator first for existing databases.

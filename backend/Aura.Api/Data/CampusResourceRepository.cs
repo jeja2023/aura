@@ -45,6 +45,7 @@ internal sealed class CampusResourceRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库查询园区资源树失败。limit={Limit}", limit);
+            PgSqlRepositoryHelpers.ThrowIfConfigured(_connectionFactory, ex, "query campus nodes");
             return [];
         }
     }
@@ -65,6 +66,7 @@ internal sealed class CampusResourceRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库写入园区节点失败。levelType={LevelType}, nodeName={NodeName}", levelType, nodeName);
+            PgSqlRepositoryHelpers.ThrowIfConfigured(_connectionFactory, ex, "insert campus node");
             return null;
         }
     }
@@ -82,6 +84,7 @@ internal sealed class CampusResourceRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库更新园区节点失败。nodeId={NodeId}", nodeId);
+            PgSqlRepositoryHelpers.ThrowIfConfigured(_connectionFactory, ex, "update campus node");
             return false;
         }
     }
@@ -99,6 +102,7 @@ internal sealed class CampusResourceRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库删除园区节点失败。nodeId={NodeId}", nodeId);
+            PgSqlRepositoryHelpers.ThrowIfConfigured(_connectionFactory, ex, "delete campus node");
             return false;
         }
     }
@@ -123,6 +127,7 @@ internal sealed class CampusResourceRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库查询楼层列表失败。limit={Limit}", limit);
+            PgSqlRepositoryHelpers.ThrowIfConfigured(_connectionFactory, ex, "query floors");
             return [];
         }
     }
@@ -143,6 +148,7 @@ internal sealed class CampusResourceRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库写入楼层失败。nodeId={NodeId}", nodeId);
+            PgSqlRepositoryHelpers.ThrowIfConfigured(_connectionFactory, ex, "insert floor");
             return null;
         }
     }
@@ -168,6 +174,7 @@ internal sealed class CampusResourceRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库查询摄像头列表失败。limit={Limit}", limit);
+            PgSqlRepositoryHelpers.ThrowIfConfigured(_connectionFactory, ex, "query cameras");
             return [];
         }
     }
@@ -191,6 +198,7 @@ internal sealed class CampusResourceRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库按设备查询摄像头列表失败。deviceId={DeviceId}", deviceId);
+            PgSqlRepositoryHelpers.ThrowIfConfigured(_connectionFactory, ex, "query cameras by device");
             return [];
         }
     }
@@ -211,6 +219,7 @@ internal sealed class CampusResourceRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库写入摄像头失败。floorId={FloorId}, deviceId={DeviceId}, channelNo={ChannelNo}", floorId, deviceId, channelNo);
+            PgSqlRepositoryHelpers.ThrowIfConfigured(_connectionFactory, ex, "insert camera");
             return null;
         }
     }

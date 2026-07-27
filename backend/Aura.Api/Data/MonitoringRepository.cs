@@ -53,6 +53,10 @@ internal sealed class MonitoringRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库写入告警失败。alertType={AlertType}", alertType);
+            if (_connectionFactory.IsConfigured)
+            {
+                throw new DataAccessUnavailableException("insert alert", ex);
+            }
             return null;
         }
     }
@@ -237,6 +241,7 @@ internal sealed class MonitoringRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库写入研判结果失败。vid={Vid}, roomId={RoomId}, judgeType={JudgeType}", vid, roomId, judgeType);
+            PgSqlRepositoryHelpers.ThrowIfConfigured(_connectionFactory, ex, "insert judge result");
             return null;
         }
     }
@@ -255,6 +260,7 @@ internal sealed class MonitoringRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库删除研判结果失败。judgeDate={JudgeDate}, judgeType={JudgeType}", judgeDate, judgeType);
+            PgSqlRepositoryHelpers.ThrowIfConfigured(_connectionFactory, ex, "delete judge results");
             return false;
         }
     }
@@ -292,6 +298,7 @@ internal sealed class MonitoringRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库查询研判结果失败。judgeDate={JudgeDate}, judgeType={JudgeType}, maxRows={MaxRows}", judgeDate, judgeType, maxRows);
+            PgSqlRepositoryHelpers.ThrowIfConfigured(_connectionFactory, ex, "query judge results");
             return [];
         }
     }
@@ -307,6 +314,7 @@ internal sealed class MonitoringRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库清空虚拟人员失败。");
+            PgSqlRepositoryHelpers.ThrowIfConfigured(_connectionFactory, ex, "clear virtual persons");
             return false;
         }
     }
@@ -328,6 +336,7 @@ internal sealed class MonitoringRepository
         catch (Exception ex)
         {
             _logger?.LogWarning(ex, "数据库写入虚拟人员失败。vid={Vid}, deviceId={DeviceId}", vid, deviceId);
+            PgSqlRepositoryHelpers.ThrowIfConfigured(_connectionFactory, ex, "insert virtual person");
         }
     }
 
@@ -348,6 +357,7 @@ internal sealed class MonitoringRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "数据库查询虚拟人员列表失败。");
+            PgSqlRepositoryHelpers.ThrowIfConfigured(_connectionFactory, ex, "query virtual persons");
             return [];
         }
     }

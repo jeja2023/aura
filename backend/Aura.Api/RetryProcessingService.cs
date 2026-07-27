@@ -58,13 +58,25 @@ internal sealed class RetryProcessingService
         var failed = 0;
         try
         {
+            if (_retryQueue.Enabled)
+            {
+                _ = await _retryQueue.RecoverProcessingAsync();
+            }
+
             for (var i = 0; i < take; i++)
             {
-                var task = await _retryQueue.DequeueAsync();
-                if (task is null)
+                if (i > 0 && lockToken is not null
+                    && !await _cache.RenewLockAsync(processLockKey, lockToken, TimeSpan.FromMinutes(processLockMinutes)))
                 {
                     break;
                 }
+
+                var item = await _retryQueue.DequeueAsync();
+                if (item is null)
+                {
+                    break;
+                }
+                var task = item.Task;
 
                 AiExtractResult ai;
                 if (!string.IsNullOrWhiteSpace(task.ImagePath))
@@ -92,15 +104,10 @@ internal sealed class RetryProcessingService
                         if (!upsert.Success)
                         {
                             failed++;
-                            var retryQueued = false;
+                            var vectorRetryQueued = false;
                             if (task.RetryCount < 3)
                             {
-                                await _retryQueue.EnqueueAsync(task with { RetryCount = task.RetryCount + 1 });
-                                retryQueued = true;
-                            }
-                            else
-                            {
-                                TryDeleteFile(task.ImagePath);
+                                vectorRetryQueued = await _retryQueue.RequeueAsync(item, task with { RetryCount = task.RetryCount + 1 });
                             }
 
                             var vectorFailedMetadata = AiMetadataComposer.Compose(
@@ -108,10 +115,25 @@ internal sealed class RetryProcessingService
                                 ai,
                                 vectorId: vectorId,
                                 vectorUpsertResult: upsert,
-                                retryQueued: retryQueued,
-                                retryReason: retryQueued ? "重试补偿中" : "向量补偿失败且已达到最大重试次数");
+                                retryQueued: vectorRetryQueued,
+                                retryReason: vectorRetryQueued
+                                    ? "重试补偿中"
+                                    : task.RetryCount < 3
+                                        ? "向量补偿重新入队失败"
+                                        : "向量补偿失败且已达到最大重试次数");
                             await UpdateCaptureMetadataStateAsync(task.CaptureId, vectorFailedMetadata);
                             await _auditRepository.InsertOperationAsync("重试任务", "AI向量补偿失败", $"captureId={task.CaptureId}, 设备={task.DeviceId}, 通道={task.ChannelNo}, 原因={upsert.Message}");
+                            if (task.RetryCount >= 3)
+                            {
+                                if (await _retryQueue.AckAsync(item))
+                                {
+                                    TryDeleteFile(task.ImagePath);
+                                }
+                                else
+                                {
+                                    await _auditRepository.InsertOperationAsync("重试任务", "重试任务ACK失败", $"captureId={task.CaptureId}");
+                                }
+                            }
                             continue;
                         }
                     }
@@ -124,31 +146,50 @@ internal sealed class RetryProcessingService
                         retryQueued: false,
                         retryReason: upsert is null ? null : "重试补偿已完成");
                     await UpdateCaptureMetadataStateAsync(task.CaptureId, newMetadata);
-                    success++;
                     await _auditRepository.InsertOperationAsync("重试任务", "AI重试成功", $"captureId={task.CaptureId}, 设备={task.DeviceId}, 通道={task.ChannelNo}");
-                    TryDeleteFile(task.ImagePath);
+                    if (await _retryQueue.AckAsync(item))
+                    {
+                        success++;
+                        TryDeleteFile(task.ImagePath);
+                    }
+                    else
+                    {
+                        failed++;
+                        await _auditRepository.InsertOperationAsync("重试任务", "重试任务ACK失败", $"captureId={task.CaptureId}");
+                    }
                     continue;
                 }
 
                 failed++;
+                var retryQueued = false;
                 if (task.RetryCount < 3)
                 {
-                    await _retryQueue.EnqueueAsync(task with { RetryCount = task.RetryCount + 1 });
+                    retryQueued = await _retryQueue.RequeueAsync(item, task with { RetryCount = task.RetryCount + 1 });
                 }
-                else
-                {
-                    TryDeleteFile(task.ImagePath);
-                }
-
                 var extractFailedMetadata = AiMetadataComposer.Compose(
                     task.MetadataJson,
                     ai,
                     vectorId: null,
                     vectorUpsertResult: null,
-                    retryQueued: task.RetryCount < 3,
-                    retryReason: task.RetryCount < 3 ? "AI 提取失败，继续重试中" : "AI 提取失败且已达到最大重试次数");
+                    retryQueued: retryQueued,
+                    retryReason: retryQueued
+                        ? "AI 提取失败，继续重试中"
+                        : task.RetryCount < 3
+                            ? "AI 提取失败，重新入队失败"
+                            : "AI 提取失败且已达到最大重试次数");
                 await UpdateCaptureMetadataStateAsync(task.CaptureId, extractFailedMetadata);
                 await _auditRepository.InsertOperationAsync("重试任务", "AI重试失败", $"设备={task.DeviceId}, 通道={task.ChannelNo}, 原因={ai.Message}");
+                if (task.RetryCount >= 3)
+                {
+                    if (await _retryQueue.AckAsync(item))
+                    {
+                        TryDeleteFile(task.ImagePath);
+                    }
+                    else
+                    {
+                        await _auditRepository.InsertOperationAsync("重试任务", "重试任务ACK失败", $"captureId={task.CaptureId}");
+                    }
+                }
             }
         }
         finally

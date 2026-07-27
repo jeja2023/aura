@@ -1,4 +1,5 @@
 using Aura.Api.Data;
+using Aura.Api.Internal;
 using Aura.Api.Models;
 using Aura.Api.Ops;
 
@@ -10,6 +11,7 @@ internal sealed class MonitoringQueryService
     private readonly MonitoringRepository _monitoringRepository;
     private readonly AuditRepository _auditRepository;
     private readonly EventDispatchService _eventDispatchService;
+    private readonly bool _allowInMemoryFallback;
 
     public MonitoringQueryService(
         AppStore store,
@@ -17,7 +19,8 @@ internal sealed class MonitoringQueryService
         CaptureRepository captureRepository,
         MonitoringRepository monitoringRepository,
         AuditRepository auditRepository,
-        EventDispatchService eventDispatchService)
+        EventDispatchService eventDispatchService,
+        bool allowInMemoryFallback)
     {
         _store = store;
         _pgSqlConnectionFactory = pgSqlConnectionFactory;
@@ -25,6 +28,7 @@ internal sealed class MonitoringQueryService
         _monitoringRepository = monitoringRepository;
         _auditRepository = auditRepository;
         _eventDispatchService = eventDispatchService;
+        _allowInMemoryFallback = allowInMemoryFallback;
     }
 
     public async Task<IResult> GetTrackAsync(string vid, int limit)
@@ -39,6 +43,7 @@ internal sealed class MonitoringQueryService
             return Results.Ok(new { code = 0, msg = "查询成功", data = new { vid, limit = lim, points = rows.Select(x => new { x.CameraId, x.RoiId, time = x.EventTime }) } });
         }
 
+        if (!_allowInMemoryFallback) return AuraApiResults.ServiceUnavailable("数据库未配置，轨迹查询不可用", 50310);
         var points = _store.TrackEvents
             .Where(x => x.Vid == vid)
             .OrderByDescending(x => x.EventTime)
@@ -59,6 +64,7 @@ internal sealed class MonitoringQueryService
             return Results.Ok(new { code = 0, msg = "查询成功", data = rows, limit = lim });
         }
 
+        if (!_allowInMemoryFallback) return AuraApiResults.ServiceUnavailable("数据库未配置，研判查询不可用", 50310);
         return Results.Ok(new
         {
             code = 0,
@@ -81,7 +87,9 @@ internal sealed class MonitoringQueryService
             return Results.Ok(new { code = 0, msg = "查询成功", data = mapped });
         }
 
-        return Results.Ok(new { code = 0, msg = "查询成功", data = _store.Alerts.OrderByDescending(x => x.AlertId).Take(lim) });
+        return _allowInMemoryFallback
+            ? Results.Ok(new { code = 0, msg = "查询成功", data = _store.Alerts.OrderByDescending(x => x.AlertId).Take(lim) })
+            : AuraApiResults.ServiceUnavailable("数据库未配置，告警查询不可用", 50310);
     }
 
     public async Task<IResult> CreateAlertAsync(CreateAlertReq req)
@@ -91,16 +99,23 @@ internal sealed class MonitoringQueryService
         var saved = dbId.HasValue ? entity with { AlertId = dbId.Value } : entity;
         if (!dbId.HasValue)
         {
+            if (!_allowInMemoryFallback)
+            {
+                return AuraApiResults.ServiceUnavailable("数据库写入失败，无法创建告警", 50310);
+            }
             _store.Alerts.Add(saved);
         }
 
         await _auditRepository.InsertOperationAsync("楼栋管理员", "手动告警", $"类型={req.AlertType}");
-        _store.Operations.Add(new OperationEntity(
-            OperationId: Interlocked.Increment(ref _store.OperationSeed),
-            OperatorName: "楼栋管理员",
-            Action: "手动告警",
-            Detail: $"类型={req.AlertType}",
-            CreatedAt: DateTimeOffset.Now));
+        if (_allowInMemoryFallback)
+        {
+            _store.Operations.Add(new OperationEntity(
+                OperationId: Interlocked.Increment(ref _store.OperationSeed),
+                OperatorName: "楼栋管理员",
+                Action: "手动告警",
+                Detail: $"类型={req.AlertType}",
+                CreatedAt: DateTimeOffset.Now));
+        }
         await _eventDispatchService.NotifyAlertAsync(saved.AlertType, saved.Detail, "手动告警");
         await _eventDispatchService.BroadcastRoleEventAsync("alert.created", new { alertType = saved.AlertType, detail = saved.Detail, at = saved.CreatedAt });
         return Results.Ok(new { code = 0, msg = "告警创建成功", data = saved });
@@ -114,6 +129,8 @@ internal sealed class MonitoringQueryService
             return Results.Ok(new { code = 0, msg = "查询成功", data = rows });
         }
 
-        return Results.Ok(new { code = 0, msg = "查询成功", data = _store.VirtualPersons.OrderByDescending(x => x.FirstSeen) });
+        return _allowInMemoryFallback
+            ? Results.Ok(new { code = 0, msg = "查询成功", data = _store.VirtualPersons.OrderByDescending(x => x.FirstSeen) })
+            : AuraApiResults.ServiceUnavailable("数据库未配置，聚类查询不可用", 50310);
     }
 }

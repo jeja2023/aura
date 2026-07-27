@@ -8,10 +8,10 @@ namespace Aura.Api.Data;
 internal sealed record DbPagedResult<T>(List<T> Rows, int Total, bool Succeeded);
 
 /// <summary>
-/// 统一各仓储中重复的「try { 数据库调用 } catch { 记日志返回兜底值 }」样板：
+/// 统一各仓储中重复的数据库调用样板：
 ///   await using var conn = factory.CreateConnection();
 ///   var ret = await operation(conn);
-/// 失败时根据签名返回兜底值（null / [] / false 等），并按 <paramref name="logLevel"/> 记录上下文。
+/// 失败时记录上下文；数据库已配置时抛出统一的不可用异常，仅无数据库开发模式返回兜底值。
 /// </summary>
 internal static class PgSqlRepositoryHelpers
 {
@@ -34,7 +34,7 @@ internal static class PgSqlRepositoryHelpers
         }
     }
 
-    /// <summary>查询型：失败时返回 <paramref name="fallback"/> 指定的兜底值。</summary>
+    /// <summary>查询型：仅在未配置数据库时返回 <paramref name="fallback"/> 指定的兜底值。</summary>
     public static async Task<T> ExecuteAsync<T>(
         PgSqlConnectionFactory factory,
         ILogger? logger,
@@ -62,11 +62,12 @@ internal static class PgSqlRepositoryHelpers
             {
                 logger?.Log(logLevel, ex, "{Operation} 失败。context={Context}", operationLabel, logContext);
             }
+            ThrowIfConfigured(factory, ex, operationLabel);
             return fallback;
         }
     }
 
-    /// <summary>无返回值写入：失败仅记日志，不抛出。</summary>
+    /// <summary>无返回值写入：已配置数据库时失败抛出统一异常。</summary>
     public static async Task<bool> ExecuteVoidAsync(
         PgSqlConnectionFactory factory,
         ILogger? logger,
@@ -93,7 +94,16 @@ internal static class PgSqlRepositoryHelpers
             {
                 logger?.Log(logLevel, ex, "{Operation} 失败。context={Context}", operationLabel, logContext);
             }
+            ThrowIfConfigured(factory, ex, operationLabel);
             return false;
+        }
+    }
+
+    public static void ThrowIfConfigured(PgSqlConnectionFactory factory, Exception exception, string operation)
+    {
+        if (factory.IsConfigured)
+        {
+            throw new DataAccessUnavailableException(operation, exception);
         }
     }
 }

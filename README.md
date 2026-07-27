@@ -4,9 +4,9 @@
 
 ## 项目状态
 
-- 当前版本：`0.3.1`（细目见 **`CHANGELOG.md`**）
+- 当前版本：`0.4.0`（细目见 **`CHANGELOG.md`**）
 - 阶段状态：商业产品化代码、数据库迁移、工作台、自动化测试和门禁框架已完成；真实依赖、目标硬件、客户 IdP 和真机适配器继续由发布门禁阻断
-- 交付结论：实现与验收状态见 `docs/2026-07-27-0.3.1商业产品化实施与验收记录.md`；可销售口径以 `docs/commercial/能力与支持矩阵.md` 为准
+- 交付结论：实现与验收状态见 `docs/2026-07-27-0.4.0商业产品化实施与验收记录.md`；可销售口径以 `docs/commercial/能力与支持矩阵.md` 为准
 - 工程状态：后端可构建（推荐打开根目录 **`Aura.sln`** 或 `dotnet build backend/Aura.Api/Aura.Api.csproj`）、前端页面可访问、核心链路可联调
 - 运维状态：已提供回归脚本、联调压测脚本、部署与上线检查文档
 - 修复记录：见根目录 **`2026-07-03-fix-optimization-notes.md`**，包含本轮数据库错误语义、前端覆盖层、GPU 网络预检和受限验证说明。
@@ -25,12 +25,13 @@
   - `0.2.1`：依赖治理与升级，前端 ESLint 10、AI 运行时依赖升级并迁移测试客户端到 httpx2，Dependabot 补齐 DbMigrator 生态与分组/忽略策略。
   - `0.3.0`：新增事件/案件/调查闭环、商业工作台、规则和 AI 治理、OIDC/应急身份、跨存储数据生命周期、通知、权益用量、移动 PWA、服务画像及证据化发布门禁。
   - `0.3.1`：对齐环境配置文件与示例、支持 Docker pgvector 自动对账、增加本地冲突服务一键清理脚本、全局排除规则修复 Tab 按钮透明问题、统一媒体解析与扩展页胶囊标签风格并修复正文纵向滚动条。
+  - `0.4.0`：封闭匿名存储访问、统一数据库故障语义、持久化设备心跳、升级抓拍防重放签名与可靠重试队列、强化会话撤销和 AI 生产门禁，并补齐桌面/移动端 Playwright 冒烟测试。
 
 ## 目录结构
 
 - `Aura.sln`：Visual Studio / Rider 解决方案入口
 - `Directory.Build.props`：统一 MSBuild 中间输出路径（`.verify_build\obj`）并排除误编译 `obj` 生成物，便于本机工具链
-- `Directory.Build.targets`：保持构建输入单一来源于 `backend/Aura.Api`，不再把 `generated/` 审查产物重定向进生产编译，确保本机、CI 与 Docker 编译同一套源码
+- `Directory.Build.targets`：保持构建输入单一来源于 `backend/Aura.Api`，确保本机、CI 与 Docker 编译同一套正式源码
 - `backend/Aura.Api`：.NET 10 WebAPI 中枢服务；启动入口为 **`Program.cs`**，服务注册在 **`Extensions/ServiceExtensions.cs`**，路由按域拆分在 **`Extensions/AuraEndpoints*.cs`**，安全头与前端路由中间件在 **`Middleware/`**
 - `backend/Aura.Api.Tests`：轻量自检工程（聚类/导出等），可选执行
 - `backend/Aura.Api.Integration.Tests`：xUnit 集成测试（`WebApplicationFactory`，环境为 `Testing`）。**维护提示**：若修改 `backend/Aura.Api/appsettings.Testing.json` 中的 **`Jwt:Key` / `Jwt:Issuer` / `Jwt:Audience`**，必须同步修改 **`backend/Aura.Api.Integration.Tests/TestingJwt.cs`** 内同名常量，否则 `dotnet test` 会失败。
@@ -39,7 +40,7 @@
 - `backend/Aura.Api/Graph`：PostgreSQL Outbox 到 ArangoDB 的关系图投影、重建和多跳查询。
 - `ai`：Python FastAPI AI 服务（特征提取/检索），主入口 `main.py` 已收敛为应用装配入口，核心拆分为 `app/`（启动装配/生命周期/中间件）、`routes/`（API 路由）、`vector_store/`（向量索引存取）、`services/`（Arango/推理/聚类能力）、`models/`（请求模型）
 - `database/schema.pgsql.sql`：PostgreSQL 表结构
-- `frontend`：Vanilla JS 前端页面（根目录含 **`package.json`**，维护者可执行 **`npm ci`** 与 **`npm run lint`** 做 ESLint 检查）。**NVR 设备**与**海康 ISAPI 联调**分别对应 `frontend/device/` 与 `frontend/device-diag/`（入口见下文「关键页面入口」）
+- `frontend`：Vanilla JS 前端页面（根目录含 **`package.json`**，维护者可执行 **`npm ci`**、**`npm run lint`** 与 **`npm run test:smoke`** 完成静态检查及桌面/移动端登录冒烟测试）。**NVR 设备**与**海康 ISAPI 联调**分别对应 `frontend/device/` 与 `frontend/device-diag/`（入口见下文「关键页面入口」）
 - `frontend/media-analysis`：提供方、管线、媒体源、订阅、任务、Inbox、制品、向量、图和 readiness 管理页面。
 - `frontend/workbench`：统一商业工作台，覆盖事件、案件、调查、接入、规则/AI、数据治理、运行与运营分析，并提供静态壳 PWA。
 - `tools/Aura.MediaAnalysis.ProviderSimulator`：通用解析提供方模拟器，用于图片、视频、视频流及故障场景联调。
@@ -51,7 +52,7 @@
 - `docs/通用媒体解析与多模数据架构开发计划.md`：PostgreSQL、pgvector、ArangoDB 的职责边界、完整开发方案和实施索引
 - `docs/媒体解析平台运维手册.md`：提供方接入、事件重放、向量迁移、图重建和容量运维
 - `docs/2026-07-22-0.2.0发布说明与验收记录.md`：本版本升级步骤、验证矩阵、已知边界和回滚原则
-- `docs/2026-07-27-0.3.1商业产品化实施与验收记录.md`：当前版本验证结果、商业产品化需求追踪和仍需现场认证的硬门禁
+- `docs/2026-07-27-0.4.0商业产品化实施与验收记录.md`：当前版本验证结果、安全与可靠性升级说明和仍需现场认证的硬门禁
 - `docs/commercial`：服务画像、能力矩阵、发布门禁、身份恢复、数据删除、AI 治理、SLO 与 API 迁移文档
 - `docs/2026-06-09-自动化验收记录.md`：`0.1.27` 本机自动化验收记录，覆盖后端构建/测试、AI pytest、前端 ESLint、Docker 配置解析与未覆盖现场项
 - `docs/archive/最终交付清单.md`：历史交付范围清单
@@ -78,7 +79,7 @@
 
 ### 1) 初始化数据库
 
-空环境可将 `database/schema.pgsql.sql` 导入支持 pgvector 的 PostgreSQL 16+；推荐直接执行 `dotnet run --project backend/Aura.DbMigrator -- bootstrap`，它会登记合并基线 001-024 并执行增量 025-036。已有数据库只能执行增量 `migrate`，禁止使用 `bootstrap`。
+空环境可将 `database/schema.pgsql.sql` 导入支持 pgvector 的 PostgreSQL 16+；推荐直接执行 `dotnet run --project backend/Aura.DbMigrator -- bootstrap`，它会登记合并基线 001-024 并执行增量 025-037。已有数据库只能执行增量 `migrate`，禁止使用 `bootstrap`。
 
 ### 2) 启动 AI 服务
 

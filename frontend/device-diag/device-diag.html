@@ -183,7 +183,7 @@
           <li>在库中为该设备配置 <code class="hik-isapi-code">hmac_secret</code>（生产环境必须配置；开发环境可按后端策略回退）。抓拍接口将校验 <code class="hik-isapi-code">X-Signature</code>。</li>
           <li>将海康或网关的 HTTP 推送地址指向：<code class="hik-isapi-code" id="capturePushUrlInline"></code></li>
           <li>请求：<code class="hik-isapi-code">POST</code>，<code class="hik-isapi-code">Content-Type: application/json</code>。请求体字段与适配器一致：<code class="hik-isapi-code">deviceId</code>（数字）、<code class="hik-isapi-code">channelNo</code>（与布点一致）、<code class="hik-isapi-code">captureTime</code>（ISO 8601，建议带时区）、<code class="hik-isapi-code">imageBase64</code>（纯 Base64，无 data: 前缀）、其它元数据可一并放入 JSON（勿重复塞大图）。</li>
-          <li>请求头 <code class="hik-isapi-code">X-Signature</code>：对字符串 <code class="hik-isapi-code">deviceId|channelNo|captureTime</code>（其中 <code class="hik-isapi-code">captureTime</code> 与 JSON 内值<strong>字节一致</strong>，采用 .NET 默认 <code class="hik-isapi-code">O</code> 格式）做 <strong>HMAC-SHA256</strong>，密钥为设备 <code class="hik-isapi-code">hmac_secret</code>，输出<strong>小写十六进制</strong>字符串。</li>
+          <li>请求头需包含 <code class="hik-isapi-code">X-Capture-Timestamp</code>（Unix 秒）、至少 16 字符的唯一 <code class="hik-isapi-code">X-Capture-Nonce</code> 与 <code class="hik-isapi-code">X-Signature</code>。签名正文依次为 <code class="hik-isapi-code">deviceId\nchannelNo\ntimestamp\nnonce\nSHA256(rawBody)</code>，使用设备 <code class="hik-isapi-code">hmac_secret</code> 做 HMAC-SHA256 并输出十六进制字符串；时间戳默认只允许前后 300 秒，nonce 不得复用。</li>
           <li>若启用抓拍 IP 白名单，仅允许名单内地址调用 <code class="hik-isapi-code">/api/capture/push</code>。</li>
           <li>通道号与 ISAPI「抓图通道序号」对应关系请用下方「模拟通道列表 / 代理通道」对照 NVR 实际配置，再与「摄像头布点」中的 <code class="hik-isapi-code">channelNo</code> 对齐。</li>
         </ol>

@@ -30,6 +30,7 @@ internal sealed class IdentityAdminService
     private readonly string _jwtIssuer;
     private readonly string _jwtAudience;
     private readonly int _jwtExpireMinutes;
+    private readonly bool _allowInMemoryFallback;
 
     public IdentityAdminService(
         AppStore store,
@@ -42,7 +43,8 @@ internal sealed class IdentityAdminService
         string jwtKey,
         string jwtIssuer,
         string jwtAudience,
-        int jwtExpireMinutes)
+        int jwtExpireMinutes,
+        bool allowInMemoryFallback)
     {
         _store = store;
         _userAuthRepository = userAuthRepository;
@@ -55,6 +57,7 @@ internal sealed class IdentityAdminService
         _jwtIssuer = jwtIssuer;
         _jwtAudience = jwtAudience;
         _jwtExpireMinutes = jwtExpireMinutes;
+        _allowInMemoryFallback = allowInMemoryFallback;
     }
 
     public async Task<IResult> LoginAsync(HttpContext http, LoginReq req)
@@ -159,6 +162,7 @@ internal sealed class IdentityAdminService
             await connection.ExecuteAsync(new CommandDefinition(
                 "UPDATE auth_session SET revoked_at=CURRENT_TIMESTAMP,revoked_by=@Actor,revoke_reason='logout' WHERE session_id=@SessionId AND revoked_at IS NULL",
                 new { Actor = operatorName, SessionId = sessionId }));
+            await _cache.DeleteAsync($"aura:auth:session:{sessionId:N}");
         }
 
         http.Response.Cookies.Append("aura_token", string.Empty, new CookieOptions
@@ -193,8 +197,10 @@ internal sealed class IdentityAdminService
             return Results.Ok(new { code = 0, msg = "查询成功", data = rows });
         }
 
-        var mockRows = _store.Roles.OrderByDescending(x => x.RoleId).ToList();
-        return Results.Ok(new { code = 0, msg = "查询成功", data = mockRows });
+        var emptyOrFallbackRows = _allowInMemoryFallback
+            ? _store.Roles.OrderByDescending(x => x.RoleId).ToList()
+            : [];
+        return Results.Ok(new { code = 0, msg = "查询成功", data = emptyOrFallbackRows });
     }
 
     public async Task<IResult> CreateRoleAsync(RoleCreateReq req)
@@ -205,12 +211,25 @@ internal sealed class IdentityAdminService
         }
 
         var permissionJson = req.PermissionJson ?? "[]";
-        var dbId = await _userAuthRepository.InsertRoleAsync(req.RoleName, permissionJson);
+        long? dbId;
+        try
+        {
+            dbId = await _userAuthRepository.InsertRoleAsync(req.RoleName, permissionJson);
+        }
+        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation)
+        {
+            return AuraApiResults.Conflict("角色名称已被占用", 40902);
+        }
         if (dbId.HasValue)
         {
             await _auditRepository.InsertOperationAsync("系统管理员", "角色创建", $"角色={req.RoleName}");
             _logger.LogInformation("角色创建成功：{RoleName}", req.RoleName);
             return Results.Ok(new { code = 0, msg = "创建成功", data = new { roleId = dbId.Value, roleName = req.RoleName, permissionJson } });
+        }
+
+        if (!_allowInMemoryFallback)
+        {
+            return AuraApiResults.ServiceUnavailable("数据库写入失败，无法创建角色", 50310);
         }
 
         var entity = new RoleEntity(Interlocked.Increment(ref _store.RoleSeed), req.RoleName, permissionJson);
@@ -241,13 +260,26 @@ internal sealed class IdentityAdminService
         }
 
         var hash = BCrypt.Net.BCrypt.HashPassword(req.Password);
-        var dbId = await _userAuthRepository.InsertUserAsync(userName, displayName, hash, req.RoleId);
+        long? dbId;
+        try
+        {
+            dbId = await _userAuthRepository.InsertUserAsync(userName, displayName, hash, req.RoleId);
+        }
+        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation)
+        {
+            return AuraApiResults.Conflict("用户名已被占用", 40901);
+        }
         if (dbId.HasValue)
         {
             await _cache.DeleteAsync("user:list:v2");
             await _auditRepository.InsertOperationAsync("系统管理员", "用户创建", $"用户={userName}, 角色ID={req.RoleId}");
             _logger.LogInformation("用户创建成功：{UserName}", userName);
             return Results.Ok(new { code = 0, msg = "创建成功", data = new { userId = dbId.Value, userName, displayName, roleId = req.RoleId, status = 1, mustChangePassword = false } });
+        }
+
+        if (!_allowInMemoryFallback)
+        {
+            return AuraApiResults.ServiceUnavailable("数据库写入失败，无法创建用户", 50310);
         }
 
         var entity = new UserEntity(
@@ -272,9 +304,18 @@ internal sealed class IdentityAdminService
         if (ok)
         {
             await _cache.DeleteAsync("user:list:v2");
+            if (req.Status != 1)
+            {
+                await RevokeUserSessionsAsync(userId, "user_disabled");
+            }
             await _auditRepository.InsertOperationAsync("系统管理员", "用户状态更新", $"用户ID={userId}, 状态={req.Status}");
             _logger.LogInformation("用户状态更新成功：ID={UserId}, 状态={Status}", userId, req.Status);
             return Results.Ok(new { code = 0, msg = "状态更新成功" });
+        }
+
+        if (!_allowInMemoryFallback)
+        {
+            return AuraApiResults.NotFound("用户不存在", 40402);
         }
 
         var uidx = _store.Users.FindIndex(x => x.UserId == userId);
@@ -317,6 +358,7 @@ internal sealed class IdentityAdminService
             if (affected > 0)
             {
                 await _cache.DeleteAsync("user:list:v2");
+                await RevokeUserSessionsAsync(userId, "user_profile_changed");
                 await _auditRepository.InsertOperationAsync("系统管理员", "用户资料更新", $"用户ID={userId}, 用户名={userName}, 显示名称={displayName}, 角色ID={req.RoleId}, 状态={req.Status}");
                 _logger.LogInformation("用户资料已更新：UserId={UserId}", userId);
                 return Results.Ok(new { code = 0, msg = "保存成功" });
@@ -326,10 +368,19 @@ internal sealed class IdentityAdminService
         {
             return AuraApiResults.Conflict("用户名已被占用", 40901);
         }
+        catch (DataAccessUnavailableException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "数据库更新用户资料异常。UserId={UserId}", userId);
             return AuraApiResults.InternalServerError("保存失败");
+        }
+
+        if (!_allowInMemoryFallback)
+        {
+            return AuraApiResults.NotFound("用户不存在", 40402);
         }
 
         if (_store.Users.Any(u => u.UserId != userId && string.Equals(u.UserName, userName, StringComparison.OrdinalIgnoreCase)))
@@ -367,6 +418,7 @@ internal sealed class IdentityAdminService
         if (await _userAuthRepository.UpdateUserPasswordByUserIdAsync(userId, hash, mustChangePassword: true))
         {
             await _cache.DeleteAsync("user:list:v2");
+            await RevokeUserSessionsAsync(userId, "password_reset");
             await _auditRepository.InsertOperationAsync("系统管理员", "用户密码重置", $"用户ID={userId}");
             _logger.LogInformation("用户密码已重置：UserId={UserId}", userId);
             return Results.Ok(new
@@ -379,6 +431,11 @@ internal sealed class IdentityAdminService
                     temporaryPassword = hasExplicitPassword ? null : nextPassword
                 }
             });
+        }
+
+        if (!_allowInMemoryFallback)
+        {
+            return AuraApiResults.NotFound("用户不存在", 40402);
         }
 
         var uidx = _store.Users.FindIndex(x => x.UserId == userId);
@@ -471,13 +528,20 @@ internal sealed class IdentityAdminService
 
     public async Task<IResult> DeleteUserAsync(long userId)
     {
+        var revokedSessions = await _userAuthRepository.RevokeUserSessionsAsync(userId, "系统管理员", "user_deleted");
         var ok = await _userAuthRepository.DeleteUserAsync(userId);
         if (ok)
         {
             await _cache.DeleteAsync("user:list:v2");
+            await InvalidateSessionCacheAsync(revokedSessions);
             await _auditRepository.InsertOperationAsync("系统管理员", "用户删除", $"用户ID={userId}");
             _logger.LogInformation("用户已删除：UserId={UserId}", userId);
             return Results.Ok(new { code = 0, msg = "删除成功" });
+        }
+
+        if (!_allowInMemoryFallback)
+        {
+            return AuraApiResults.NotFound("用户不存在", 40402);
         }
 
         var uidx = _store.Users.FindIndex(x => x.UserId == userId);
@@ -492,6 +556,20 @@ internal sealed class IdentityAdminService
         AddOperationLog("系统管理员", "用户删除", $"用户ID={userId}");
         _logger.LogInformation("内存库用户已删除：UserId={UserId}", userId);
         return Results.Ok(new { code = 0, msg = "删除成功" });
+    }
+
+    private async Task RevokeUserSessionsAsync(long userId, string reason, Guid? exceptSessionId = null)
+    {
+        var sessionIds = await _userAuthRepository.RevokeUserSessionsAsync(userId, "系统管理员", reason, exceptSessionId);
+        await InvalidateSessionCacheAsync(sessionIds);
+    }
+
+    private async Task InvalidateSessionCacheAsync(IEnumerable<Guid> sessionIds)
+    {
+        foreach (var sessionId in sessionIds)
+        {
+            await _cache.DeleteAsync($"aura:auth:session:{sessionId:N}");
+        }
     }
 
     private void AddOperationLog(string operatorName, string action, string detail)

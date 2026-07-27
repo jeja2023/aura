@@ -41,6 +41,7 @@ internal class SystemConfigRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "查询系统配置失败。configKey={ConfigKey}", configKey);
+            PgSqlRepositoryHelpers.ThrowIfConfigured(_connectionFactory, ex, "query system configuration");
             return null;
         }
     }
@@ -75,6 +76,7 @@ internal class SystemConfigRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "保存系统配置失败。configKey={ConfigKey}", configKey);
+            PgSqlRepositoryHelpers.ThrowIfConfigured(_connectionFactory, ex, "save system configuration");
             return false;
         }
     }

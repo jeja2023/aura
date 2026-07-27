@@ -11,19 +11,22 @@ internal sealed class CaptureOpsService
     private readonly CaptureRepository _captureRepository;
     private readonly MonitoringRepository _monitoringRepository;
     private readonly AuditRepository _auditRepository;
+    private readonly bool _allowInMemoryFallback;
 
     public CaptureOpsService(
         AppStore store,
         PgSqlConnectionFactory pgSqlConnectionFactory,
         CaptureRepository captureRepository,
         MonitoringRepository monitoringRepository,
-        AuditRepository auditRepository)
+        AuditRepository auditRepository,
+        bool allowInMemoryFallback)
     {
         _store = store;
         _pgSqlConnectionFactory = pgSqlConnectionFactory;
         _captureRepository = captureRepository;
         _monitoringRepository = monitoringRepository;
         _auditRepository = auditRepository;
+        _allowInMemoryFallback = allowInMemoryFallback;
     }
 
     public async Task<IResult> CreateMockAsync(CaptureMockReq req)
@@ -45,6 +48,10 @@ internal sealed class CaptureOpsService
         var saved = dbId.HasValue ? record with { CaptureId = dbId.Value } : record;
         if (!dbId.HasValue)
         {
+            if (!_allowInMemoryFallback)
+            {
+                return AuraApiResults.ServiceUnavailable("数据库写入失败，无法创建模拟抓拍", 50310);
+            }
             _store.Captures.Add(saved);
         }
 
@@ -62,7 +69,7 @@ internal sealed class CaptureOpsService
             var alertId = await _monitoringRepository.InsertAlertAsync(alert.AlertType, alert.Detail);
             if (!alertId.HasValue)
             {
-                _store.Alerts.Add(alert);
+                if (_allowInMemoryFallback) _store.Alerts.Add(alert);
             }
         }
 
@@ -127,6 +134,11 @@ internal sealed class CaptureOpsService
                 return Results.Ok(new { code = 0, msg = "查询成功", data = mapped, pagination = new { total = dbResult.Total, page = pageNum, pageSize } });
             }
 
+            if (!_allowInMemoryFallback)
+            {
+                return AuraApiResults.ServiceUnavailable("数据库未配置，抓拍列表不可用", 50310);
+            }
+
             IEnumerable<CaptureEntity> mem = _store.Captures;
             if (from.HasValue)
             {
@@ -177,6 +189,11 @@ internal sealed class CaptureOpsService
             return Results.Ok(new { code = 0, msg = "查询成功", data = mapped });
         }
 
+        if (!_allowInMemoryFallback)
+        {
+            return AuraApiResults.ServiceUnavailable("数据库未配置，抓拍列表不可用", 50310);
+        }
+
         return Results.Ok(new
         {
             code = 0,
@@ -187,6 +204,7 @@ internal sealed class CaptureOpsService
 
     private void AddOperationLog(string operatorName, string action, string detail)
     {
+        if (!_allowInMemoryFallback) return;
         _store.Operations.Add(new OperationEntity(
             OperationId: Interlocked.Increment(ref _store.OperationSeed),
             OperatorName: operatorName,

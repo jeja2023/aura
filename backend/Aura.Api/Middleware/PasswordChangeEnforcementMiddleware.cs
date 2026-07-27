@@ -47,6 +47,7 @@ internal sealed class PasswordChangeEnforcementMiddleware
         }
 
         if (!path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase)
+            && !path.StartsWithSegments("/storage", StringComparison.OrdinalIgnoreCase)
             && !path.StartsWithSegments("/hubs", StringComparison.OrdinalIgnoreCase))
         {
             await _next(context);

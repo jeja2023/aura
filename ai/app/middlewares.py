@@ -1,4 +1,5 @@
 # 文件：应用中间件（middlewares.py） | File: App middlewares
+import hmac
 import os
 import uuid
 
@@ -49,7 +50,7 @@ def register_middlewares(app) -> None:
                 return response
 
         incoming = request.headers.get("X-Aura-Ai-Key", "")
-        if incoming != expected:
+        if not hmac.compare_digest(incoming, expected):
             return JSONResponse(
                 status_code=401,
                 content={"code": 40101, "msg": "未授权访问 AI 服务", "request_id": request_id},

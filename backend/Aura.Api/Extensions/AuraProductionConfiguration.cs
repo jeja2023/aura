@@ -30,6 +30,7 @@ public static partial class ServiceExtensions
         var redisConn = configuration.GetConnectionString("Redis");
         var allowedHosts = configuration["AllowedHosts"];
         var alertWebhookUrl = configuration["Ops:Alert:WebhookUrl"];
+        var aiApiKey = configuration["Ai:ApiKey"];
 
         if (IsPlaceholderValue(jwtKey, "PLEASE_", "REPLACE_", "aura-dev-jwt-key-please-change"))
         {
@@ -54,6 +55,11 @@ public static partial class ServiceExtensions
         if (IsPlaceholderValue(allowedHosts, "PLEASE_", "REPLACE_", "please-replace", "*"))
         {
             throw new InvalidOperationException("生产环境缺少有效的 AllowedHosts 配置。");
+        }
+
+        if (IsPlaceholderValue(aiApiKey, "PLEASE_", "REPLACE_", "please-replace") || aiApiKey!.Length < 24)
+        {
+            throw new InvalidOperationException("生产环境缺少至少 24 字符的有效 Ai:ApiKey 配置。");
         }
 
         if (!string.IsNullOrWhiteSpace(alertWebhookUrl))

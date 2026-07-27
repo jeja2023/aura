@@ -1,5 +1,6 @@
 using Aura.Api.Internal;
 using Aura.Api.Data;
+using Aura.Api.Cache;
 using Dapper;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -32,6 +33,13 @@ public static partial class ServiceExtensions
                     {
                         var sid = context.Principal?.FindFirst("sid")?.Value;
                         if (!Guid.TryParse(sid, out var sessionId)) return;
+                        var cache = context.HttpContext.RequestServices.GetRequiredService<RedisCacheService>();
+                        var sessionCacheKey = $"aura:auth:session:{sessionId:N}";
+                        if (string.Equals(await cache.GetAsync(sessionCacheKey), "active", StringComparison.Ordinal))
+                        {
+                            return;
+                        }
+
                         var factory = context.HttpContext.RequestServices.GetRequiredService<PgSqlConnectionFactory>();
                         await using var connection = factory.CreateConnection();
                         var active = await connection.ExecuteScalarAsync<bool>(new CommandDefinition(
@@ -40,13 +48,15 @@ public static partial class ServiceExtensions
                               SELECT 1 FROM auth_session s
                               LEFT JOIN sys_user u ON u.user_id=s.user_id
                               WHERE s.session_id=@SessionId AND s.revoked_at IS NULL AND s.expires_at>CURRENT_TIMESTAMP
-                                AND (s.user_id IS NULL OR u.status=1))
+                                AND ((s.provider_code='local' AND u.status=1)
+                                  OR (s.provider_code<>'local' AND (s.user_id IS NULL OR u.status=1))))
                             """, new { SessionId = sessionId }, cancellationToken: context.HttpContext.RequestAborted));
                         if (!active)
                         {
                             context.Fail("Session revoked, expired, or disabled");
                             return;
                         }
+                        await cache.SetAsync(sessionCacheKey, "active", TimeSpan.FromSeconds(30));
                         await connection.ExecuteAsync(new CommandDefinition(
                             "UPDATE auth_session SET last_seen_at=CURRENT_TIMESTAMP WHERE session_id=@SessionId AND last_seen_at<CURRENT_TIMESTAMP-INTERVAL '1 minute'",
                             new { SessionId = sessionId }, cancellationToken: context.HttpContext.RequestAborted));

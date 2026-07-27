@@ -1,10 +1,12 @@
 /* 文件：全局异常处理扩展 | File: Global exception handler extensions */
 using Aura.Api.Models;
 using Aura.Api.Serialization;
+using Aura.Api.Data;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 
 namespace Aura.Api.Middleware;
 
@@ -30,10 +32,15 @@ internal static class GlobalExceptionHandlerExtensions
                     ? cid.ToString()
                     : context.TraceIdentifier;
 
-                context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+                var databaseUnavailable = feature?.Error is DataAccessUnavailableException or NpgsqlException;
+                context.Response.StatusCode = databaseUnavailable
+                    ? StatusCodes.Status503ServiceUnavailable
+                    : StatusCodes.Status500InternalServerError;
                 context.Response.ContentType = "application/json; charset=utf-8";
                 await context.Response.WriteAsJsonAsync(
-                    new ApiErrorResponse(50000, "服务内部错误，请稍后重试或联系管理员。", TraceId: traceId),
+                    databaseUnavailable
+                        ? new ApiErrorResponse(50310, "数据库暂时不可用，请稍后重试。", TraceId: traceId)
+                        : new ApiErrorResponse(50000, "服务内部错误，请稍后重试或联系管理员。", TraceId: traceId),
                     AuraJsonSerializerOptions.Default);
             });
         });

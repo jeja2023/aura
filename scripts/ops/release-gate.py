@@ -60,7 +60,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--build-version", help="Candidate build version")
     parser.add_argument("--git-commit", help="Candidate git commit")
     parser.add_argument("--image-digest", default="", help="Candidate image digest")
-    parser.add_argument("--migration-version", default="036", help="Expected database migration")
+    parser.add_argument("--migration-version", default="037", help="Expected database migration")
     parser.add_argument("--run-automated", action="store_true", help="Run repository checks")
     parser.add_argument("--real-dependencies", action="store_true", help="Assert evidence used real dependencies")
     parser.add_argument("--target-hardware", action="store_true", help="Assert execution used approved target hardware")

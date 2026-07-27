@@ -14,7 +14,7 @@ from services.evaluation_service import evaluate_retrieval_dataset, load_eval_da
 from services.inference_service import InferenceBackpressureError, InferenceUnavailableError
 from vector_store.index_store import load_vectors_for_cluster, search_vectors, upsert_vector
 from utils.retrieval_config import build_retrieval_defaults, resolve_search_params
-from utils.service_state import requires_persistent_index
+from utils.service_state import current_environment, requires_persistent_index
 from utils.vector_utils import ImageTooLargeError, ImageValidationError, validate_image_base64_length
 
 
@@ -53,6 +53,8 @@ def build_api_router(deps: RouteDeps) -> APIRouter:
 
         allowed_roots_raw = os.getenv("AURA_AI_EXTRACT_FILE_ROOTS", "").strip()
         if not allowed_roots_raw:
+            if current_environment().lower() == "production":
+                return False, "", "extract-file is disabled until allowed roots are configured"
             return True, str(target_resolved), ""
 
         allowed_roots = []
@@ -77,6 +79,8 @@ def build_api_router(deps: RouteDeps) -> APIRouter:
         target = Path(raw_path).expanduser()
         allowed_roots_raw = os.getenv("AURA_AI_EVAL_DATASET_ROOTS", "").strip()
         if not allowed_roots_raw:
+            if current_environment().lower() == "production":
+                return False, "", "dataset-path evaluation is disabled until allowed roots are configured"
             return True, str(target), ""
 
         try:

@@ -35,6 +35,8 @@ public sealed class UnifiedErrorResponseTests : IClassFixture<AuraApiFactory>
     {
         var client = _factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/capture/push");
+        request.Headers.Add("X-Capture-Timestamp", DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString());
+        request.Headers.Add("X-Capture-Nonce", Guid.NewGuid().ToString("N"));
         request.Headers.Add("X-Signature", "bad-signature");
         request.Content = new StringContent(
             """

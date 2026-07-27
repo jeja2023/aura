@@ -22,6 +22,10 @@ internal static class AuraEndpointsDeviceCapture
         var isDev = ctx.IsDev;
         var globalHmacSecret = ctx.GlobalHmacSecret;
         var captureIpWhitelist = ctx.CaptureIpWhitelist;
+        var captureClockSkewSeconds = Math.Clamp(
+            ctx.Configuration.GetValue("Security:CaptureAllowedClockSkewSeconds", 300),
+            30,
+            900);
 
         var cameraGroup = app.MapGroup("/api/camera");
         cameraGroup.MapGet("/list", async (HttpRequest httpReq) =>
@@ -54,62 +58,40 @@ internal static class AuraEndpointsDeviceCapture
         var deviceGroup = app.MapGroup("/api/device");
         deviceGroup.MapGet("/list", async (DeviceManagementService svc) => await svc.GetDevicesAsync()).RequireAuthorization("楼栋管理员");
         deviceGroup.MapPost("/register", async (DeviceRegisterReq req, DeviceManagementService svc) => await svc.RegisterDeviceAsync(req)).RequireAuthorization("超级管理员");
-        deviceGroup.MapPost("/ping/{deviceId:long}", (long deviceId, DeviceManagementService svc) => svc.PingDevice(deviceId)).RequireAuthorization("楼栋管理员");
+        deviceGroup.MapPost("/ping/{deviceId:long}", async (long deviceId, DeviceManagementService svc) => await svc.PingDeviceAsync(deviceId)).RequireAuthorization("楼栋管理员");
 
         var captureGroup = app.MapGroup("/api/capture");
-        captureGroup.MapPost("/push", async (HttpContext http, CaptureProcessingService svc) =>
-        {
-            var reqJson = await http.Request.ReadFromJsonAsync<JsonElement>();
-            var normalized = new HikvisionIsapiAdapter().Normalize(reqJson);
-            var validation = await AuraHelpers.ValidateCaptureRequest(
-                http.Request,
-                normalized,
-                devices,
-                isDev,
-                globalHmacSecret,
-                captureIpWhitelist,
-                AuraEndpointContext.MaxCaptureRequestBytes,
-                AuraEndpointContext.MaxImageBase64Chars,
-                AuraEndpointContext.MaxMetadataJsonChars,
-                cache);
-            return validation ?? await svc.ProcessAsync(normalized, "海康 ISAPI 抓拍");
-        });
+        MapCaptureEndpoint("/push", new HikvisionIsapiAdapter(), "海康 ISAPI 抓拍");
+        MapCaptureEndpoint("/sdk", new CppSdkAdapter(), "C++SDK 抓拍");
+        MapCaptureEndpoint("/onvif", new OnvifAdapter(), "ONVIF 抓拍");
 
-        captureGroup.MapPost("/sdk", async (HttpContext http, CaptureProcessingService svc) =>
+        void MapCaptureEndpoint(string route, ICaptureAdapter adapter, string source)
         {
-            var reqJson = await http.Request.ReadFromJsonAsync<JsonElement>();
-            var normalized = new CppSdkAdapter().Normalize(reqJson);
-            var validation = await AuraHelpers.ValidateCaptureRequest(
-                http.Request,
-                normalized,
-                devices,
-                isDev,
-                globalHmacSecret,
-                captureIpWhitelist,
-                AuraEndpointContext.MaxCaptureRequestBytes,
-                AuraEndpointContext.MaxImageBase64Chars,
-                AuraEndpointContext.MaxMetadataJsonChars,
-                cache);
-            return validation ?? await svc.ProcessAsync(normalized, "C++SDK 抓拍");
-        });
+            captureGroup.MapPost(route, async (HttpContext http, CaptureProcessingService svc, CancellationToken cancellationToken) =>
+            {
+                var body = await AuraHelpers.ReadCaptureRequestBodyAsync(
+                    http.Request,
+                    AuraEndpointContext.MaxCaptureRequestBytes,
+                    cancellationToken);
+                if (body.Error is not null) return body.Error;
 
-        captureGroup.MapPost("/onvif", async (HttpContext http, CaptureProcessingService svc) =>
-        {
-            var reqJson = await http.Request.ReadFromJsonAsync<JsonElement>();
-            var normalized = new OnvifAdapter().Normalize(reqJson);
-            var validation = await AuraHelpers.ValidateCaptureRequest(
-                http.Request,
-                normalized,
-                devices,
-                isDev,
-                globalHmacSecret,
-                captureIpWhitelist,
-                AuraEndpointContext.MaxCaptureRequestBytes,
-                AuraEndpointContext.MaxImageBase64Chars,
-                AuraEndpointContext.MaxMetadataJsonChars,
-                cache);
-            return validation ?? await svc.ProcessAsync(normalized, "ONVIF 抓拍");
-        });
+                var normalized = adapter.Normalize(body.Payload);
+                var validation = await AuraHelpers.ValidateCaptureRequest(
+                    http.Request,
+                    normalized,
+                    body.BodySha256,
+                    devices,
+                    isDev,
+                    globalHmacSecret,
+                    captureIpWhitelist,
+                    AuraEndpointContext.MaxCaptureRequestBytes,
+                    AuraEndpointContext.MaxImageBase64Chars,
+                    AuraEndpointContext.MaxMetadataJsonChars,
+                    captureClockSkewSeconds,
+                    cache);
+                return validation ?? await svc.ProcessAsync(normalized, source);
+            });
+        }
 
         captureGroup.MapPost("/mock", async (CaptureMockReq req, CaptureOpsService svc) => await svc.CreateMockAsync(req)).RequireAuthorization("楼栋管理员");
         captureGroup.MapGet("/list", async (HttpRequest httpReq, CaptureOpsService svc) => await svc.GetCapturesAsync(httpReq)).RequireAuthorization("楼栋管理员");
