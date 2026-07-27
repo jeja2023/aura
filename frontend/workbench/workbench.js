@@ -38,7 +38,7 @@ async function api(url, options = {}) {
 
 async function apiForm(url, formData) {
   const response = await fetch(url, { method: "POST", body: formData, credentials: "include" });
-  let data = null;
+  let data;
   try { data = await response.json(); } catch { data = { msg: response.statusText }; }
   if (!response.ok || data?.code !== 0) {
     const error = new Error(data?.msg || `HTTP ${response.status}`);

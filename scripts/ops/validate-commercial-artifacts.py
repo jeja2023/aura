@@ -60,11 +60,13 @@ def validate_version(errors: list[str]) -> str:
     checks = {
         ROOT / "ai" / "main.py": f'version="{version}"',
         ROOT / "docs" / "commercial" / "能力与支持矩阵.md": f"# Aura {version} 能力与支持矩阵",
-        ROOT / "docs" / f"2026-07-23-{version}商业产品化实施与验收记录.md": f"# Aura {version}",
     }
     for path, marker in checks.items():
         if not path.exists() or marker not in path.read_text(encoding="utf-8"):
             fail(errors, f"version {version} is not synchronized in {path.relative_to(ROOT)}")
+    release_records = (ROOT / "docs").glob(f"????-??-??-{version}商业产品化实施与验收记录.md")
+    if not any(f"# Aura {version}" in path.read_text(encoding="utf-8") for path in release_records):
+        fail(errors, f"version {version} has no synchronized commercial acceptance record")
     return version
 
 

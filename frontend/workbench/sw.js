@@ -34,7 +34,7 @@ function notificationTarget(value) {
 }
 
 self.addEventListener("push", (event) => {
-  let payload = {};
+  let payload;
   try { payload = event.data ? event.data.json() : {}; } catch { payload = {}; }
   const title = String(payload.title || "Aura 待办提醒").slice(0, 120);
   const body = String(payload.body || "你有一项新的现场处置任务").slice(0, 300);

@@ -55,7 +55,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -99,10 +99,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "10.0.x"
 
@@ -115,7 +115,7 @@ jobs:
             ${{ runner.os }}-nuget-
 
       - name: Restore solution
-        run: dotnet restore "${{ github.workspace }}/Aura.sln"
+        run: dotnet restore "${{ github.workspace }}/Aura.sln" -p:Configuration=Release
 
       - name: Validate commercial artifacts and contracts
         run: python "${{ github.workspace }}/scripts/ops/validate-commercial-artifacts.py"
@@ -124,7 +124,9 @@ jobs:
         run: dotnet build "${{ github.workspace }}/Aura.sln" -c Release --no-restore
 
       - name: Check NuGet vulnerabilities
-        run: dotnet list "${{ github.workspace }}/Aura.sln" package --vulnerable --include-transitive
+        env:
+          Configuration: Release
+        run: dotnet list "${{ github.workspace }}/Aura.sln" package --vulnerable --include-transitive --no-restore
 
       - name: Run backend unit tests
         run: dotnet test "${{ github.workspace }}/backend/Aura.Api.Tests/Aura.Api.Tests.csproj" -c Release --no-build --no-restore --verbosity normal
@@ -141,10 +143,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -173,12 +175,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
