@@ -258,9 +258,9 @@
   line-height: 1.55;
 }
 
-/* 仅作用于未单独指定语义类的按钮；勿覆盖 .btn-secondary / 列表芯片 / 事件筛选芯片等 */
+/* 仅作用于未单独指定语义类的按钮；勿覆盖 .btn-secondary / 列表芯片 / 事件筛选芯片 / 媒体解析标签 / 扩展管理标签等 */
 .app-content
-  button:not(.app-sidebar-toggle):not(.btn-primary):not(.btn-secondary):not(.event-filter-chip) {
+  button:not(.app-sidebar-toggle):not(.btn-primary):not(.btn-secondary):not(.event-filter-chip):not(.media-tab):not(.extensions-tab) {
   color: var(--primary-text);
   font-weight: 600;
 }

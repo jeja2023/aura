@@ -5,6 +5,13 @@
   gap: 14px;
   min-height: 0;
 }
+.app-content {
+  overflow-y: auto;
+}
+.app-content:not(.scene-mode) > .extensions-page {
+  flex: 0 0 auto;
+  min-height: auto;
+}
 
 .extensions-toolbar {
   display: flex;

@@ -2,6 +2,27 @@
 
 本文档记录仓库关键版本与阶段性改动，便于联调、回归与发布追踪。
 
+## 0.3.1（2026-07-27）
+
+### 环境配置与 Docker 数据库集成
+
+- 对齐根目录 `.env` 与 `.env.example` 结构（补齐缺少的 Web Push 提示注释）。
+- 补全并严格对齐 `.env.docker` 与 `.env.docker.example` 的键集合、注释与结构（补充 `MEDIA_PROVIDER_SIMULATOR` 镜像/端口/监听地址、ArangoDB 派生图配置、通用媒体解析出站安全/超时参数等），同时保留本地自定义凭据。
+- 自动同步宿主机 `.env` 的数据库与缓存连接凭据到 Docker 实例（PostgreSQL 密码、ArangoDB 密码以及 Redis 端口 `6380`），解决一键启动脚本 `start_services.py` 运行时的数据库认证失败问题。
+- 新增本地冲突服务清理脚本 `stop_local_services.ps1`，支持在 Windows 上自动停用本地占用的 `5432` (PostgreSQL) 与 `8529` (ArangoDB) 端口。
+
+### 前端 UI / 视觉规范与排版优化
+
+- 修复外壳样式 `shell.css` 中高优先级选择器 `(0, 5, 1)` 导致的标签隐形问题：在 `button:not(...)` 排除列表中追加 `:not(.media-tab):not(.extensions-tab)`，消除全局白色文字规则导致 Tab 按钮在浅色背景下不可见的问题。
+- 重构并统一“媒体解析平台”页面（`media-analysis.css`）标签样式（`.media-tab`），全面升级为与“扩展管理”（`extensions.css`）一致的现代化圆角胶囊/卡片按钮风格。
+- 修复“媒体解析平台”与“扩展管理”页面长表单与大块 JSON 调试窗口溢出截断问题：在 `media-analysis.css` 与 `extensions.css` 中对 `.app-content` 配置 `overflow-y: auto`，使超出可视高度的内容能够自适应出现纵向滚动条。
+
+### 版本号与构建配置
+
+- 启用版本 `0.3.1`：`.NET` 统一版本写入 `Directory.Build.props` (0.3.1 / 0.3.1.0)，AI FastAPI OpenAPI 版本同步升级为 `0.3.1`。
+- `docker/.env.registry.example` 默认业务镜像标签与离线包文件名升级到 `v0.3.1`。
+- 更新 `README.md` 项目状态与近期重点清单。
+
 ## 0.3.0（2026-07-26）
 
 ### 商业业务闭环
