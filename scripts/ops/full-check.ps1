@@ -4,6 +4,7 @@
 $ErrorActionPreference = "Stop"
 [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
 $base = "https://localhost:5001"
+$script:webSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
 $adminPassword = $env:AURA_ADMIN_PASSWORD
 if ([string]::IsNullOrWhiteSpace($adminPassword)) {
     throw "Please set environment variable AURA_ADMIN_PASSWORD (no built-in default password)."
@@ -11,22 +12,20 @@ if ([string]::IsNullOrWhiteSpace($adminPassword)) {
 
 function Invoke-Api([string]$Method, [string]$Path, $Body = $null, [string]$Token = "") {
     $headers = @{}
-    if ($Token -ne "") { $headers["Authorization"] = "Bearer $Token" }
     if ($null -ne $Body) {
         # Always use ConvertTo-Json to build valid JSON body.
         $json = $Body | ConvertTo-Json -Compress -Depth 12
-        return Invoke-RestMethod -Method $Method -Uri "$base$Path" -Headers $headers -Body $json -ContentType "application/json; charset=utf-8"
+        return Invoke-RestMethod -Method $Method -Uri "$base$Path" -Headers $headers -WebSession $script:webSession -Body $json -ContentType "application/json; charset=utf-8"
     }
-    return Invoke-RestMethod -Method $Method -Uri "$base$Path" -Headers $headers
+    return Invoke-RestMethod -Method $Method -Uri "$base$Path" -Headers $headers -WebSession $script:webSession
 }
 
 Write-Host "1) login..."
 try {
     $login = Invoke-Api "POST" "/api/auth/login" @{ userName = "admin"; password = $adminPassword }
-    $token = $login.data.token
-    if ([string]::IsNullOrWhiteSpace($token)) {
-        throw "login failed: token is empty."
-    }
+    $authCookie = $script:webSession.Cookies.GetCookies([Uri]$base)["aura_token"]
+    if ($null -eq $authCookie) { throw "login failed: authentication cookie is missing." }
+    $token = "cookie-session"
 
     Write-Host "2) bulk mock capture (200)..."
     $sw = [System.Diagnostics.Stopwatch]::StartNew()

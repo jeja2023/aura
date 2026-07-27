@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "1.0",
+  "code": "cpp-sdk-gateway",
+  "name": "Isolated vendor C++ SDK gateway",
+  "version": "0.0.0",
+  "protocol": "Out-of-process RPC and standard events",
+  "lifecycle": "experimental",
+  "implementationStatus": "planned",
+  "auraVersions": ["future"],
+  "capabilities": [],
+  "configuration": {},
+  "contract": { "healthPath": null, "discoveryPath": null, "samplePath": null, "timeoutSeconds": 15, "errorCodes": {} },
+  "security": {
+    "credentialMode": "Project-specific secret reference",
+    "secretReferencesOnly": true,
+    "networkDirection": "Gateway boundary not approved",
+    "ssrfPolicy": "No arbitrary upstream addresses",
+    "binaryProvenance": "No vendor SDK or native binary is present"
+  },
+  "support": {
+    "knownLimitations": ["Planned only; requires an approved customer project, SDK version, signature, license, target OS, and hardware"],
+    "vulnerabilityResponse": "Quarantine the gateway and replace the signed SDK package",
+    "owner": "device-integration"
+  }
+}

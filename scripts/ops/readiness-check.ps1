@@ -9,6 +9,7 @@ $ErrorActionPreference = "Stop"
 [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
 
 $base = "https://localhost:5001"
+$script:webSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
 $user = if (-not [string]::IsNullOrWhiteSpace($User)) {
     $User
 } elseif (-not [string]::IsNullOrWhiteSpace($env:AURA_ADMIN_USER)) {
@@ -37,21 +38,19 @@ if ([string]::IsNullOrWhiteSpace($pass)) {
 
 function Invoke-Api([string]$Method, [string]$Path, $Body = $null, [string]$Token = "") {
     $headers = @{}
-    if ($Token -ne "") { $headers["Authorization"] = "Bearer $Token" }
     if ($null -ne $Body) {
         $json = $Body | ConvertTo-Json -Compress -Depth 12
-        return Invoke-RestMethod -Method $Method -Uri "$base$Path" -Headers $headers -Body $json -ContentType "application/json; charset=utf-8"
+        return Invoke-RestMethod -Method $Method -Uri "$base$Path" -Headers $headers -WebSession $script:webSession -Body $json -ContentType "application/json; charset=utf-8"
     }
-    return Invoke-RestMethod -Method $Method -Uri "$base$Path" -Headers $headers
+    return Invoke-RestMethod -Method $Method -Uri "$base$Path" -Headers $headers -WebSession $script:webSession
 }
 
 Write-Host "1) Login..."
 try {
     $login = Invoke-Api "POST" "/api/auth/login" @{ userName = $user; password = $pass }
-    $token = $login.data.token
-    if ([string]::IsNullOrWhiteSpace($token)) {
-        throw "Login failed: empty token."
-    }
+    $authCookie = $script:webSession.Cookies.GetCookies([Uri]$base)["aura_token"]
+    if ($null -eq $authCookie) { throw "Login failed: authentication cookie is missing." }
+    $token = "cookie-session"
     Write-Host "   Login OK"
 
     Write-Host "2) Check /api/health ..."

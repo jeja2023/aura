@@ -39,8 +39,11 @@
       ]
     },
     {
-      title: "产品化扩展",
-      items: [{ href: "/extensions/", label: "扩展管理" }]
+      title: "业务协同",
+      items: [
+        { href: "/workbench/", label: "商业工作台" },
+        { href: "/extensions/", label: "扩展管理" }
+      ]
     },
     {
       title: "权限与组织",
@@ -64,6 +67,7 @@
   const PERMISSION_SCOPED_HREFS = Object.freeze({
     "/device-diag/": "device.diag",
     "/media-analysis/": "media.analysis.view",
+    "/workbench/": ["event.view", "case.view", "investigation.view", "ops.view"],
     "/ops-settings/": "ai.settings",
     "/extensions/": ["alert.manage", "space.manage", "report.manage", "tenant.manage", "ai.platform"]
   });

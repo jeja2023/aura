@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "1.0",
+  "code": "hikvision-isapi",
+  "name": "Hikvision ISAPI device adapter",
+  "version": "0.3.0",
+  "protocol": "ISAPI/HTTPS",
+  "lifecycle": "experimental",
+  "implementationStatus": "supported",
+  "auraVersions": ["0.3.x"],
+  "capabilities": ["device-health", "snapshot", "alert-stream", "channel-discovery"],
+  "configuration": { "type": "object", "required": ["baseUri", "credentialRef"], "properties": { "baseUri": { "type": "string", "format": "uri" }, "credentialRef": { "type": "string", "pattern": "^(env|file|vault|keyvault|aws-secrets-manager)://" } } },
+  "contract": {
+    "healthPath": "/ISAPI/System/status",
+    "discoveryPath": "/ISAPI/System/Video/inputs/channels",
+    "samplePath": "/ISAPI/Streaming/channels/101/picture",
+    "timeoutSeconds": 15,
+    "errorCodes": { "401": "authentication_failed", "403": "permission_denied", "404": "capability_unsupported", "408": "device_timeout", "5xx": "device_failure" }
+  },
+  "security": {
+    "credentialMode": "Digest authentication via secret reference",
+    "secretReferencesOnly": true,
+    "networkDirection": "Aura initiates traffic to an explicitly configured NVR or camera",
+    "ssrfPolicy": "Approved device network ranges only",
+    "binaryProvenance": "No vendor native binary"
+  },
+  "support": {
+    "knownLimitations": ["Repository implementation does not constitute model or firmware certification", "Certification requires the eight-check tool and a real-device report"],
+    "vulnerabilityResponse": "Disable affected device profile and rotate credentials; publish matrix update",
+    "owner": "device-integration"
+  }
+}

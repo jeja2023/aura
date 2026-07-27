@@ -19,6 +19,7 @@ public static class EndpointExtensions
         AuraEndpointsMediaAnalysis.Map(app);
         AuraEndpointsVectorIndex.Map(app);
         AuraEndpointsGraph.Map(app);
+        AuraEndpointsProduct.Map(app);
         return app;
     }
 }

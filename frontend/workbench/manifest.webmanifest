@@ -1,0 +1,12 @@
+{
+  "name": "Aura 商业工作台",
+  "short_name": "Aura 工作台",
+  "start_url": "/workbench/",
+  "scope": "/workbench/",
+  "display": "standalone",
+  "background_color": "#f1f5f9",
+  "theme_color": "#ffffff",
+  "icons": [
+    { "src": "/common/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "status": "blocked",
+  "commandLine": "",
+  "exitCode": null,
+  "environment": {
+    "environmentId": "",
+    "targetVersion": "",
+    "dataScale": ""
+  },
+  "metrics": {},
+  "logSummary": "Replace with an independently reviewable summary.",
+  "artifactUri": ""
+}

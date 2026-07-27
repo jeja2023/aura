@@ -1,0 +1,9 @@
+﻿{
+    "createdAt":  "2026-07-24T08:50:37.0380059+08:00",
+    "database":  "aura",
+    "host":  "127.0.0.1",
+    "port":  "5432",
+    "format":  "custom",
+    "backupFile":  "E:\\Aura\\artifacts\\db-backups\\aura-aura-20260724-085036.dump",
+    "sizeBytes":  314252
+}

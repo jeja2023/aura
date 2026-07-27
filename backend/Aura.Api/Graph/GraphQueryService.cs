@@ -4,6 +4,37 @@ namespace Aura.Api.Graph;
 
 internal sealed class GraphQueryService(IGraphRepository graph)
 {
+    public Task<JsonElement> CandidatePeopleAsync(CandidatePeopleGraphQuery request, CancellationToken cancellationToken) =>
+        graph.QueryAsync(
+            "candidate_people",
+            """
+            FOR candidate IN persons
+              FILTER candidate.tenant_id == @tenantId AND candidate.person_id IN @candidateIds
+              LET relations = (
+                FOR neighbor, edge IN 1..1 ANY candidate co_occurs
+                  FILTER neighbor.tenant_id == @tenantId AND neighbor.person_id IN @relatedIds
+                    AND (@from == null OR edge.last_seen >= @from)
+                    AND (@to == null OR edge.first_seen <= @to)
+                    AND edge.count >= @minimumCount
+                  SORT edge.count DESC
+                  RETURN { personId: neighbor.person_id, count: edge.count,
+                    firstSeen: edge.first_seen, lastSeen: edge.last_seen, edgeKey: edge._key })
+              FILTER LENGTH(relations) > 0
+              LIMIT @limit
+              RETURN { candidate: candidate.person_id, coOccurrences: relations,
+                classification: 'candidate', confirmed: false }
+            """,
+            new
+            {
+                tenantId = request.TenantId,
+                candidateIds = request.CandidatePersonIds.Distinct().Take(1000).ToArray(),
+                relatedIds = request.RelatedPersonIds.Distinct().Take(1000).ToArray(),
+                from = request.From,
+                to = request.To,
+                minimumCount = Math.Clamp(request.MinimumCount, 1, 100_000),
+                limit = Math.Clamp(request.Limit, 1, 500)
+            }, cancellationToken);
+
     public Task<JsonElement> ReachableCamerasAsync(GraphReachabilityRequest request, CancellationToken cancellationToken) =>
         graph.QueryAsync(
             "camera_reachable",

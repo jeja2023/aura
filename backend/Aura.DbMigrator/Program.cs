@@ -12,6 +12,9 @@ internal static class MigrationCli
 {
     private const string BaselineVersion = "000_baseline_schema";
     private const string BaselineScriptName = "schema.pgsql.sql";
+    // schema.pgsql.sql is intentionally kept at the last consolidated baseline.
+    // Newer scripts must execute during bootstrap instead of being marked as applied.
+    private const int ConsolidatedBaselineMigration = 24;
     private const long MigrationLockKey = 0x417572614D494752; // "AuraMIGR"
 
     public static async Task<int> RunAsync(string[] args)
@@ -80,7 +83,7 @@ internal static class MigrationCli
         Console.WriteLine("Commands:");
         Console.WriteLine("  status      Show applied and pending migrations.");
         Console.WriteLine("  migrate     Apply pending incremental scripts in database/migrations.");
-        Console.WriteLine("  bootstrap   Apply schema.pgsql.sql to an empty database and mark existing migrations as baseline.");
+        Console.WriteLine("  bootstrap   Apply schema.pgsql.sql to an empty database, then run migrations newer than its baseline.");
         Console.WriteLine();
         Console.WriteLine("Options:");
         Console.WriteLine("  --connection <value>      PostgreSQL connection string. Falls back to ConnectionStrings__PgSql.");
@@ -309,13 +312,25 @@ internal static class MigrationCli
             await EnsureHistoryTableAsync(connection, transaction);
             await InsertHistoryAsync(connection, transaction, BaselineVersion, BaselineScriptName, schemaChecksum, "baseline");
 
-            foreach (var script in scripts)
+            foreach (var script in scripts.Where(script => ParseMigrationNumber(script.Version) <= ConsolidatedBaselineMigration))
             {
                 await InsertHistoryAsync(connection, transaction, script.Version, script.ScriptName, script.Checksum, "baseline");
                 if (verbose)
                 {
                     Console.WriteLine($"  Registered baseline migration: {script.Version} {script.ScriptName}");
                 }
+            }
+
+            foreach (var script in scripts.Where(script => ParseMigrationNumber(script.Version) > ConsolidatedBaselineMigration))
+            {
+                if (verbose)
+                {
+                    Console.WriteLine($"  Applying post-baseline migration: {script.Version} {script.ScriptName}");
+                }
+
+                await using var command = new NpgsqlCommand(script.Sql, connection, transaction);
+                await command.ExecuteNonQueryAsync();
+                await InsertHistoryAsync(connection, transaction, script.Version, script.ScriptName, script.Checksum, "migration");
             }
 
             await transaction.CommitAsync();
@@ -327,6 +342,13 @@ internal static class MigrationCli
             await transaction.RollbackAsync();
             throw;
         }
+    }
+
+    private static int ParseMigrationNumber(string version)
+    {
+        return int.TryParse(version, out var number)
+            ? number
+            : throw new InvalidOperationException($"Migration version '{version}' is not numeric.");
     }
 
     private static void ValidateAppliedChecksums(

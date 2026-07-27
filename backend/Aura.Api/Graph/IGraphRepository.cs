@@ -18,3 +18,6 @@ internal sealed record GraphPathRequest(long TenantId, long FromCameraId, long T
 internal sealed record GraphReachabilityRequest(long TenantId, long CameraId, int Depth = 2, int Limit = 100);
 internal sealed record PersonGraphQuery(long TenantId, string PersonId, DateTimeOffset? From = null, DateTimeOffset? To = null, int Depth = 1, int Limit = 100);
 internal sealed record RoomGraphQuery(long TenantId, long RoomId, DateTimeOffset? From = null, DateTimeOffset? To = null, int Limit = 100);
+internal sealed record CandidatePeopleGraphQuery(
+    long TenantId,IReadOnlyList<string> CandidatePersonIds,IReadOnlyList<string> RelatedPersonIds,
+    DateTimeOffset? From = null,DateTimeOffset? To = null,int MinimumCount = 1,int Limit = 100);

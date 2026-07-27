@@ -1,0 +1,56 @@
+{
+  "profileCode": "private-standard-target",
+  "version": 1,
+  "status": "draft",
+  "deliveryMode": "private_standard",
+  "approval": {
+    "reference": "",
+    "approvedBy": "",
+    "approvedAt": ""
+  },
+  "environment": {
+    "environmentId": "",
+    "cpu": "",
+    "memoryGiB": 0,
+    "disk": "",
+    "network": "",
+    "gpu": "none",
+    "nodeCount": 1,
+    "configurationFingerprint": "",
+    "datasetVersion": ""
+  },
+  "load": {
+    "tenantCount": 1,
+    "deviceCount": 0,
+    "activeStreams": 0,
+    "concurrentUsers": 0,
+    "eventsPerDay": 0,
+    "peakEventsPerSecond": 0,
+    "vectorCount": 0,
+    "graphNodeCount": 0,
+    "graphEdgeCount": 0,
+    "mediaGiB": 0
+  },
+  "profile": {
+    "coreApiAvailability": 0.995,
+    "rpoMinutes": 15,
+    "rtoMinutes": 240,
+    "graphRebuildMinutes": 120,
+    "vectorRecallAt10": 0.95,
+    "vectorP95Ms": 500,
+    "graphP95Ms": 1000,
+    "backlogRecoveryMinutes": 30,
+    "supportMatrix": {
+      "operatingSystems": ["replace-with-certified-target"],
+      "browsers": ["replace-with-certified-target"],
+      "postgres": ["PostgreSQL 16 + pgvector 0.8.x"],
+      "arangodb": ["ArangoDB 3.12.x"],
+      "redis": ["replace-with-certified-target"],
+      "objectStorage": ["replace-with-certified-target"],
+      "containerRuntime": ["replace-with-certified-target"],
+      "devices": ["replace-with-certified-model-and-firmware"],
+      "providers": ["replace-with-certified-provider-version"],
+      "retention": ["replace-with-approved-retention-policy"]
+    }
+  }
+}

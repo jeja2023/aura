@@ -22,7 +22,7 @@ _deps, _arango, _inference, _index_runtime = build_runtime(
 def create_app() -> FastAPI:
     app = FastAPI(
         title="Aura AI 推理服务",
-        version="0.2.1",
+        version="0.3.0",
         lifespan=build_lifespan(
             arango=_arango,
             inference=_inference,

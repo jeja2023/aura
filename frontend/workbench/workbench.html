@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#ffffff" />
+  <title>商业工作台</title>
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <script src="../common/theme-pref.js"></script>
+  <link rel="stylesheet" href="../common/theme.css" />
+  <link rel="stylesheet" href="../common/shell.css" />
+  <link rel="stylesheet" href="../common/forms.css" />
+  <link rel="stylesheet" href="./workbench.css" />
+</head>
+<body class="app-body" data-shell-title="商业工作台">
+  <aside class="app-sidebar" id="auraSidebar" aria-label="主导航"></aside>
+  <div class="app-frame">
+    <header class="app-topbar">
+      <button type="button" class="app-sidebar-toggle" id="auraSidebarToggle" aria-label="展开或收起导航">菜单</button>
+      <h1 class="app-page-title"></h1>
+      <div class="app-topbar-actions"></div>
+    </header>
+    <main class="app-content">
+      <div class="wb-page">
+        <div class="wb-context">
+          <label><span>租户</span><select id="tenantScope" class="aura-input"></select></label>
+          <label><span>统计窗口</span><select id="timeWindow" class="aura-input"><option value="1">24 小时</option><option value="7">7 天</option><option value="30" selected>30 天</option><option value="90">90 天</option></select></label>
+          <div class="wb-context-actions">
+            <span class="wb-connection" id="connectionState" data-state="pending">连接中</span>
+            <span class="wb-draft-count" id="draftCount">草稿 0</span>
+            <button class="btn-secondary" id="enablePush" type="button" title="启用案件通知">启用推送</button>
+            <button class="btn-secondary" id="scanDeepLink" type="button" title="从二维码打开案件">扫码</button>
+            <input id="deepLinkFile" type="file" accept="image/*" capture="environment" hidden />
+            <button class="btn-secondary wb-icon-btn" id="syncDrafts" type="button" title="同步草稿" aria-label="同步草稿">&#8645;</button>
+            <button class="btn-secondary wb-icon-btn" id="refreshView" type="button" title="刷新" aria-label="刷新">&#8635;</button>
+          </div>
+        </div>
+
+        <div class="wb-tabs" role="tablist" aria-label="工作台视图">
+          <button class="wb-tab is-active" type="button" data-tab="events">事件</button>
+          <button class="wb-tab" type="button" data-tab="cases">案件</button>
+          <button class="wb-tab" type="button" data-tab="investigation">调查</button>
+          <button class="wb-tab" type="button" data-tab="integration">接入</button>
+          <button class="wb-tab" type="button" data-tab="governance">规则与 AI</button>
+          <button class="wb-tab" type="button" data-tab="operations">运行</button>
+          <button class="wb-tab" type="button" data-tab="analytics">经营分析</button>
+        </div>
+
+        <section class="wb-view is-active" data-view="events">
+          <div class="wb-toolbar">
+            <label><span>状态</span><select id="eventStatus"><option value="">全部</option><option value="open">待分诊</option><option value="acknowledged">已确认</option><option value="dismissed">已排除</option><option value="linked">已关联案件</option></select></label>
+            <label><span>级别</span><select id="eventSeverity"><option value="">全部</option><option value="critical">紧急</option><option value="high">高</option><option value="medium">中</option><option value="low">低</option></select></label>
+            <label class="wb-grow"><span>检索</span><input id="eventKeyword" class="aura-search-input" type="search" placeholder="编号、标题或摘要" /></label>
+            <button class="btn-secondary" id="searchEvents" type="button">查询</button>
+            <button class="btn-primary" id="openEventCreate" type="button" data-permission="event.manage">新建事件</button>
+          </div>
+          <div class="wb-master-detail">
+            <div class="wb-master">
+              <div class="wb-section-head"><h2>事件队列</h2><span id="eventTotal">0</span></div>
+              <div class="wb-table-wrap"><table class="aura-data-table"><thead><tr><th>事件</th><th>级别</th><th>状态</th><th>发生时间</th></tr></thead><tbody id="eventRows"></tbody></table></div>
+              <div id="eventPager"></div>
+            </div>
+            <div class="wb-detail" id="eventDetail" aria-live="polite">
+              <div class="wb-empty">选择一个事件</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="wb-view" data-view="cases" hidden>
+          <div class="wb-toolbar">
+            <label><span>状态</span><select id="caseStatus"><option value="">全部</option><option value="new">新建</option><option value="acknowledged">已确认</option><option value="in_progress">处理中</option><option value="paused">已暂停</option><option value="escalated">已升级</option><option value="resolved">已解决</option><option value="closed">已关闭</option><option value="reopened">已重开</option></select></label>
+            <label class="wb-grow"><span>检索</span><input id="caseKeyword" class="aura-search-input" type="search" placeholder="案件编号或标题" /></label>
+            <button class="btn-secondary" id="searchCases" type="button">查询</button>
+            <button class="btn-secondary" id="loadMyTasks" type="button">我的待办</button>
+            <button class="btn-primary" id="openCaseCreate" type="button" data-permission="case.manage">新建案件</button>
+          </div>
+          <div class="wb-master-detail">
+            <div class="wb-master">
+              <div class="wb-section-head"><h2>案件队列</h2><span id="caseTotal">0</span></div>
+              <div class="wb-table-wrap"><table class="aura-data-table"><thead><tr><th>案件</th><th>优先级</th><th>状态</th><th>更新时间</th></tr></thead><tbody id="caseRows"></tbody></table></div>
+              <div id="casePager"></div>
+            </div>
+            <div class="wb-detail" id="caseDetail"><div class="wb-empty">选择一个案件</div></div>
+          </div>
+        </section>
+
+        <section class="wb-view" data-view="investigation" hidden>
+          <div class="wb-columns">
+            <form class="wb-form" id="investigationCreate" data-permission="investigation.manage">
+              <div class="wb-section-head"><h2>调查会话</h2></div>
+              <label><span>标题</span><input name="title" maxlength="256" required /></label>
+              <button class="btn-primary" type="submit">创建</button>
+            </form>
+            <form class="wb-form" id="investigationOpen">
+              <div class="wb-section-head"><h2>打开调查</h2></div>
+              <label><span>调查 ID</span><input name="investigationId" type="number" min="1" required /></label>
+              <button class="btn-secondary" type="submit">打开</button>
+            </form>
+          </div>
+          <div id="investigationWorkspace" class="wb-investigation" hidden>
+            <div class="wb-section-head"><h2 id="investigationTitle">调查</h2><span id="investigationMeta"></span></div>
+            <div class="wb-columns wb-investigation-tools">
+              <form class="wb-form" id="investigationQuery" data-permission="investigation.manage">
+                <label><span>查询类型</span><select name="queryType"><option value="timeline">时间线</option><option value="similarity">相似候选</option><option value="graph">关系图</option><option value="space">空间</option></select></label>
+                <label><span>结构化条件</span><textarea name="query" rows="6">{}</textarea></label>
+                <button class="btn-primary" type="submit">执行查询</button>
+              </form>
+              <form class="wb-form" id="controlledQuery" data-permission="investigation.manage">
+                <label><span>自然语言调查</span><textarea name="text" rows="6" maxlength="2000" required></textarea></label>
+                <button class="btn-secondary" type="submit">生成查询计划</button>
+              </form>
+            </div>
+            <div id="controlledPlan" class="wb-controlled-plan" hidden></div>
+            <pre class="wb-output" id="investigationOutput"></pre>
+          </div>
+        </section>
+
+        <section class="wb-view" data-view="integration" hidden>
+          <div class="wb-columns">
+            <form class="wb-form" id="onboardingCreate" data-permission="integration.manage">
+              <div class="wb-section-head"><h2>新建接入</h2></div>
+              <label><span>类型</span><select name="integrationType"><option value="provider">解析提供方</option><option value="media_source">媒体源</option><option value="adapter">设备适配器</option></select></label>
+              <label><span>名称</span><input name="name" maxlength="256" required /></label>
+              <button class="btn-primary" type="submit">开始向导</button>
+            </form>
+            <form class="wb-form" id="onboardingStep" data-permission="integration.test">
+              <div class="wb-section-head"><h2>向导步骤</h2></div>
+              <label><span>接入 ID</span><input name="onboardingId" type="number" min="1" required /></label>
+              <label><span>步骤</span><input name="step" type="number" min="1" max="7" value="1" required /></label>
+              <label><span>配置</span><textarea name="config" rows="4">{}</textarea></label>
+              <label class="wb-check"><input name="runTest" type="checkbox" /><span>执行联通验证</span></label>
+              <button class="btn-secondary" type="submit">保存步骤</button>
+            </form>
+          </div>
+          <div class="wb-section-head"><h2>接入任务</h2><button class="btn-secondary" id="loadOnboarding" type="button">刷新</button></div>
+          <div class="wb-table-wrap"><table class="aura-data-table"><thead><tr><th>ID</th><th>名称</th><th>类型</th><th>步骤</th><th>状态</th><th>更新时间</th></tr></thead><tbody id="onboardingRows"></tbody></table></div>
+        </section>
+
+        <section class="wb-view" data-view="governance" hidden>
+          <div class="wb-subtabs" role="tablist"><button class="is-active" type="button" data-governance-view="rules">规则</button><button type="button" data-governance-view="ai">AI 治理</button><button type="button" data-governance-view="data">数据治理</button></div>
+          <div data-governance-panel="rules">
+            <div class="wb-toolbar"><button class="btn-primary" id="openRuleCreate" type="button" data-permission="rule.manage">新建规则</button><button class="btn-secondary" id="loadRules" type="button">刷新</button></div>
+            <div class="wb-table-wrap"><table class="aura-data-table"><thead><tr><th>规则</th><th>状态</th><th>当前版本</th><th>熔断</th><th>更新时间</th><th>操作</th></tr></thead><tbody id="ruleRows"></tbody></table></div>
+          </div>
+          <div data-governance-panel="ai" hidden>
+            <div class="wb-metrics" id="aiMetrics"></div>
+            <div class="wb-columns">
+              <form class="wb-form" id="aiFeedback" data-permission="ai.governance.manage">
+                <div class="wb-section-head"><h2>人工反馈</h2></div>
+                <label><span>对象类型</span><select name="objectType"><option value="event">事件</option><option value="investigation">调查</option><option value="case">案件</option></select></label>
+                <label><span>对象 ID</span><input name="objectId" required /></label>
+                <label><span>反馈类型</span><select name="feedbackType"><option value="correct">正确</option><option value="false_positive">误报</option><option value="missed">漏报</option><option value="identity_error">身份错误</option><option value="relationship_error">关系错误</option><option value="quality_insufficient">质量不足</option></select></label>
+                <label><span>原因码</span><input name="reasonCode" maxlength="64" required /></label>
+                <button class="btn-primary" type="submit">提交反馈</button>
+              </form>
+              <div><div class="wb-section-head"><h2>模型质量</h2><button class="btn-secondary" id="loadAi" type="button">刷新</button></div><div class="wb-table-wrap"><table class="aura-data-table"><thead><tr><th>模型</th><th>状态</th><th>评测</th><th>反馈</th><th>漂移</th></tr></thead><tbody id="aiRows"></tbody></table></div></div>
+            </div>
+          </div>
+          <div data-governance-panel="data" hidden>
+            <div class="wb-toolbar"><select id="governanceResource"><option value="processing-registers">处理登记</option><option value="retention-policies">留存策略</option><option value="legal-holds">法律保全</option><option value="deletion-requests">删除申请</option></select><button class="btn-secondary" id="loadGovernance" type="button">查询</button></div>
+            <pre class="wb-output" id="governanceOutput"></pre>
+          </div>
+        </section>
+
+        <section class="wb-view" data-view="operations" hidden>
+          <div class="wb-metrics" id="opsMetrics"></div>
+          <div class="wb-columns">
+            <div><div class="wb-section-head"><h2>依赖健康</h2><button class="btn-secondary" id="loadOps" type="button">刷新</button></div><div class="wb-table-wrap"><table class="aura-data-table"><thead><tr><th>组件</th><th>状态</th><th>积压</th><th>最近成功</th></tr></thead><tbody id="healthRows"></tbody></table></div></div>
+            <form class="wb-form" id="highRiskPreview" data-permission="ops.high_impact">
+              <div class="wb-section-head"><h2>高影响任务</h2></div>
+              <label><span>操作</span><select name="operationType"><option value="inbox_replay">Inbox 重放</option><option value="outbox_replay">Outbox 重放</option><option value="graph_rebuild">图重建</option><option value="vector_backfill">向量回填</option><option value="rule_bulk_disable">批量停用规则</option></select></label>
+              <label><span>范围</span><textarea name="scope" rows="4">{}</textarea></label>
+              <label><span>工单号</span><input name="ticketNo" maxlength="128" required /></label>
+              <button class="btn-danger" type="submit">影响预览</button>
+            </form>
+          </div>
+          <pre class="wb-output" id="highRiskOutput"></pre>
+          <form class="wb-detail-form" id="highRiskConfirm" hidden data-permission="ops.high_impact">
+            <label><span>确认短语</span><input name="confirmationPhrase" autocomplete="off" required /></label>
+            <button class="btn-danger" type="submit">确认执行</button>
+          </form>
+        </section>
+
+        <section class="wb-view" data-view="analytics" hidden>
+          <div class="wb-metrics" id="businessMetrics"></div>
+          <div class="wb-columns">
+            <div><div class="wb-section-head"><h2>业务趋势</h2></div><div class="wb-trend" id="businessTrend" aria-label="业务趋势图"></div></div>
+            <div><div class="wb-section-head"><h2>风险热区</h2></div><div class="wb-table-wrap"><table class="aura-data-table"><thead><tr><th>空间</th><th>事件</th><th>高风险</th></tr></thead><tbody id="hotSpotRows"></tbody></table></div></div>
+          </div>
+          <div class="wb-columns">
+            <div><div class="wb-section-head"><h2>处置质量</h2></div><div class="wb-metrics" id="qualityMetrics"></div></div>
+            <div><div class="wb-section-head"><h2>平台与资源</h2></div><div class="wb-metrics" id="platformMetrics"></div></div>
+          </div>
+          <div class="wb-columns">
+            <div><div class="wb-section-head"><h2>AI 质量</h2></div><div class="wb-metrics" id="aiQualityMetrics"></div></div>
+            <div><div class="wb-section-head"><h2>指标口径</h2></div><div class="wb-table-wrap"><table class="aura-data-table"><thead><tr><th>指标</th><th>分子</th><th>分母</th><th>窗口</th></tr></thead><tbody id="metricDefinitionRows"></tbody></table></div></div>
+          </div>
+        </section>
+
+        <p id="workbenchStatus" class="aura-status" hidden aria-live="polite"></p>
+      </div>
+    </main>
+  </div>
+
+  <dialog id="eventDialog" class="wb-dialog">
+    <form method="dialog" id="eventCreate" class="wb-form">
+      <div class="wb-dialog-head"><h2>新建事件</h2><button class="btn-secondary wb-icon-btn" type="button" data-close-dialog aria-label="关闭">&#10005;</button></div>
+      <div class="wb-form-grid"><label><span>类型</span><input name="eventType" required /></label><label><span>级别</span><select name="severity"><option value="medium">中</option><option value="high">高</option><option value="critical">紧急</option><option value="low">低</option></select></label><label class="wb-wide"><span>标题</span><input name="title" required /></label><label class="wb-wide"><span>摘要</span><textarea name="summary" rows="3"></textarea></label><label><span>实体</span><input name="entityRef" /></label><label><span>空间</span><input name="spaceRef" /></label></div>
+      <div class="wb-actions"><button class="btn-secondary" type="button" data-close-dialog>取消</button><button class="btn-primary" value="default" type="submit">创建</button></div>
+    </form>
+  </dialog>
+  <dialog id="caseDialog" class="wb-dialog">
+    <form method="dialog" id="caseCreate" class="wb-form"><div class="wb-dialog-head"><h2>新建案件</h2><button class="btn-secondary wb-icon-btn" type="button" data-close-dialog aria-label="关闭">&#10005;</button></div><div class="wb-form-grid"><label class="wb-wide"><span>标题</span><input name="title" required /></label><label><span>优先级</span><select name="priority"><option value="normal">普通</option><option value="high">高</option><option value="urgent">紧急</option><option value="low">低</option></select></label><label><span>关联事件 ID</span><input name="eventId" type="number" min="1" /></label><label class="wb-wide"><span>说明</span><textarea name="description" rows="3"></textarea></label></div><div class="wb-actions"><button class="btn-secondary" type="button" data-close-dialog>取消</button><button class="btn-primary" value="default" type="submit">创建</button></div></form>
+  </dialog>
+  <dialog id="ruleDialog" class="wb-dialog wb-dialog-wide">
+    <form method="dialog" id="ruleCreate" class="wb-form"><div class="wb-dialog-head"><h2>新建规则</h2><button class="btn-secondary wb-icon-btn" type="button" data-close-dialog aria-label="关闭">&#10005;</button></div><div class="wb-form-grid"><label><span>规则代码</span><input name="ruleCode" maxlength="128" required /></label><label><span>名称</span><input name="name" maxlength="256" required /></label><label><span>事件类型</span><input name="eventType" /></label><label><span>最少次数</span><input name="occurrenceMin" type="number" min="1" value="1" /></label><label><span>开始小时</span><input name="startHour" type="number" min="0" max="23" value="0" /></label><label><span>结束小时</span><input name="endHour" type="number" min="0" max="23" value="23" /></label><label><span>抑制分钟</span><input name="suppressionMinutes" type="number" min="0" max="10080" value="0" /></label><label><span>每小时上限</span><input name="maxTriggersPerHour" type="number" min="1" value="1000" /></label><label class="wb-check"><input name="createCase" type="checkbox" /><span>命中后创建案件</span></label><label class="wb-check"><input name="shadow" type="checkbox" checked /><span>影子运行</span></label></div><div class="wb-actions"><button class="btn-secondary" type="button" data-close-dialog>取消</button><button class="btn-primary" value="default" type="submit">保存草稿</button></div></form>
+  </dialog>
+
+  <script defer src="../common/shell.js"></script>
+  <script defer src="./workbench.js"></script>
+</body>
+</html>

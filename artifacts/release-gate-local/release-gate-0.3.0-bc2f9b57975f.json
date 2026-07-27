@@ -1,0 +1,229 @@
+{
+  "schemaVersion": "1.0",
+  "status": "blocked",
+  "buildVersion": "0.3.0",
+  "gitCommit": "bc2f9b57975fbad41911e9e3986b8022026738f7",
+  "imageDigest": null,
+  "migrationVersion": "036",
+  "serviceProfile": {
+    "profileCode": "private-standard-target",
+    "version": 1,
+    "deliveryMode": "private_standard",
+    "approval": {
+      "reference": "",
+      "approvedBy": "",
+      "approvedAt": ""
+    },
+    "source": "E:\\Aura\\docs\\commercial\\service-profile.template.json"
+  },
+  "profileValidationErrors": [
+    "service profile status must be approved",
+    "service profile approval is missing reference",
+    "service profile approval is missing approvedBy",
+    "service profile approval is missing approvedAt"
+  ],
+  "environment": {
+    "operatingSystem": "Windows-10-10.0.19045-SP0",
+    "machine": "AMD64",
+    "python": "3.12.4",
+    "dotnet": "10.0.201",
+    "node": "v22.14.0",
+    "ci": "false",
+    "ciProvider": null
+  },
+  "environmentAssertions": {
+    "approvedProfile": false,
+    "realDependencies": false,
+    "targetHardware": false,
+    "secretScanClean": "[REDACTED]"
+  },
+  "requiredChecks": [
+    "dotnet_tests",
+    "python_tests",
+    "frontend_lint",
+    "postgres_migrations",
+    "arango_real",
+    "pgvector_target_scale",
+    "backlog_recovery",
+    "backup_restore",
+    "upgrade_rollback",
+    "browser_matrix",
+    "linux_scripts",
+    "security_privacy",
+    "oidc_idp",
+    "real_device_adapter"
+  ],
+  "evidence": [
+    {
+      "checkCode": "dotnet_tests",
+      "status": "passed",
+      "commandLine": "dotnet test Aura.sln -c Release --no-build --no-restore -p:NodeReuse=false",
+      "exitCode": 0,
+      "environment": {
+        "workingDirectory": "."
+      },
+      "metrics": {
+        "durationSeconds": 22.537
+      },
+      "logSummary": "E:\\Aura\\backend\\Aura.Api.Integration.Tests\\bin\\Release\\net10.0\\Aura.Api.Integration.Tests.dll (.NETCoreApp,Version=v10.0)的测试运行\n总共 1 个测试文件与指定模式相匹配。\nE:\\Aura\\backend\\Aura.Api.Tests\\bin\\Release\\net10.0\\Aura.Api.Tests.dll (.NETCoreApp,Version=v10.0)的测试运行\n总共 1 个测试文件与指定模式相匹配。\n\n已通过! - 失败:     0，通过:   109，已跳过:     0，总计:   109，持续时间: 734 ms - Aura.Api.Tests.dll (net10.0)\n\n已通过! - 失败:     0，通过:    52，已跳过:     0，总计:    52，持续时间: 15 s - Aura.Api.Integration.Tests.dll (net10.0)",
+      "artifactUri": "artifacts/release-gate-local/dotnet_tests.log",
+      "source": "automated"
+    },
+    {
+      "checkCode": "python_tests",
+      "status": "passed",
+      "commandLine": "C:\\Users\\HP\\AppData\\Local\\Programs\\Python\\Python312\\python.exe -m pytest -p no:cacheprovider",
+      "exitCode": 0,
+      "environment": {
+        "workingDirectory": "ai"
+      },
+      "metrics": {
+        "durationSeconds": 7.508
+      },
+      "logSummary": "============================= test session starts =============================\nplatform win32 -- Python 3.12.4, pytest-8.3.5, pluggy-1.5.0\nrootdir: E:\\Aura\nconfigfile: pytest.ini\nplugins: anyio-3.7.1, asyncio-0.24.0, cov-6.0.0, timeout-2.3.1\nasyncio: mode=Mode.STRICT, default_loop_scope=function\ncollected 32 items\n\ntests\\test_ai_evaluation_service.py ..                                   [  6%]\ntests\\test_ai_hardening.py ..........                                    [ 37%]\ntests\\test_ai_routes_and_index.py ....................                   [100%]\n\n============================== warnings summary ===============================\nC:\\Users\\HP\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\fastapi\\testclient.py:1\n  C:\\Users\\HP\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\fastapi\\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n    from starlette.testclient import TestClient as TestClient  # noqa\n\nai/tests/test_ai_hardening.py::test_decode_image_respects_pixel_limit\n  C:\\Users\\HP\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\PIL\\Image.py:3578: DecompressionBombWarning: Image size (4 pixels) exceeds limit of 3 pixels, could be decompression bomb DOS attack.\n    warnings.warn(\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n======================= 32 passed, 2 warnings in 4.38s ========================\n[0x7FFFD9D8CC20] ANOMALY: use of REX.w is meaningless (default operand size is 64)",
+      "artifactUri": "artifacts/release-gate-local/python_tests.log",
+      "source": "automated"
+    },
+    {
+      "checkCode": "frontend_lint",
+      "status": "passed",
+      "commandLine": "npm.cmd run lint",
+      "exitCode": 0,
+      "environment": {
+        "workingDirectory": "frontend"
+      },
+      "metrics": {
+        "durationSeconds": 6.16
+      },
+      "logSummary": "> lint\n> eslint .",
+      "artifactUri": "artifacts/release-gate-local/frontend_lint.log",
+      "source": "automated"
+    },
+    {
+      "checkCode": "postgres_migrations",
+      "status": "passed",
+      "commandLine": "dotnet run --project backend/Aura.DbMigrator -- status --command-timeout 300 --lock-timeout 60",
+      "exitCode": 0,
+      "environment": {
+        "workingDirectory": "."
+      },
+      "metrics": {
+        "durationSeconds": 8.226
+      },
+      "logSummary": "schema_migrations exists with 36 applied record(s).\n\nMigration status:\n  [applied] 001 001_ensure_sys_user_columns.sql (migration, 2026-07-23 10:18:54 +00:00)\n  [applied] 002 002_ensure_log_system_table.sql (migration, 2026-07-23 10:18:54 +00:00)\n  [applied] 003 003_sync_identity_sequences.sql (migration, 2026-07-23 10:18:54 +00:00)\n  [applied] 004 004_add_log_search_trgm_indexes.sql (migration, 2026-07-23 10:18:54 +00:00)\n  [applied] 005 005_add_capture_track_lookup_indexes.sql (migration, 2026-07-23 10:18:54 +00:00)\n  [applied] 006 006_add_map_camera_device_id_index.sql (migration, 2026-07-23 10:18:54 +00:00)\n  [applied] 007 007_add_sys_config.sql (migration, 2026-07-23 10:18:54 +00:00)\n  [applied] 008 008_add_fine_grained_permissions.sql (migration, 2026-07-23 10:18:54 +00:00)\n  [applied] 009 009_add_alert_time_lookup_index.sql (migration, 2026-07-23 10:18:54 +00:00)\n  [applied] 010 010_add_alert_search_trgm_indexes.sql (migration, 2026-07-23 10:18:54 +00:00)\n  [applied] 011 011_add_capture_filter_lookup_index.sql (migration, 2026-07-23 10:18:54 +00:00)\n  [applied] 012 012_add_log_time_lookup_indexes.sql (migration, 2026-07-23 10:18:54 +00:00)\n  [applied] 013 013_add_track_history_time_index.sql (migration, 2026-07-23 10:18:54 +00:00)\n  [applied] 014 014_add_workflow_space_report_tenant_ai_platform_tables.sql (migration, 2026-07-23 10:18:54 +00:00)\n  [applied] 015 015_add_media_analysis_control_plane.sql (migration, 2026-07-23 10:18:54 +00:00)\n  [applied] 016 016_add_media_analysis_inbox_outbox.sql (migration, 2026-07-23 10:18:54 +00:00)\n  [applied] 017 017_enable_pgvector_and_add_embeddings.sql (migration, 2026-07-23 10:18:54 +00:00)\n  [applied] 018 018_harden_space_topology.sql (migration, 2026-07-23 10:18:54 +00:00)\n  [applied] 019 019_add_projection_checkpoints.sql (migration, 2026-07-23 10:18:54 +00:00)\n  [applied] 020 020_add_media_analysis_business_facts_and_operations.sql (migration, 2026-07-23 10:18:54 +00:00)\n  [applied] 021 021_add_vector_dual_write_compensation.sql (migration, 2026-07-23 10:18:54 +00:00)\n  [applied] 022 022_add_media_artifact_archive_operations.sql (migration, 2026-07-23 10:18:54 +00:00)\n  [applied] 023 023_separate_provider_webhook_credentials.sql (migration, 2026-07-23 10:18:54 +00:00)\n  [applied] 024 024_add_media_analysis_default_permissions.sql (migration, 2026-07-23 10:18:55 +00:00)\n  [applied] 025 025_add_event_case_and_ops_domains.sql (migration, 2026-07-23 10:18:55 +00:00)\n  [applied] 026 026_add_investigation_governance_domains.sql (migration, 2026-07-23 10:18:55 +00:00)\n  [applied] 027 027_add_security_operations_and_commercial_domains.sql (migration, 2026-07-23 10:18:56 +00:00)\n  [applied] 028 028_add_commercial_product_permissions.sql (migration, 2026-07-23 10:18:56 +00:00)\n  [applied] 029 029_add_commercial_worker_leases.sql (migration, 2026-07-23 10:18:56 +00:00)\n  [applied] 030 030_add_data_archive_and_deletion_audit.sql (migration, 2026-07-23 10:18:56 +00:00)\n  [applied] 031 031_add_legacy_migration_control.sql (migration, 2026-07-23 10:18:56 +00:00)\n  [applied] 032 032_add_oidc_login_transactions.sql (migration, 2026-07-23 10:18:57 +00:00)\n  [applied] 033 033_add_release_gate_evidence.sql (migration, 2026-07-23 10:18:57 +00:00)\n  [applied] 034 034_add_notification_delivery_operations.sql (migration, 2026-07-23 10:18:57 +00:00)\n  [applied] 035 035_add_product_execution_workflows.sql (migration, 2026-07-23 10:38:50 +00:00)\n  [applied] 036 036_complete_commercial_workflows.sql (migration, 2026-07-24 01:33:12 +00:00)\n\nSummary: applied 36, pending 0, unknown 0.",
+      "artifactUri": "artifacts/release-gate-local/postgres_migrations.log",
+      "source": "automated"
+    },
+    {
+      "checkCode": "arango_real",
+      "status": "blocked",
+      "commandLine": null,
+      "exitCode": null,
+      "environment": {},
+      "metrics": {},
+      "logSummary": "Required evidence was not supplied.",
+      "artifactUri": null,
+      "source": "missing"
+    },
+    {
+      "checkCode": "pgvector_target_scale",
+      "status": "blocked",
+      "commandLine": null,
+      "exitCode": null,
+      "environment": {},
+      "metrics": {},
+      "logSummary": "Required evidence was not supplied.",
+      "artifactUri": null,
+      "source": "missing"
+    },
+    {
+      "checkCode": "backlog_recovery",
+      "status": "blocked",
+      "commandLine": null,
+      "exitCode": null,
+      "environment": {},
+      "metrics": {},
+      "logSummary": "Required evidence was not supplied.",
+      "artifactUri": null,
+      "source": "missing"
+    },
+    {
+      "checkCode": "backup_restore",
+      "status": "blocked",
+      "commandLine": null,
+      "exitCode": null,
+      "environment": {},
+      "metrics": {},
+      "logSummary": "Required evidence was not supplied.",
+      "artifactUri": null,
+      "source": "missing"
+    },
+    {
+      "checkCode": "upgrade_rollback",
+      "status": "blocked",
+      "commandLine": null,
+      "exitCode": null,
+      "environment": {},
+      "metrics": {},
+      "logSummary": "Required evidence was not supplied.",
+      "artifactUri": null,
+      "source": "missing"
+    },
+    {
+      "checkCode": "browser_matrix",
+      "status": "blocked",
+      "commandLine": null,
+      "exitCode": null,
+      "environment": {},
+      "metrics": {},
+      "logSummary": "Required evidence was not supplied.",
+      "artifactUri": null,
+      "source": "missing"
+    },
+    {
+      "checkCode": "linux_scripts",
+      "status": "blocked",
+      "commandLine": null,
+      "exitCode": null,
+      "environment": {},
+      "metrics": {},
+      "logSummary": "Required evidence was not supplied.",
+      "artifactUri": null,
+      "source": "missing"
+    },
+    {
+      "checkCode": "security_privacy",
+      "status": "blocked",
+      "commandLine": null,
+      "exitCode": null,
+      "environment": {},
+      "metrics": {},
+      "logSummary": "Required evidence was not supplied.",
+      "artifactUri": null,
+      "source": "missing"
+    },
+    {
+      "checkCode": "oidc_idp",
+      "status": "blocked",
+      "commandLine": null,
+      "exitCode": null,
+      "environment": {},
+      "metrics": {},
+      "logSummary": "Required evidence was not supplied.",
+      "artifactUri": null,
+      "source": "missing"
+    },
+    {
+      "checkCode": "real_device_adapter",
+      "status": "blocked",
+      "commandLine": null,
+      "exitCode": null,
+      "environment": {},
+      "metrics": {},
+      "logSummary": "Required evidence was not supplied.",
+      "artifactUri": null,
+      "source": "missing"
+    }
+  ],
+  "completedAt": "2026-07-24T02:47:33.343095+00:00"
+}

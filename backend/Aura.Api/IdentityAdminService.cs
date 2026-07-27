@@ -7,7 +7,9 @@ using Aura.Api.Cache;
 using Aura.Api.Data;
 using Aura.Api.Internal;
 using Aura.Api.Models;
+using Aura.Api.Product;
 using Aura.Api.Serialization;
+using Dapper;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -21,6 +23,8 @@ internal sealed class IdentityAdminService
     private readonly UserAuthRepository _userAuthRepository;
     private readonly AuditRepository _auditRepository;
     private readonly RedisCacheService _cache;
+    private readonly PgSqlConnectionFactory _connectionFactory;
+    private readonly BreakGlassService _breakGlassService;
     private readonly ILogger<IdentityAdminService> _logger;
     private readonly string _jwtKey;
     private readonly string _jwtIssuer;
@@ -32,6 +36,8 @@ internal sealed class IdentityAdminService
         UserAuthRepository userAuthRepository,
         AuditRepository auditRepository,
         RedisCacheService cache,
+        PgSqlConnectionFactory connectionFactory,
+        BreakGlassService breakGlassService,
         ILogger<IdentityAdminService> logger,
         string jwtKey,
         string jwtIssuer,
@@ -42,6 +48,8 @@ internal sealed class IdentityAdminService
         _userAuthRepository = userAuthRepository;
         _auditRepository = auditRepository;
         _cache = cache;
+        _connectionFactory = connectionFactory;
+        _breakGlassService = breakGlassService;
         _logger = logger;
         _jwtKey = jwtKey;
         _jwtIssuer = jwtIssuer;
@@ -66,6 +74,15 @@ internal sealed class IdentityAdminService
             return AuraApiResults.BadRequest("用户名或密码错误", 40003);
         }
 
+        var sourceIp = http.Connection.RemoteIpAddress?.ToString();
+        var breakGlassDecision = await _breakGlassService.AuthorizeLoginAsync(
+            userName, sourceIp, http.TraceIdentifier, http.RequestAborted);
+        if (breakGlassDecision == BreakGlassLoginDecision.Blocked)
+        {
+            await _auditRepository.InsertSystemLogAsync("警告", "认证服务", $"应急账号登录被阻止，用户名={userName}, IP={sourceIp ?? "unknown"}");
+            return AuraApiResults.Forbidden("应急账号未启用或启用窗口已过期", 40308);
+        }
+
         var role = AuraHelpers.ConvertRole(dbUser.RoleName);
         var loginAt = DateTimeOffset.Now;
         if (await _userAuthRepository.UpdateUserLastLoginByUserNameAsync(userName, loginAt))
@@ -81,7 +98,31 @@ internal sealed class IdentityAdminService
 
         var permissions = AuraPermissions.ParsePermissionJson(dbUser.PermissionJson);
         var expireAt = DateTimeOffset.UtcNow.AddMinutes(_jwtExpireMinutes);
-        var token = BuildJwtToken(userName, role, dbUser.MustChangePassword, permissions);
+        var sessionId = Guid.NewGuid();
+        await using (var connection = _connectionFactory.CreateConnection())
+        {
+            var userAgent = http.Request.Headers.UserAgent.ToString();
+            await connection.ExecuteAsync(new CommandDefinition(
+                """
+                INSERT INTO auth_session(session_id,user_id,user_name,provider_code,authentication_method,authentication_strength,
+                  issued_at,expires_at,last_seen_at,ip_address,user_agent)
+                VALUES(@SessionId,(SELECT user_id FROM sys_user WHERE user_name=@UserName),@UserName,'local',@Method,@Strength,@Issued,@Expires,@Issued,@Ip,@UserAgent)
+                """, new
+                {
+                    SessionId = sessionId,
+                    UserName = userName,
+                    Method = breakGlassDecision == BreakGlassLoginDecision.Allowed ? "break_glass" : "password",
+                    Strength = breakGlassDecision == BreakGlassLoginDecision.Allowed ? "emergency" : "password",
+                    Issued = DateTimeOffset.UtcNow,
+                    Expires = expireAt,
+                    Ip = http.Connection.RemoteIpAddress?.ToString(),
+                    UserAgent = userAgent[..Math.Min(userAgent.Length, 512)]
+                }));
+        }
+        var token = BuildJwtToken(
+            userName, role, dbUser.MustChangePassword, permissions, sessionId,
+            authenticationMethods: [breakGlassDecision == BreakGlassLoginDecision.Allowed ? "break_glass" : "pwd"],
+            authenticationStrength: breakGlassDecision == BreakGlassLoginDecision.Allowed ? "emergency" : "password");
         AppendAuthCookie(http, token, expireAt);
 
         var ip = http.Connection.RemoteIpAddress?.ToString() ?? "unknown";
@@ -104,13 +145,21 @@ internal sealed class IdentityAdminService
         });
     }
 
-    public IResult Logout(HttpContext http)
+    public async Task<IResult> Logout(HttpContext http)
     {
-        var userName = http.User?.Identity?.Name;
+        var userName = http.User.Identity?.Name;
         var operatorName = string.IsNullOrWhiteSpace(userName) ? "匿名用户" : userName;
         var ip = http.Connection.RemoteIpAddress?.ToString() ?? "unknown";
         _ = _auditRepository.InsertOperationAsync(operatorName, "用户退出", $"IP={ip}");
         _ = _auditRepository.InsertSystemLogAsync("信息", "认证服务", $"用户退出登录，用户名={operatorName}, IP={ip}");
+
+        if (Guid.TryParse(http.User.FindFirstValue("sid"), out var sessionId))
+        {
+            await using var connection = _connectionFactory.CreateConnection();
+            await connection.ExecuteAsync(new CommandDefinition(
+                "UPDATE auth_session SET revoked_at=CURRENT_TIMESTAMP,revoked_by=@Actor,revoke_reason='logout' WHERE session_id=@SessionId AND revoked_at IS NULL",
+                new { Actor = operatorName, SessionId = sessionId }));
+        }
 
         http.Response.Cookies.Append("aura_token", string.Empty, new CookieOptions
         {
@@ -398,7 +447,8 @@ internal sealed class IdentityAdminService
         var role = AuraHelpers.ConvertRole(dbUser.RoleName);
         var expireAt = DateTimeOffset.UtcNow.AddMinutes(_jwtExpireMinutes);
         var permissions = AuraPermissions.ParsePermissionJson(dbUser.PermissionJson);
-        var token = BuildJwtToken(userName, role, mustChangePassword: false, permissions);
+        var currentSessionId = Guid.TryParse(http.User?.FindFirstValue("sid"), out var parsedSessionId) ? parsedSessionId : (Guid?)null;
+        var token = BuildJwtToken(userName, role, mustChangePassword: false, permissions, currentSessionId);
         AppendAuthCookie(http, token, expireAt);
 
         var ip = http.Connection.RemoteIpAddress?.ToString() ?? "unknown";
@@ -519,6 +569,26 @@ internal sealed class IdentityAdminService
         return new string(chars.ToArray());
     }
 
+    internal IResult IssueFederatedLogin(
+        HttpContext http,
+        string userName,
+        string role,
+        IReadOnlyList<string> permissions,
+        Guid sessionId,
+        long tenantId,
+        string providerCode,
+        IReadOnlyList<string> authenticationMethods,
+        string authenticationStrength,
+        string? acr,
+        DateTimeOffset expireAt,
+        string returnUrl)
+    {
+        var token = BuildJwtToken(userName, role, false, permissions, sessionId, tenantId,
+            providerCode, authenticationMethods, authenticationStrength, acr);
+        AppendAuthCookie(http, token, expireAt);
+        return Results.Redirect(returnUrl);
+    }
+
     private static bool ShouldUseSecureCookie(HttpContext http)
     {
         var env = http.RequestServices.GetService<IHostEnvironment>();
@@ -538,7 +608,17 @@ internal sealed class IdentityAdminService
         });
     }
 
-    private string BuildJwtToken(string userName, string role, bool mustChangePassword, IReadOnlyList<string>? permissions = null)
+    private string BuildJwtToken(
+        string userName,
+        string role,
+        bool mustChangePassword,
+        IReadOnlyList<string>? permissions = null,
+        Guid? sessionId = null,
+        long? tenantId = null,
+        string? providerCode = null,
+        IReadOnlyList<string>? authenticationMethods = null,
+        string? authenticationStrength = null,
+        string? acr = null)
     {
         var claims = new List<Claim>
         {
@@ -552,6 +632,12 @@ internal sealed class IdentityAdminService
         {
             claims.Add(new Claim(AuraPermissions.ClaimType, permission));
         }
+        if (sessionId.HasValue) claims.Add(new Claim("sid", sessionId.Value.ToString()));
+        if (tenantId.HasValue) claims.Add(new Claim("aura:tenant_id", tenantId.Value.ToString()));
+        if (!string.IsNullOrWhiteSpace(providerCode)) claims.Add(new Claim("idp", providerCode));
+        if (!string.IsNullOrWhiteSpace(authenticationStrength)) claims.Add(new Claim("auth_strength", authenticationStrength));
+        if (!string.IsNullOrWhiteSpace(acr)) claims.Add(new Claim("acr", acr));
+        foreach (var method in authenticationMethods ?? []) claims.Add(new Claim("amr", method));
 
         var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtKey));
         var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);

@@ -1,5 +1,6 @@
 ﻿using Aura.Api.Cache;
 using Aura.Api.Data;
+using Aura.Api.Product;
 
 namespace Aura.Api.Extensions;
 
@@ -7,6 +8,7 @@ public static partial class ServiceExtensions
 {
     private static void AddAuraPersistence(IServiceCollection services, string pgsqlConn, string redisConn)
     {
+        DapperTypeHandlers.Register();
         services.AddSingleton(new PgSqlConnectionFactory(pgsqlConn));
         services.AddSingleton<UserAuthRepository>(sp =>
             new UserAuthRepository(sp.GetRequiredService<PgSqlConnectionFactory>(), sp.GetRequiredService<ILogger<UserAuthRepository>>()));
@@ -28,6 +30,8 @@ public static partial class ServiceExtensions
             new PgSqlStore(
                 sp.GetRequiredService<PgSqlConnectionFactory>(),
                 sp.GetRequiredService<ILogger<PgSqlStore>>()));
+        services.AddSingleton<EventCaseRepository>();
+        services.AddSingleton<InvestigationRepository>();
 
         services.AddSingleton<RedisConnectionProvider>(sp =>
             new RedisConnectionProvider(redisConn, sp.GetRequiredService<ILogger<RedisConnectionProvider>>()));

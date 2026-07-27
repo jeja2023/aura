@@ -218,6 +218,7 @@ services:
       SignalR__RedisBackplane__Enabled: ${SIGNALR__REDISBACKPLANE__ENABLED:-false}
       SignalR__RedisBackplane__ConnectionString: redis:6379
       SignalR__RedisBackplane__ChannelPrefix: ${SIGNALR__REDISBACKPLANE__CHANNELPREFIX:-aura:signalr}
+      CommercialProduct__Mobile__WebPushPublicKey: ${COMMERCIAL_WEB_PUSH_PUBLIC_KEY:-}
       Jwt__Key: ${JWT__KEY}
       Security__HmacSecret: ${SECURITY__HMACSECRET}
       Security__Cookies__ForceSecure: ${SECURITY__COOKIES__FORCESECURE:-true}

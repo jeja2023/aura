@@ -2,7 +2,7 @@
 
 $ErrorActionPreference = "Stop"
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$validTasks = @("readiness", "ai-check", "ai-eval", "capture-regression", "full-check", "db-status", "db-migrate", "db-backup", "db-restore", "db-rollback", "db-rollback-migrate", "db-verify-backup")
+$validTasks = @("readiness", "ai-check", "ai-eval", "capture-regression", "full-check", "start-local-api", "stop-local-api", "commercial-smoke", "release-gate", "adapter-certify", "commercial-artifacts", "db-status", "db-migrate", "db-backup", "db-restore", "db-rollback", "db-rollback-migrate", "db-verify-backup")
 $Task = if ($args.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace([string]$args[0])) { [string]$args[0] } else { "readiness" }
 $RemainingArgs = if ($args.Count -gt 1) { @($args[1..($args.Count - 1)]) } else { @() }
 
@@ -16,6 +16,12 @@ $scriptName = switch ($Task) {
     "ai-eval" { "ai-eval.ps1" }
     "capture-regression" { "capture-regression.ps1" }
     "full-check" { "full-check.ps1" }
+    "start-local-api" { "start-local-api.ps1" }
+    "stop-local-api" { "stop-local-api.ps1" }
+    "commercial-smoke" { "commercial-smoke.ps1" }
+    "release-gate" { "release-gate.ps1" }
+    "adapter-certify" { "adapter-certify.ps1" }
+    "commercial-artifacts" { "commercial-artifacts.ps1" }
     "db-status" { "db-maintenance.ps1" }
     "db-migrate" { "db-maintenance.ps1" }
     "db-backup" { "db-maintenance.ps1" }

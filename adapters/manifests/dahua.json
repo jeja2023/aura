@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "1.0",
+  "code": "dahua-device",
+  "name": "Dahua device adapter",
+  "version": "0.0.0",
+  "protocol": "Vendor protocol",
+  "lifecycle": "experimental",
+  "implementationStatus": "planned",
+  "auraVersions": ["future"],
+  "capabilities": [],
+  "configuration": {},
+  "contract": { "healthPath": null, "discoveryPath": null, "samplePath": null, "timeoutSeconds": 15, "errorCodes": {} },
+  "security": {
+    "credentialMode": "Undecided until a target model is approved",
+    "secretReferencesOnly": true,
+    "networkDirection": "Not approved",
+    "ssrfPolicy": "Approved device network ranges only",
+    "binaryProvenance": "Vendor binaries are not present"
+  },
+  "support": {
+    "knownLimitations": ["Planned only; no implementation or certified device"],
+    "vulnerabilityResponse": "Not applicable before implementation approval",
+    "owner": "device-integration"
+  }
+}

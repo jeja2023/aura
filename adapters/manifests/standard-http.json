@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "1.0",
+  "code": "standard-http-provider",
+  "name": "Standard HTTP media analysis provider",
+  "version": "1.0.0",
+  "protocol": "HTTPS/JSON",
+  "lifecycle": "experimental",
+  "implementationStatus": "supported",
+  "auraVersions": ["0.3.x"],
+  "capabilities": ["health", "capability-discovery", "image-task", "video-task", "stream-task", "webhook"],
+  "configuration": { "$ref": "../../docs/contracts/media-analysis-provider-v1.openapi.yaml" },
+  "contract": {
+    "healthPath": "/health",
+    "discoveryPath": "/capabilities",
+    "samplePath": "/samples/minimal",
+    "timeoutSeconds": 15,
+    "errorCodes": { "400": "invalid_request", "401": "authentication_failed", "408": "timeout", "429": "rate_limited", "500": "provider_failure" }
+  },
+  "security": {
+    "credentialMode": "HMAC, Bearer, OAuth2 client credentials, or mTLS",
+    "secretReferencesOnly": true,
+    "networkDirection": "Aura initiates outbound HTTPS; provider returns signed webhook",
+    "ssrfPolicy": "Aura resolved-address allow policy",
+    "binaryProvenance": "No native binary"
+  },
+  "support": {
+    "knownLimitations": ["Certification is provider-version specific", "Real provider evidence is required before lifecycle becomes certified"],
+    "vulnerabilityResponse": "Follow Aura commercial security response policy",
+    "owner": "integration-platform"
+  }
+}

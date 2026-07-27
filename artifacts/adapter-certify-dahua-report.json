@@ -1,0 +1,84 @@
+{
+  "schemaVersion": "1.0",
+  "adapter": {
+    "code": "dahua-device",
+    "version": "0.0.0",
+    "manifest": "adapters\\manifests\\dahua.json"
+  },
+  "device": {
+    "model": "unknown-lab-model",
+    "firmware": "unknown-lab-firmware"
+  },
+  "environment": {
+    "realDevice": false,
+    "baseUrlHost": null,
+    "transport": null,
+    "allowHttp": false,
+    "credentialSupplied": false
+  },
+  "checks": [
+    {
+      "code": "manifest_valid",
+      "status": "passed",
+      "detail": "Manifest structure is valid",
+      "metrics": {}
+    },
+    {
+      "code": "health",
+      "status": "blocked",
+      "detail": "--base-url is required for runtime checks",
+      "metrics": {}
+    },
+    {
+      "code": "discovery",
+      "status": "blocked",
+      "detail": "--base-url is required for runtime checks",
+      "metrics": {}
+    },
+    {
+      "code": "sample",
+      "status": "blocked",
+      "detail": "--base-url is required for runtime checks",
+      "metrics": {}
+    },
+    {
+      "code": "timeout",
+      "status": "passed",
+      "detail": "Bounded client timeout is 15 seconds",
+      "metrics": {
+        "timeoutSeconds": 15.0
+      }
+    },
+    {
+      "code": "error_mapping",
+      "status": "failed",
+      "detail": "Error mapping must include authentication and timeout concepts",
+      "metrics": {}
+    },
+    {
+      "code": "credentials",
+      "status": "passed",
+      "detail": "Credentials use references and no credential value is written to evidence",
+      "metrics": {}
+    },
+    {
+      "code": "ssrf",
+      "status": "failed",
+      "detail": "--base-url is required for runtime checks",
+      "metrics": {}
+    }
+  ],
+  "status": "blocked",
+  "executedAt": "2026-07-24T01:57:57.103688+00:00",
+  "requiredChecks": [
+    "manifest_valid",
+    "health",
+    "discovery",
+    "sample",
+    "timeout",
+    "error_mapping",
+    "credentials",
+    "ssrf"
+  ],
+  "certificationRule": "All checks must pass with realDevice=true and a persisted report URI"
+}

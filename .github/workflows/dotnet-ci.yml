@@ -17,6 +17,9 @@ on:
       - "Directory.Build.props"
       - "global.json"
       - "deploy/**"
+      - "adapters/**"
+      - "docs/**"
+      - "scripts/**"
   pull_request:
     branches: [main, master]
     paths:
@@ -33,6 +36,9 @@ on:
       - "Directory.Build.props"
       - "global.json"
       - "deploy/**"
+      - "adapters/**"
+      - "docs/**"
+      - "scripts/**"
 
 concurrency:
   group: dotnet-ci-${{ github.workflow }}-${{ github.ref }}
@@ -68,6 +74,9 @@ jobs:
               - "Directory.Build.props"
               - "global.json"
               - "deploy/**"
+              - "adapters/**"
+              - "docs/**"
+              - "scripts/**"
             frontend:
               - "frontend/**"
               - "frontend-overrides/**"
@@ -107,6 +116,9 @@ jobs:
 
       - name: Restore solution
         run: dotnet restore "${{ github.workspace }}/Aura.sln"
+
+      - name: Validate commercial artifacts and contracts
+        run: python "${{ github.workspace }}/scripts/ops/validate-commercial-artifacts.py"
 
       - name: Build solution
         run: dotnet build "${{ github.workspace }}/Aura.sln" -c Release --no-restore

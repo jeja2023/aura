@@ -7,6 +7,7 @@ using Aura.Api.Data;
 using Aura.Api.Export;
 using Aura.Api.Internal;
 using Aura.Api.Ops;
+using Aura.Api.Product;
 using Aura.Api.Services;
 using Aura.Api.Services.Hikvision;
 using Aura.Api.Vector;
@@ -36,6 +37,11 @@ public static partial class ServiceExtensions
         services.AddHostedService<DailyJudgeHostedService>();
         services.AddHostedService<ReportAutomationHostedService>();
         services.AddHostedService<HikvisionAlertStreamHostedService>();
+        services.AddHostedService<HighRiskTaskWorker>();
+        services.AddHostedService<DataCleanupWorker>();
+        services.AddHostedService<DataDeletionProjectionWorker>();
+        services.AddHostedService<NotificationDeliveryWorker>();
+        services.AddHostedService<RuleAutomationWorker>();
     }
 
     private static void AddAuraApplicationServices(
@@ -57,6 +63,8 @@ public static partial class ServiceExtensions
                 sp.GetRequiredService<UserAuthRepository>(),
                 sp.GetRequiredService<AuditRepository>(),
                 sp.GetRequiredService<RedisCacheService>(),
+                sp.GetRequiredService<PgSqlConnectionFactory>(),
+                sp.GetRequiredService<BreakGlassService>(),
                 sp.GetRequiredService<ILogger<IdentityAdminService>>(),
                 jwtKey,
                 jwtIssuer,
@@ -122,5 +130,28 @@ public static partial class ServiceExtensions
             sp.GetRequiredService<AppStore>(),
             sp.GetRequiredService<PgSqlConnectionFactory>(),
             sp.GetRequiredService<UserAuthRepository>()));
+        services.AddScoped<InvestigationService>();
+        services.AddScoped<CaseCollaborationService>();
+        services.AddSingleton<StepUpAuthorizationService>();
+        services.AddSingleton<HighRiskOperationService>();
+        services.AddScoped<IntegrationOnboardingService>();
+        services.AddScoped<GovernanceCatalogService>();
+        services.AddScoped<ControlledQueryService>();
+        services.AddScoped<OperationsCenterService>();
+        services.AddSingleton<DataLifecycleService>();
+        services.AddSingleton<DataDeletionProjectionService>();
+        services.AddScoped<LegacyCaseMigrationService>();
+        services.AddScoped<IdentityFederationService>();
+        services.AddScoped<EntitlementUsageService>();
+        services.AddScoped<ReleaseGovernanceService>();
+        services.AddScoped<EvidenceExportService>();
+        services.AddSingleton<INotificationChannelAdapter, InAppNotificationChannelAdapter>();
+        services.AddSingleton<INotificationChannelAdapter, WebhookNotificationChannelAdapter>();
+        services.AddSingleton<INotificationChannelAdapter, ConfiguredHttpNotificationChannelAdapter>();
+        services.AddSingleton<NotificationOrchestrationService>();
+        services.AddSingleton<RuleAutomationService>();
+        services.AddScoped<AiGovernanceService>();
+        services.AddScoped<BreakGlassService>();
+        services.AddScoped<ProductInsightsService>();
     }
 }

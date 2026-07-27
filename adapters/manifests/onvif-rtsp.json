@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "1.0",
+  "code": "onvif-rtsp",
+  "name": "ONVIF and RTSP device adapter",
+  "version": "0.1.0",
+  "protocol": "ONVIF/RTSP",
+  "lifecycle": "experimental",
+  "implementationStatus": "experimental",
+  "auraVersions": ["0.3.x"],
+  "capabilities": ["device-discovery", "media-profiles", "snapshot"],
+  "configuration": { "type": "object", "required": ["deviceUri", "credentialRef"], "properties": { "deviceUri": { "type": "string", "format": "uri" }, "credentialRef": { "type": "string", "pattern": "^(env|file|vault|keyvault|aws-secrets-manager)://" } } },
+  "contract": {
+    "healthPath": null,
+    "discoveryPath": null,
+    "samplePath": null,
+    "timeoutSeconds": 15,
+    "errorCodes": { "connection": "device_unreachable", "authentication": "authentication_failed", "profile": "media_profile_unsupported", "snapshot": "snapshot_failed" }
+  },
+  "security": {
+    "credentialMode": "Secret reference",
+    "secretReferencesOnly": true,
+    "networkDirection": "Aura adapter initiates traffic to an explicitly configured device",
+    "ssrfPolicy": "Approved device network ranges only",
+    "binaryProvenance": "No vendor native binary"
+  },
+  "support": {
+    "knownLimitations": ["No certified device model or firmware in repository evidence", "PTZ and event subscription are outside the current experimental scope"],
+    "vulnerabilityResponse": "Disable adapter and rotate device credentials on protocol or dependency advisory",
+    "owner": "device-integration"
+  }
+}

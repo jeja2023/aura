@@ -22,6 +22,32 @@ internal static class AuraPermissions
     internal const string VectorIndexManage = "vector.index.manage";
     internal const string GraphView = "graph.view";
     internal const string GraphAdmin = "graph.admin";
+    internal const string EventView = "event.view";
+    internal const string EventManage = "event.manage";
+    internal const string CaseView = "case.view";
+    internal const string CaseManage = "case.manage";
+    internal const string CaseReview = "case.review";
+    internal const string InvestigationView = "investigation.view";
+    internal const string InvestigationManage = "investigation.manage";
+    internal const string EvidenceViewOriginal = "evidence.view_original";
+    internal const string EvidenceExport = "evidence.export";
+    internal const string EvidenceLegalHold = "evidence.legal_hold";
+    internal const string RuleView = "rule.view";
+    internal const string RuleManage = "rule.manage";
+    internal const string RuleApprove = "rule.approve";
+    internal const string AiGovernanceView = "ai.governance.view";
+    internal const string AiGovernanceManage = "ai.governance.manage";
+    internal const string AiReleaseApprove = "ai.release.approve";
+    internal const string IntegrationView = "integration.view";
+    internal const string IntegrationManage = "integration.manage";
+    internal const string IntegrationTest = "integration.test";
+    internal const string OpsView = "ops.view";
+    internal const string OpsExecute = "ops.execute";
+    internal const string OpsHighImpact = "ops.high_impact";
+    internal const string UsageView = "usage.view";
+    internal const string UsageManage = "usage.manage";
+    internal const string DataGovernanceView = "data.governance.view";
+    internal const string DataGovernanceManage = "data.governance.manage";
 
     public static IReadOnlyList<string> ParsePermissionJson(string? permissionJson)
     {
