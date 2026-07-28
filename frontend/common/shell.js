@@ -167,6 +167,26 @@
     }
     html += "</nav>";
     container.innerHTML = html;
+
+    const savedScrollTop = window.sessionStorage.getItem("aura.sidebar.scrollTop");
+    if (savedScrollTop !== null) {
+      const top = parseInt(savedScrollTop, 10);
+      if (!Number.isNaN(top) && top >= 0) {
+        container.scrollTop = top;
+      }
+    }
+    const activeEl = container.querySelector(".nav-link.is-active");
+    if (activeEl) {
+      const rect = activeEl.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect();
+      if (savedScrollTop === null || rect.top < containerRect.top || rect.bottom > containerRect.bottom) {
+        activeEl.scrollIntoView({ block: "nearest", behavior: "instant" });
+      }
+    }
+
+    container.addEventListener("scroll", () => {
+      window.sessionStorage.setItem("aura.sidebar.scrollTop", String(container.scrollTop));
+    }, { passive: true });
   }
 
   function setPageTitle() {

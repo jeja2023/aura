@@ -1,4 +1,4 @@
-﻿# SDK 镜像与仓库 global.json 的 sdk.version 保持一致；运行时使用官方 ASP.NET 镜像。
+# SDK 镜像与仓库 global.json 的 sdk.version 保持一致；运行时使用官方 ASP.NET 镜像。
 ARG DOTNET_SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:10.0.201
 ARG DOTNET_ASPNET_IMAGE=mcr.microsoft.com/dotnet/aspnet:10.0
 
@@ -8,7 +8,8 @@ WORKDIR /src
 COPY Directory.Build.props Directory.Build.targets global.json Aura.sln ./
 COPY backend/Aura.Api/Aura.Api.csproj backend/Aura.Api/
 COPY backend/Aura.DbMigrator/Aura.DbMigrator.csproj backend/Aura.DbMigrator/
-RUN dotnet restore backend/Aura.Api/Aura.Api.csproj \
+RUN printf '<?xml version="1.0" encoding="utf-8"?>\n<configuration>\n  <packageSources>\n    <clear />\n    <add key="huaweicloud" value="https://mirrors.huaweicloud.com/repository/nuget/v3/index.json" />\n  </packageSources>\n</configuration>\n' > NuGet.Config \
+    && dotnet restore backend/Aura.Api/Aura.Api.csproj \
     && dotnet restore backend/Aura.DbMigrator/Aura.DbMigrator.csproj
 
 COPY backend/Aura.Api/ backend/Aura.Api/

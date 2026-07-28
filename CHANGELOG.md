@@ -2,6 +2,27 @@
 
 本文档记录仓库关键版本与阶段性改动，便于联调、回归与发布追踪。
 
+## 0.4.1（2026-07-28）
+
+### 侧边栏导航与视口位置持久化
+
+- **侧边栏滚动位置保持**：在 `shell.js` 中增加了侧边栏导航容器的 `scroll` 状态监听，自动将用户的侧栏 `scrollTop` 高度持久化至 `sessionStorage` (`aura.sidebar.scrollTop`)。
+- **页面跳转与加载平滑复位**：跨页面跳转或菜单点击刷新后，自动恢复侧栏滚动位置，解决页面跳转后导航栏复位归零至顶部的问题。
+- **激活菜单视口兜底**：当当前激活的菜单项 (`.nav-link.is-active`) 超出滚动容器视口时，自动通过 `scrollIntoView({ block: "nearest" })` 将激活菜单居中可见。
+
+### 商业工作台与 UI 交互防覆盖重构
+
+- **全局 Tab 视觉统一规范**：参照 `媒体解析平台` 与 `扩展管理` 页面的通用胶囊/卡片式 (Capsule/Pill Tabs) 设计规范，全面重构商业工作台主 View 标签 (`.wb-tab`) 与子视图页签 (`.wb-subtabs button`)。
+- **高对比度与防覆盖保护**：为浅色主题下 `--text-muted` 提高对比度（`#334155` Slate 700），并对未选中标签赋予微亮胶囊背景与高对比字体，对激活标签 (`.is-active`) 赋予主题蓝背景与纯白文字 (`!important`)。
+- **CSS 样式选择器隔离**：排除全局 `shell.css` 中普通按钮样式的盲目白字覆盖，提升选择器权重至 `.app-content .wb-tabs button.wb-tab`，彻底解决浅色/白底背景下的白字覆盖与发虚问题。
+
+### ONNX 特征模型与 Docker 编排加固
+
+- **ONNX ReID 模型实测与验证**：验证放置于 `models/osnet_ibn_x1_0.onnx` (268.5MB) 的 OSNet ReID 512 维特征抽取模型，通过 FastAPI 推理服务及 35/35 项单元测试。
+- **Docker 编排与镜像网络修复**：创建并关联外部 `gpu-bridge` Docker 网络；修正 `docker/backend.Dockerfile` 增加华为云 NuGet 镜像源以规避 `dotnet restore` 依赖下载超时。
+
+---
+
 ## 0.4.0（2026-07-27）
 
 ### 私有文件与访问控制

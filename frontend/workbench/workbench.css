@@ -1,23 +1,23 @@
 .wb-page { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .wb-context { display: flex; align-items: end; gap: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
-.wb-context > label { display: flex; flex-direction: column; gap: 5px; width: min(260px, 28vw); color: var(--text-muted); font-size: 12px; }
+.wb-context > label { display: flex; flex-direction: column; gap: 5px; width: min(260px, 28vw); color: var(--text-main, #0f172a); font-size: 13px; font-weight: 600; }
 .wb-context-actions { margin-left: auto; display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 .wb-icon-btn { width: 38px; min-width: 38px; height: 38px; padding: 0; font-size: 18px; }
-.wb-connection, .wb-draft-count, .wb-state, .wb-severity { display: inline-flex; align-items: center; min-height: 24px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--text-muted); font-size: 12px; white-space: nowrap; }
+.wb-connection, .wb-draft-count, .wb-state, .wb-severity { display: inline-flex; align-items: center; min-height: 24px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--text-muted); font-size: 12px; white-space: nowrap; font-weight: 600; }
 .wb-connection::before { content: ""; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: #f59e0b; }
 .wb-connection[data-state="online"]::before { background: #16a34a; }
 .wb-connection[data-state="offline"]::before { background: #dc2626; }
 .wb-draft-count { border-color: rgba(245, 158, 11, .45); color: #a16207; }
 
-.wb-tabs { display: flex; gap: 2px; overflow-x: auto; border-bottom: 1px solid var(--line); scrollbar-width: thin; }
-.wb-tab { flex: 0 0 auto; min-height: 40px; padding: 8px 14px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--text-muted); font: inherit; font-weight: 600; cursor: pointer; }
-.wb-tab:hover { color: var(--text); background: rgba(var(--primary-rgb), .06); }
-.wb-tab.is-active { color: var(--primary); border-bottom-color: var(--primary); }
+.app-content .wb-tabs { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; border-bottom: 0; padding-bottom: 4px; }
+.app-content .wb-tabs button.wb-tab { min-height: 38px; padding: 8px 16px; border: 1px solid rgba(var(--primary-rgb), 0.22); border-radius: 8px; background-color: color-mix(in srgb, var(--bg-elevated) 88%, var(--primary) 12%); color: color-mix(in srgb, var(--text-main) 86%, var(--primary) 14%) !important; cursor: pointer; font: inherit; font-size: 14px; font-weight: 700; line-height: 1.2; white-space: nowrap; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06); transition: background-color var(--transition-fast, 0.18s), border-color var(--transition-fast, 0.18s), box-shadow var(--transition-fast, 0.18s), color var(--transition-fast, 0.18s), transform var(--transition-fast, 0.18s); }
+.app-content .wb-tabs button.wb-tab:hover { border-color: rgba(var(--primary-rgb), 0.52); background-color: color-mix(in srgb, var(--bg-elevated) 78%, var(--primary) 22%); color: var(--primary) !important; box-shadow: 0 4px 12px rgba(var(--primary-rgb), 0.18); transform: translateY(-1px); }
+.app-content .wb-tabs button.wb-tab.is-active { border-color: var(--primary); background-color: var(--primary); color: var(--primary-text, #ffffff) !important; box-shadow: 0 5px 15px rgba(var(--primary-rgb), 0.28); }
 .wb-view { display: none; flex-direction: column; gap: 14px; min-width: 0; }
 .wb-view.is-active { display: flex; }
 
 .wb-toolbar { display: flex; align-items: end; gap: 10px; flex-wrap: wrap; }
-.wb-toolbar label { display: flex; flex-direction: column; gap: 5px; min-width: 128px; color: var(--text-muted); font-size: 12px; }
+.wb-toolbar label { display: flex; flex-direction: column; gap: 5px; min-width: 128px; color: var(--text-main, #0f172a); font-size: 13px; font-weight: 600; }
 .wb-toolbar .wb-grow { flex: 1 1 280px; }
 .wb-toolbar button { flex: 0 0 auto; }
 .wb-master-detail { display: grid; grid-template-columns: minmax(480px, .95fr) minmax(360px, 1.05fr); gap: 18px; min-height: 520px; }
@@ -25,11 +25,11 @@
 .wb-detail { padding-left: 18px; border-left: 1px solid var(--line); overflow: auto; }
 .wb-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; min-height: 32px; }
 .wb-section-head h2, .wb-dialog-head h2 { margin: 0; font-size: 16px; letter-spacing: 0; }
-.wb-section-head > span { color: var(--text-muted); font-size: 12px; }
+.wb-section-head > span { color: var(--text-muted); font-size: 12px; font-weight: 500; }
 .wb-table-wrap { width: 100%; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
 .wb-table-wrap table { width: 100%; min-width: 600px; border-collapse: collapse; }
 .wb-table-wrap th, .wb-table-wrap td { padding: 10px 11px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; font-size: 13px; }
-.wb-table-wrap th { position: sticky; top: 0; z-index: 1; color: var(--text-muted); background: var(--card); font-size: 12px; white-space: nowrap; }
+.wb-table-wrap th { position: sticky; top: 0; z-index: 1; color: var(--text-main, #0f172a); background: var(--card); font-size: 12px; font-weight: 700; white-space: nowrap; }
 .wb-table-wrap tbody tr:last-child td { border-bottom: 0; }
 .wb-table-wrap tbody tr[data-id] { cursor: pointer; }
 .wb-table-wrap tbody tr[data-id]:hover, .wb-table-wrap tbody tr.is-selected { background: rgba(var(--primary-rgb), .08); }
@@ -81,9 +81,10 @@
 .wb-controlled-plan > label { display: flex; flex-direction: column; gap: 5px; color: var(--text-muted); font-size: 12px; }
 .wb-controlled-plan textarea { width: 100%; min-height: 220px; resize: vertical; font: 12px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; }
 .wb-output { min-height: 160px; max-height: 420px; margin: 0; padding: 12px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, var(--card) 86%, var(--bg) 14%); color: var(--text); font: 12px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
-.wb-subtabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
-.wb-subtabs button { min-height: 36px; padding: 7px 12px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--text-muted); cursor: pointer; font: inherit; }
-.wb-subtabs button.is-active { color: var(--primary); border-bottom-color: var(--primary); }
+.app-content .wb-subtabs { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; border-bottom: 0; margin-bottom: 10px; }
+.app-content .wb-subtabs button { min-height: 34px; padding: 6px 14px; border: 1px solid rgba(var(--primary-rgb), 0.22); border-radius: 6px; background-color: color-mix(in srgb, var(--bg-elevated) 90%, var(--primary) 10%); color: color-mix(in srgb, var(--text-main) 86%, var(--primary) 14%) !important; cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; line-height: 1.2; white-space: nowrap; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05); transition: background-color var(--transition-fast, 0.18s), border-color var(--transition-fast, 0.18s), box-shadow var(--transition-fast, 0.18s), color var(--transition-fast, 0.18s), transform var(--transition-fast, 0.18s); }
+.app-content .wb-subtabs button:hover { border-color: rgba(var(--primary-rgb), 0.52); background-color: color-mix(in srgb, var(--bg-elevated) 78%, var(--primary) 22%); color: var(--primary) !important; box-shadow: 0 3px 10px rgba(var(--primary-rgb), 0.16); transform: translateY(-1px); }
+.app-content .wb-subtabs button.is-active { border-color: var(--primary); background-color: var(--primary); color: var(--primary-text, #ffffff) !important; box-shadow: 0 4px 12px rgba(var(--primary-rgb), 0.25); }
 .wb-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 10px; }
 .wb-metric { min-height: 86px; padding: 12px; border: 1px solid var(--line); border-left: 3px solid var(--primary); border-radius: 8px; background: var(--card); }
 .wb-metric[data-tone="success"] { border-left-color: #16a34a; }

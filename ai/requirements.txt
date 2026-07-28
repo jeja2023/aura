@@ -2,6 +2,6 @@ fastapi==0.136.1
 uvicorn[standard]==0.32.1
 pydantic==2.13.3
 python-arango==8.3.2
-onnxruntime==1.25.0
+onnxruntime==1.20.1
 numpy==2.4.4
 pillow==11.0.0

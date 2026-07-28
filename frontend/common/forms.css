@@ -257,9 +257,9 @@ button[type="submit"]:active {
   gap: 6px;
   margin: 0;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0.01em;
-  color: var(--text-muted);
+  color: var(--text-main, #0f172a);
 }
 
 /* 导出页：label 内嵌 select 的横向布局 */

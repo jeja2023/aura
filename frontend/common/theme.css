@@ -12,12 +12,12 @@
   --bg-card: #ffffff;
   --bg-elevated: #ffffff;
   --text-main: #0f172a;
-  --text-muted: #64748b;
-  --border-subtle: #e2e8f0;
+  --text-muted: #334155;
+  --border-subtle: #cbd5e1;
   --shadow: 0 4px 20px rgba(15, 23, 42, 0.06);
   --sidebar-bg: #ffffff;
   --sidebar-text: #0f172a;
-  --sidebar-muted: #64748b;
+  --sidebar-muted: #334155;
   --sidebar-active-bg: rgba(var(--primary-rgb), 0.12);
   --sidebar-border: #e2e8f0;
   --canvas-bg: #0f1724;

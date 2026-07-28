@@ -26,7 +26,7 @@ def create_app() -> FastAPI:
 
     app = FastAPI(
         title="Aura AI 推理服务",
-        version="0.4.0",
+        version="0.4.1",
         docs_url=None if production else "/docs",
         redoc_url=None if production else "/redoc",
         openapi_url=None if production else "/openapi.json",
