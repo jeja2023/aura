@@ -110,12 +110,12 @@ def _get_or_default_env(name: str, default: Optional[str]) -> Optional[str]:
     value = os.environ.get(name)
     if value is None:
         return default
-    value = str(value).strip()
+    value = value.strip()
     return value if value else default
 
 
 def _env_positive_int(name: str, default: int) -> int:
-    value = str(os.environ.get(name) or "").strip()
+    value = (os.environ.get(name) or "").strip()
     if not value:
         return default
     try:
@@ -172,7 +172,7 @@ def _preflight_check() -> None:
 
 
 def _should_skip_db_migrate(skip_db_migrate_arg: bool) -> bool:
-    value = str(os.environ.get("AURA_SKIP_DB_MIGRATE") or "").strip().lower()
+    value = (os.environ.get("AURA_SKIP_DB_MIGRATE") or "").strip().lower()
     return skip_db_migrate_arg or value in {"1", "true", "yes", "on"}
 
 
@@ -404,8 +404,8 @@ def main() -> int:
                 ".NET 服务 180 秒内未就绪。请检查 PostgreSQL/Redis 可达性、HTTPS 开发证书与控制台日志。"
             )
 
-        admin_user = str((os.environ.get("AURA_ADMIN_USER") or "admin")).strip()
-        admin_password = str((os.environ.get("AURA_ADMIN_PASSWORD") or "")).strip()
+        admin_user = (os.environ.get("AURA_ADMIN_USER") or "admin").strip()
+        admin_password = (os.environ.get("AURA_ADMIN_PASSWORD") or "").strip()
         readiness_payload: Optional[dict[str, Any]] = None
         if admin_password:
             try:
