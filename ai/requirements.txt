@@ -1,7 +1,7 @@
-fastapi==0.136.1
-uvicorn[standard]==0.32.1
-pydantic==2.13.3
-python-arango==8.3.2
+fastapi==0.140.0
+uvicorn[standard]==0.51.0
+pydantic==2.13.4
+python-arango==8.3.3
 onnxruntime==1.20.1
-numpy==2.4.4
+numpy==2.5.1
 pillow==11.0.0
